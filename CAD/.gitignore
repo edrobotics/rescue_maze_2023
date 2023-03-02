@@ -1,0 +1,4 @@
+# Ignores solidworks temp files
+~$*
+# Ignores flashforge gcode print files to avoid mistakes when choosing the wrong printer
+*.gx
