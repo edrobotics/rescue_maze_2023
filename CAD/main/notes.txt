@@ -1,0 +1,60 @@
+
+TODO:
+Check ultrasonic sensor heights
+Check ground clearance (wheel design)
+Add zip-tie holes for cables for colour sensor (?)
+Add battery mounting system to undercover
+
+
+
+
+General:
+
+Holesize is maybe a bit to small
+	On the creator 3 it is OK, a bit tight, on the Prusa Mini it is too tight (you can still screw it through though)
+
+
+
+
+
+
+Ultrasonic sensors:
+
+The ultrasonic sensors should be higher up or could be angled slightly upwards to avoid falsely detecting a ramp as a wall.
+
+
+
+
+
+Baseplate:
+
+Ska båda motorkonfigurationer fungera med samma basplatta?
+
+Om plasten ej fungerar kan CNC-maskinen vara ett alternativ
+
+Ska måttet som anges vara för hjulbasens mått eller för basplattans?
+
+For threaded inserts: https://hackaday.com/2019/02/28/threading-3d-printed-parts-how-to-use-heat-set-inserts/
+
+Gör mount-stället för ultrasonic sensor brackets smalare?
+
+Improvements for next print:
+	Add holes for rescue kit mechanism
+	Add third mounting hole for ultrasonic sensor mounts
+
+
+
+
+Batteri + hållare:
+
+För att byta batteriet: Borde kunna dra mellan hjulen
+
+För att hålla fast batteriet: Kanter i sidan. Någon form av rem ovanför för tryck nedåt. Alternativt tryckplatta?
+
+
+
+
+
+Rescue kit mechanism:
+
+Perhaps use rack and pinion for the pusher for the rescue kit mechanism?
