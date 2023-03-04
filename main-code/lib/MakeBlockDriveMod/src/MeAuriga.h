@@ -95,7 +95,7 @@ Encoder_port_type encoder_Port[6] =
   //ENB A   ENB B   PWMB    DIR B1  DIR B2
   { 18,     43,     10,     47,     46},
   { 2,     4,     5,     17,     16},
-  { NC,     NC,     NC,     NC,     NC},
+  { 3,     6,     7,     8,     9},
 };
 
 #define buzzerOn()  pinMode(45,OUTPUT),digitalWrite(45, HIGH)
