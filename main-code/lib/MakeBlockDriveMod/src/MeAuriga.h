@@ -96,6 +96,7 @@ Encoder_port_type encoder_Port[6] =
   { 18,     43,     10,     47,     46},
   { 2,     4,     5,     17,     16},
   { 3,     6,     7,     8,     9},
+  { NC,     NC,     NC,     NC,     NC},
 };
 
 #define buzzerOn()  pinMode(45,OUTPUT),digitalWrite(45, HIGH)
