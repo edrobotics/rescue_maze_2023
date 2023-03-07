@@ -36,11 +36,10 @@ Ska måttet som anges vara för hjulbasens mått eller för basplattans?
 
 For threaded inserts: https://hackaday.com/2019/02/28/threading-3d-printed-parts-how-to-use-heat-set-inserts/
 
-Gör mount-stället för ultrasonic sensor brackets smalare?
+Gör mount-stället för ultrasonic sensor brackets smalare (på hödjden)?
 
 Improvements for next print:
 	Add holes for rescue kit mechanism
-	Add third mounting hole for ultrasonic sensor mounts
 
 
 
@@ -58,3 +57,8 @@ För att hålla fast batteriet: Kanter i sidan. Någon form av rem ovanför för
 Rescue kit mechanism:
 
 Perhaps use rack and pinion for the pusher for the rescue kit mechanism?
+
+Use some heavier weight and put on top to make the rescue kits go down more reliably?
+
+Design ideas:
+	Have a rescue kit holder (like a well) with an extended "backwards" edge. A rescue kit is in the well, it moves, the rescue kit drops out as another one drops onto the "backwards" edge. When the mechanism retracts, the rescue kit on the "backwards" edge is pushed into the well by the back wall. This works both with linear and rotational motion.
