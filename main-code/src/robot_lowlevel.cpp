@@ -239,24 +239,24 @@ double mathAngleToGyroAngle(double angle) {return -angle + 180;}
 // Returns the distance left to turn in degrees. When you get closer, it decreases. When you have overshot, it will be negative.
 // Can we omit zerocross, and just give the turn angle instead?
 // zeroCross - if the turn will cross over 0
-// turningdirection - which direction you will turn. 1 is clockwise and -1 is counter-clockwise.
+// turningdirection - which direction you will turn. 1 is counter-clockwise and -1 is clockwise (math angles)
 double leftToTurn(bool zeroCross, int turningDirection, double tarAng, double curAng)
 {
 
   if (zeroCross==false) { // Normal turn
-    if (turningDirection == -1) {
+    if (turningDirection == 1) {
       if (tarAng>300 && curAng<180) return 360 - tarAng + curAng; // If you have overshot so much that you passed zero
-      else return -turningDirection*(tarAng-curAng); // Else turn like normal
-    } else if (turningDirection == 1) {
+      else return turningDirection*(tarAng-curAng); // Else turn like normal
+    } else if (turningDirection == -1) {
       if (tarAng<60 && curAng >180) return 360 - curAng + tarAng; // if you have overshot so much that you passed zero
-      else return -turningDirection*(tarAng-curAng); // Else turn like normal
+      else return turningDirection*(tarAng-curAng); // Else turn like normal
     }
-  } else if (zeroCross==true && turningDirection==-1) { // Turning that passes 0 and is counter-clockwise (positive direction)
+  } else if (zeroCross==true && turningDirection==1) { // Turning that passes 0 and is counter-clockwise (positive direction)
     if (curAng>180) return 360 - curAng + tarAng; // Handles it until curAng is 0
-    else return -turningDirection*(tarAng-curAng); // When curAng has passed 0, it is just lika a normal turn (like above)
-  } else if (zeroCross==true && turningDirection==1) { // Turning that passes 0 and is clockwise (negative direction)
+    else return turningDirection*(tarAng-curAng); // When curAng has passed 0, it is just lika a normal turn (like above)
+  } else if (zeroCross==true && turningDirection==-1) { // Turning that passes 0 and is clockwise (negative direction)
     if (curAng<180) return curAng + 360-tarAng; // Handles it until curAng is <360 (passes 0)
-    else return -turningDirection*(tarAng-curAng); // When curAng has passed 0, it is just lika a normal turn (like above)
+    else return turningDirection*(tarAng-curAng); // When curAng has passed 0, it is just lika a normal turn (like above)
   }
   return -100; // Return -100 if nothing matched (which should never happen)
 
@@ -271,36 +271,51 @@ double leftToTurn(bool zeroCross, int turningDirection, double tarAng, double cu
 }
 
 // Turn using the gyro
-// The move angle is the angle to turn, in degrees. Positive is counter-clockwise.
-// Improvement: Slow down when you get closer to turn more precisely
+// The move angle is the angle to turn, in degrees. Positive is counter-clockwise (math angle)
 void gyroTurn(double turnAngle)
 {
   // Used to determine turning direction of the wheels
-    int multiplier = -1;
+    int multiplier = 1; // Positive is ccw
     bool crossingZero = false;
-    if (turnAngle<0) multiplier=1;
+    if (turnAngle<0) multiplier=-1; // Negative is cw
     
     gyro.update();
     currentAngle = gyroAngleToMathAngle(gyro.getAngleZ()); // Sets positive to be counter-clockwise and makes all valid values between 0 and 360
     targetAngle = (currentAngle + turnAngle);
     if (targetAngle<0) {
-    targetAngle = 360+targetAngle; // If the target angle is negative, subtract it from 360. As the move_angle cannot be greater than 360 (should always be 90), this will also bind the value between 0 and 360.
+    targetAngle = 360+targetAngle; // If the target angle is negative, subtract it from 360. As the turnAngle cannot be greater than 360 (should always be 90), this will also bind the value between 0 and 360.
     crossingZero = true;
   } else if (targetAngle >= 360) {
     targetAngle = targetAngle - 360; // Should bind the value to be between 0 and 360 for positive target angles ( no angle should be 720 degrees or greater, so this should work)
     crossingZero = true;
   }
     //double speedToRun = multiplier*1.5*BASE_SPEED_CMPS*CMPS_TO_RPM;
-    double speedToRun = multiplier*69;
-    encoderLF.runSpeed(speedToRun);
-    encoderLB.runSpeed(speedToRun);
-    encoderRF.runSpeed(speedToRun);
-    encoderRB.runSpeed(speedToRun);
-    while (leftToTurn(crossingZero, multiplier, targetAngle, currentAngle) > 5) {
+    double speedToRun = multiplier*69/CMPS_TO_RPM;
+    runWheelSide(wheels_left, -speedToRun);
+    runWheelSide(wheels_right, speedToRun);
+
+    double varLeftToTurn = leftToTurn(crossingZero, multiplier, targetAngle, currentAngle);
+
+    while (varLeftToTurn > 15) {
       gyro.update();
       currentAngle = gyroAngleToMathAngle(gyro.getAngleZ());
       loopEncoders();
+      varLeftToTurn = leftToTurn(crossingZero, multiplier, targetAngle, currentAngle);
     }
+
+    // Slowing down in the end of the turn.
+    // All of this code could be placed inside of the first while-loop, but then every iteration would take more time because of checks and the gyro would become less accurate due to that.
+    speedToRun = multiplier*30/CMPS_TO_RPM;
+    runWheelSide(wheels_left, -speedToRun);
+    runWheelSide(wheels_right, speedToRun);
+
+    while (varLeftToTurn > 2) {
+      gyro.update();
+      currentAngle = gyroAngleToMathAngle(gyro.getAngleZ());
+      loopEncoders();
+      varLeftToTurn = leftToTurn(crossingZero, multiplier, targetAngle, currentAngle);
+    }
+    
     stopWheels();
 }
 
