@@ -31,23 +31,44 @@ void loop()
     char command = Serial.read();
     switch (command)
     {
-    case 'w':
-      //driveStep();
-      driveStep();
-      break;
-    case 's':
-      driveBlind(-30, false);
-      stopWheels();
-      break;
-    case 'a':
-      turnSteps(ccw, 1);
-      break;
-    case 'd':
-      turnSteps(cw, 1);
-      break;
-    default:
-      break;
+      // Driving
+      case 'w': // drive one step forward
+        driveStep();
+        serialcomm::returnSuccess();
+        break;
+
+      case 's': // drive one step backwards. Only used for testing/debugging
+        driveBlind(-30, false);
+        stopWheels();
+        serialcomm::returnSuccess();
+        break;
+
+      case 'a': // turn counterclockwise one step
+        turnSteps(ccw, 1);
+        serialcomm::returnSuccess();
+        break;
+
+      case 'd': // turn clockwise one step
+        turnSteps(cw, 1);
+        serialcomm::returnSuccess();
+        break;
+      
+
+      // Sensors
+      case 'u': // Send the current state of the walls to the maze code (raspberry). 'u' for ultrasonic - bad name. Use 's' later?
+        int wallStates = getWallStates();
+        Serial.write(wallStates);
+        break;
+
+      // Rescue kits and victims
+      case 'v':
+        // The code for deployment goes here (structure planning not done yet)
+        serialcomm::returnSuccess();
+        break;
+      default:
+        break;
     }
+
   }
 
 

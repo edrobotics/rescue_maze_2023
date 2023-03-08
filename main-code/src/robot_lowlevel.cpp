@@ -7,6 +7,7 @@
 #include <SPI.h>
 
 // Encoder motor definitions
+// Make an array of them? Could I then call encoderArray.loop() to loop all sensors?
 MeEncoderOnBoard encoderLF(SLOT2); // Left front encoder motor
 MeEncoderOnBoard encoderLB(SLOT3); // Left back encoder motor
 MeEncoderOnBoard encoderRF(SLOT1); // Right front encoder motor
@@ -71,6 +72,19 @@ bool frontWallPresent = false;
 // For gyro turning
 double currentAngle = 0;
 double targetAngle = 0;
+
+
+//------------------ Serial communication -------------------------------//
+
+void serialcomm::returnSuccess()
+{
+  Serial.write(0);
+}
+
+void serialcomm::returnFailure()
+{
+  Serial.write(1);
+}
 
 
 //------------------ Low level encoder functions ---------------------------//
@@ -404,6 +418,21 @@ void calcRobotPose(WallSide wallSide, double& angle, double& trueDistance)
   
   // Debugging
   //Serial.print(angle); Serial.print("    "); Serial.println(trueDistance);
+}
+
+
+
+// Returns the struct containing information about the presence of the walls.
+// The reason for using a struct is that I do not know how else to return 3 values
+int getWallStates()
+{
+  getUltrasonics();
+  checkWallPresence();
+  int wallStates = 0;
+  if (frontWallPresent) wallStates |= 0b100;
+  if (leftWallPresent) wallStates |= 0b010;
+  if (rightWallPresent) wallStates |= 0b001;
+  return wallStates;
 }
 
 

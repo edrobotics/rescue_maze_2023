@@ -9,10 +9,6 @@
 
 //////////////// Public functions /////////////////////////////
 
-// Most of (all?) the code needed to initialize the encoders
-// Should be run inside of setup()
-void encodersInit();
-
 // Drives one step (30cm) forwards.
 // Could take a speed argument
 void driveStep();
@@ -26,6 +22,19 @@ enum TurningDirection {
 // steps - the amount of steps (90 degrees) to turn. Positive is counter-clockwise, negative is clockwise.
 // The direction may be separated into a separate argument and given its own type.
 void turnSteps(TurningDirection direction, int steps);
+
+
+// Returns an array of bools giving information about whether the walls are present
+int getWallStates();
+
+
+namespace serialcomm
+{
+    void returnSuccess();
+
+    void returnFailure();
+}
+
 
 /////////////////// Private functions /////////////////////////////
 
@@ -45,6 +54,10 @@ void isr_encoderRB(void);
 
 // Loop all encoders
 void loopEncoders();
+
+// Most of (all?) the code needed to initialize the encoders
+// Should be run inside of setup()
+void encodersInit();
 
 //--------------------- Slightly higher level encoder motor functions --------------------------//
 
@@ -153,6 +166,10 @@ double getDistanceDriven();
 void pidDrive(WallSide wallSide);
 
 
+//------------------------- Rescue kits -----------------------------------//
+
+// Deploy a rescue kit in the current position
+void deployRescueKit();
 
 
 
