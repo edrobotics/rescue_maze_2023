@@ -25,6 +25,7 @@ double wallDistance = 0;
 
 void loop()
 {
+  
   if (Serial.available() >0)
   {
     char command = Serial.read();
@@ -32,11 +33,10 @@ void loop()
     {
     case 'w':
       //driveStep();
-      driveBlind(30);
-      stopWheels();
+      driveStep();
       break;
     case 's':
-      driveBlind(-30);
+      driveBlind(-30, false);
       stopWheels();
       break;
     case 'a':
@@ -49,4 +49,6 @@ void loop()
       break;
     }
   }
+
+
 }

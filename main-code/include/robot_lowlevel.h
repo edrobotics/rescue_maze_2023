@@ -69,8 +69,8 @@ void moveWheelSide(WheelSide wheelSide, double distance, double speed);
 void runWheelSide(WheelSide wheelSide, double speed);
 
 // Let the wheels finish their motion.
-// Used after 
-void letWheelsTurn();
+// stopWhenDone - if true, the wheels will stop when done. If false, they will continue rotating.
+void letWheelsTurn(bool stopWhenDone);
 
 //---------------------------- Turning functions --------------------------------//
 
@@ -120,6 +120,7 @@ enum WallSide {
     wall_left,
     wall_right,
     wall_both,
+    wall_none,
 };
 
 // Update the "true" distance to the wall and the angle from upright
@@ -132,7 +133,9 @@ void calcRobotPose(WallSide wallSide, double& angle, double& trueDistance);
 //-------------------- Driving functions --------------------------------//
 
 // Drive using just the encoders, "blindly".
-void driveBlind(double distance);
+void driveBlind(double distance, bool stopWhenDone);
+
+void driveSpeed(double speed);
 
 void startDistanceMeasure();
 
@@ -147,7 +150,7 @@ double getDistanceDriven();
 
 // Drive with wall following
 // wallSide - which wall to follow. Can be wall_left, wall_right or wall_both. Directions relative to the robot.
-void pidDrive(WallSide wallSide, double driveDistance);
+void pidDrive(WallSide wallSide);
 
 
 

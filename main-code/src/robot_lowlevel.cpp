@@ -192,7 +192,9 @@ void runWheelSide(WheelSide wheelSide, double speed)
   } else {} // An error: no valid WheelSide specified
 }
 
-void letWheelsTurn()
+// Let the wheels finish their motion.
+// stopWhenDone - if true, the wheels will stop when done. If false, they will continue rotating.
+void letWheelsTurn(bool stopWhenDone)
 {
   bool LFdone = false;
   bool LBdone = false;
@@ -200,19 +202,19 @@ void letWheelsTurn()
   bool RBdone = false;
   while(!LFdone || !LBdone || !RFdone || !RBdone) {
     if (abs(encoderLF.distanceToGo())<5) {
-      encoderLF.runSpeed(0);
+      if (stopWhenDone==true) encoderLF.runSpeed(0);
       LFdone = true;
     }
     if (abs(encoderLB.distanceToGo())<5) {
-      encoderLB.runSpeed(0);
+      if (stopWhenDone==true) encoderLB.runSpeed(0);
       LBdone = true;
     }
     if (abs(encoderRF.distanceToGo())<5) {
-      encoderRF.runSpeed(0);
+      if (stopWhenDone==true) encoderRF.runSpeed(0);
       RFdone = true;
     }
     if (abs(encoderRB.distanceToGo())<5) {
-      encoderRB.runSpeed(0);
+      if (stopWhenDone==true) encoderRB.runSpeed(0);
       RBdone = true;
     }
     loopEncoders();
@@ -397,11 +399,20 @@ void calcRobotPose(WallSide wallSide, double& angle, double& trueDistance)
 // Drive just using the encoders
 // distance - the distance to drive
 // The speed is adjusted globally using the BASE_SPEED_CMPS variable.
-void driveBlind(double distance)
+void driveBlind(double distance, bool stopWhenDone)
 {
   moveWheelSide(wheels_left, distance, BASE_SPEED_CMPS);
   moveWheelSide(wheels_right, distance, BASE_SPEED_CMPS);
-  letWheelsTurn();
+  letWheelsTurn(stopWhenDone);
+}
+
+//Drives at the set speed. Need to loop encoders in between
+// speed - the speed to drive at in cm/s
+// You need to call loopEncoders() Yourself!
+void driveSpeed(double speed)
+{
+  runWheelSide(wheels_left, speed);
+  runWheelSide(wheels_right, speed);
 }
 
 double startPositionEncoderLF = 0;
@@ -449,42 +460,37 @@ double getDistanceDriven()
 double angleP = 1;
 double distanceP = 1;
 
-// Drive with wall following
+// Drive with wall following. Will do one iteration, so to actually follow the wall, call it multiple times in short succession.
 // wallSide - which wall to follow. Can be wall_left, wall_right or wall_both. Directions relative to the robot.
-void pidDrive(WallSide wallSide, double driveDistance)
+void pidDrive(WallSide wallSide)
 {
-  startDistanceMeasure();
   double wallDistance = 0;
   double robotAngle = 0;
-  while(getDistanceDriven()<driveDistance) {
-    getUltrasonics();
-    calcRobotPose(wallSide, robotAngle, wallDistance); // Can be used regardless of which side is being used
-    double distanceError = 0; // positive means that we are to the right of where we want to be.
-    
-    if (wallSide==wall_left)
-    {
-      distanceError = wallDistance - ultrasonicDistanceToWall;
-    }
-    else if (wallSide==wall_right)
-    { 
-      distanceError = ultrasonicDistanceToWall - wallDistance;
-    }
-    else if (wallSide==wall_both)
-    {
-      // Case not handled yet
-    }
-
-    double targetAngle = distanceError*distanceP; // Calculate the angle you want depending on the distance to the wall (error)
-    double angleError = targetAngle-robotAngle; // Calculate the correction needed in the wheels to get to the angle
-    double correction = angleP*angleError; // Calculate the correction in the wheels. Positive is counter-clockwise (math)
-
-
-    runWheelSide(wheels_left, BASE_SPEED_CMPS - correction);
-    runWheelSide(wheels_right, BASE_SPEED_CMPS + correction);
-    loopEncoders();
+  getUltrasonics();
+  calcRobotPose(wallSide, robotAngle, wallDistance); // Can be used regardless of which side is being used
+  double distanceError = 0; // positive means that we are to the right of where we want to be.
+  
+  if (wallSide==wall_left)
+  {
+    distanceError = wallDistance - ultrasonicDistanceToWall;
   }
-  
-  
+  else if (wallSide==wall_right)
+  { 
+    distanceError = ultrasonicDistanceToWall - wallDistance;
+  }
+  else if (wallSide==wall_both)
+  {
+    // Case not handled yet
+  }
+
+  double targetAngle = distanceError*distanceP; // Calculate the angle you want depending on the distance to the wall (error)
+  double angleError = targetAngle-robotAngle; // Calculate the correction needed in the wheels to get to the angle
+  double correction = angleP*angleError; // Calculate the correction in the wheels. Positive is counter-clockwise (math)
+
+
+  runWheelSide(wheels_left, BASE_SPEED_CMPS - correction);
+  runWheelSide(wheels_right, BASE_SPEED_CMPS + correction);
+  loopEncoders();  
 
 }
 
@@ -492,18 +498,26 @@ void pidDrive(WallSide wallSide, double driveDistance)
 
 void driveStep()
 {
-  WallSide wallToFollow = wall_left; // Initialization of variable
-  getUltrasonics();
-  checkWallPresence();
-  if (leftWallPresent && rightWallPresent) wallToFollow = wall_both;
-  else if (leftWallPresent) wallToFollow = wall_left;
-  else if (rightWallPresent) wallToFollow = wall_right;
-  else
-  {
-    // No wall was found. Drive blind and check if you find a wall. Maybe also use gyro?
+  WallSide wallToFollow; // Declare a variable for which wall to follow
+  startDistanceMeasure(); // Starts the distance measuring
+  
+  while (getDistanceDriven() < 30) { // Drive while you have travelled less than 30cm
+    getUltrasonics();
+    checkWallPresence();
+    if (leftWallPresent && rightWallPresent) wallToFollow = wall_both;
+    else if (leftWallPresent) wallToFollow = wall_left;
+    else if (rightWallPresent) wallToFollow = wall_right;
+    else wallToFollow = wall_none; // If no wall was detected
+
+    if (wallToFollow==wall_none) {
+      // Drive at base speed
+      driveSpeed(BASE_SPEED_CMPS);
+      loopEncoders();
+    } else {
+      pidDrive(wallToFollow);
+    }
   }
 
-  pidDrive(wallToFollow, 30);
   stopWheels();
   
 
