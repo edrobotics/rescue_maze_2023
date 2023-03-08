@@ -7,9 +7,6 @@
 #include <MeGyro.h>*/
 
 
-
-
-
 //////////////// Public functions /////////////////////////////
 
 // Most of (all?) the code needed to initialize the encoders
@@ -32,6 +29,10 @@ void turnSteps(TurningDirection direction, int steps);
 
 /////////////////// Private functions /////////////////////////////
 
+
+
+
+
 //---------------- Low level encoder motor functions ---------------------//
 
 
@@ -52,12 +53,23 @@ void loopEncoders();
 void stopWheels();
 
 enum WheelSide {
-    left,
-    right,
+    wheels_left,
+    wheels_right,
 };
 
+
+// wheelSide - wheels_left or wheels_right (a group of 2 encoder motors)
+// distance - the distance the wheel will move in cm. Positive is forward and negative is backwards
+// speed - the speed the wheel will move at in cm/s. Always positive.
 void moveWheelSide(WheelSide wheelSide, double distance, double speed);
 
+// Runs the specified wheel side at the specified speed
+// wheelSide - wheels_left or wheels_right
+// speed - the speed in cm/s to run the side at. Positive is forward and negative is backwards.
+void runWheelSide(WheelSide wheelSide, double speed);
+
+// Let the wheels finish their motion.
+// Used after 
 void letWheelsTurn();
 
 //---------------------------- Turning functions --------------------------------//
@@ -92,10 +104,50 @@ void gyroTurn(double turnAngle);
 // direction - the direction to turn (cw or ccw)
 void gyroTurnSteps(TurningDirection direction, int steps);
 
+//--------------------- Sensors ----------------------------------------//
+
+// Get all ultrasonic sensors
+// Perhaps return an array in the future (or take on as a mutable(?) argument?)
+void getUltrasonics();
+
+// Print all sensor data for debugging
+void printUltrasonics();
+
+// Check if the walls are present. Uses raw distance data instead of "true" distance data.
+void checkWallPresence();
+
+enum WallSide {
+    wall_left,
+    wall_right,
+    wall_both,
+};
+
+// Update the "true" distance to the wall and the angle from upright
+// wallSide - which wallSide to check. wall_left, wall_right or wall_both
+// Other code should call the getUltrasonics() beforehand
+void calcRobotPose(WallSide wallSide, double& angle, double& trueDistance);
+
+
+
 //-------------------- Driving functions --------------------------------//
 
 // Drive using just the encoders, "blindly".
 void driveBlind(double distance);
+
+void startDistanceMeasure();
+
+void testDistanceMeasureLeft();
+
+void testDistanceMeasureRight();
+
+// Returns the distance driven by the robot since startDistanceMeasure() was called. Return is in cm.
+// Idea: Handle if one encoder is very off?
+double getDistanceDriven();
+
+
+// Drive with wall following
+// wallSide - which wall to follow. Can be wall_left, wall_right or wall_both. Directions relative to the robot.
+void pidDrive(WallSide wallSide, double driveDistance);
 
 
 

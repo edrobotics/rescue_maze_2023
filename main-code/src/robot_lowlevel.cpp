@@ -12,6 +12,15 @@ MeEncoderOnBoard encoderLB(SLOT3); // Left back encoder motor
 MeEncoderOnBoard encoderRF(SLOT1); // Right front encoder motor
 MeEncoderOnBoard encoderRB(SLOT4); // Right back encoder motor
 
+
+// Ultrasonic sensor definitions
+MeUltrasonicSensor ultrasonicLF(PORT_8); // Left front
+MeUltrasonicSensor ultrasonicLB(PORT_9); // Left back
+MeUltrasonicSensor ultrasonicRF(PORT_6); // Right front
+MeUltrasonicSensor ultrasonicRB(PORT_10); // Right back
+MeUltrasonicSensor ultrasonicF(PORT_7); // Front
+
+
 // Gyro definition
 MeGyro gyro(0, 0x69);
 
@@ -21,8 +30,8 @@ enum TurningDirection {
     ccw,
 };
 enum WheelSide {
-    left,
-    right,
+    wheels_left,
+    wheels_right,
 };
 */
 
@@ -39,6 +48,25 @@ const double WHEELBASE_CIRCUMFERENCE = PI*WHEEL_DISTANCE;
 const double CMPS_TO_RPM = 1.0/WHEEL_CIRCUMFERENCE*60.0; // Constant to convert from cm/s to rpm
 const double BASE_SPEED_CMPS = 20; // The base speed of driving (cm/s)
 const double BASE_SPEED_RPM = CMPS_TO_RPM*BASE_SPEED_CMPS; // The base speed of driving (rpm)
+
+
+// Sensor constants
+const double ultrasonicSpacing = 14; // The distance between the centers two ultrasonic sensors.
+const double ultrasonicDistanceToWall = 6; // The distance between the ultrasonic sensor (edge of the robot) and the wall when the robot is centered. Not calibrated !!!!! just a guess!!!
+const double wallPresenceTreshold = 20; // Not calibrated !!!!!!!!!!!!!!!!!!!!!!!! Just a guess!!!!!!!!!!!!!!!!!!!!!!!
+
+// Sensor data
+double ultrasonicDistanceLF = 0;
+double ultrasonicDistanceLB = 0;
+double ultrasonicDistanceRF = 0;
+double ultrasonicDistanceRB = 0;
+double ultrasonicDistanceF = 0;
+
+
+// Wall presence
+bool leftWallPresent = false;
+bool rightWallPresent = false;
+bool frontWallPresent = false;
 
 // For gyro turning
 double currentAngle = 0;
@@ -130,20 +158,38 @@ void stopWheels()
 }
 
 // Moves the specified wheel side some distance.
-// wheelSide - left or right (a group of 2 encoder motors)
+// wheelSide - wheels_left or wheels_right (a group of 2 encoder motors)
 // distance - the distance the wheel will move in cm. Positive is forward and negative is backwards
 // speed - the speed the wheel will move at in cm/s. Always positive.
+//TODO: It drives a bit too far. Maybe make it slow down in the end?
 void moveWheelSide(WheelSide wheelSide, double distance, double speed)
 {
   speed *= CMPS_TO_RPM;
   distance*=360/WHEEL_CIRCUMFERENCE; // Converts the distance from cm to degrees
-  if (wheelSide==left) {
+  if (wheelSide==wheels_left) {
     encoderLF.speedMove(distance, speed);
     encoderLB.speedMove(distance, speed);
-  } else if (wheelSide==right) {
+  } else if (wheelSide==wheels_right) {
     encoderRF.speedMove(-distance, speed);
     encoderRB.speedMove(-distance, speed);
   }
+}
+
+
+// Runs the specified wheel side at the specified speed
+// wheelSide - wheels_left or wheels_right
+// speed - the speed in cm/s to run the side at. Positive will move the robot forward
+void runWheelSide(WheelSide wheelSide, double speed)
+{
+  speed *= CMPS_TO_RPM; // Convert speed from cm/s to rpm
+  if (wheelSide == wheels_left) {
+    encoderLF.runSpeed(speed);
+    encoderLB.runSpeed(speed);
+  } else if (wheelSide == wheels_right) {
+    // Inverted speed because 
+    encoderRF.runSpeed(-speed);
+    encoderRB.runSpeed(-speed);
+  } else {} // An error: no valid WheelSide specified
 }
 
 void letWheelsTurn()
@@ -273,6 +319,79 @@ void turnSteps(TurningDirection direction, int steps)
   gyroTurnSteps(direction, steps);
 }
 
+
+
+//--------------------- Sensors --------------------------------------//
+
+// Get all ultrasonic sensors
+// Perhaps return an array in the future (or take on as a mutable(?) argument?)
+void getUltrasonics()
+{
+  //TODO: Add limit to how quickly you can call it
+
+  ultrasonicDistanceF = ultrasonicF.distanceCm();
+  ultrasonicDistanceLF = ultrasonicLF.distanceCm();
+  ultrasonicDistanceLB = ultrasonicLB.distanceCm();
+  ultrasonicDistanceRF = ultrasonicRF.distanceCm();
+  ultrasonicDistanceRB = ultrasonicRB.distanceCm();
+}
+
+void printUltrasonics()
+{
+  Serial.print(ultrasonicDistanceF); Serial.print(", ");
+  Serial.print(ultrasonicDistanceLF); Serial.print(", ");
+  Serial.print(ultrasonicDistanceLB); Serial.print(", ");
+  Serial.print(ultrasonicDistanceRF); Serial.print(", ");
+  Serial.println(ultrasonicDistanceRB);
+}
+
+// Check if the walls are present. Uses raw distance data instead of "true" distance data.
+void checkWallPresence()
+{
+  leftWallPresent = false;
+  rightWallPresent = false;
+  frontWallPresent = false;
+  if (ultrasonicDistanceLF < wallPresenceTreshold && ultrasonicDistanceLB < wallPresenceTreshold) leftWallPresent = true;
+  if (ultrasonicDistanceRF < wallPresenceTreshold && ultrasonicDistanceRB < wallPresenceTreshold) rightWallPresent = true;
+  if (ultrasonicDistanceF < wallPresenceTreshold) frontWallPresent = true;
+}
+
+
+// Update the "true" distance to the wall and the angle from upright
+// wallSide - which wallSide to check. wall_left, wall_right or wall_both
+// Other code should call the getUltrasonics() beforehand
+// How do I get the return values?
+void calcRobotPose(WallSide wallSide, double& angle, double& trueDistance)
+{
+  double d1 = 0;
+  double d2 = 0;
+  if (wallSide==wall_left)
+  {
+    d1 = ultrasonicDistanceLF;
+    d2 = ultrasonicDistanceLB;
+  }
+  else if (wallSide==wall_right)
+  {
+    // Should this be inverted from the left side (like it is now)?
+    d1 = ultrasonicDistanceRB;
+    d2 = ultrasonicDistanceRF;
+  }
+  else if (wallSide == wall_both)
+  {
+    // Do nothing for now? Make it like if the left wall was followed?
+  }
+
+  angle = atan((d2 - d1)/ultrasonicSpacing);
+  trueDistance = cos(angle) * ((d1 + d2)/(double)2);
+  angle *= RAD_TO_DEG; // Convert the angle to degrees
+  
+  // Debugging
+  //Serial.print(angle); Serial.print("    "); Serial.println(trueDistance);
+}
+
+
+
+
 //----------------------Driving----------------------------------------//
 
 // Drive just using the encoders
@@ -280,14 +399,112 @@ void turnSteps(TurningDirection direction, int steps)
 // The speed is adjusted globally using the BASE_SPEED_CMPS variable.
 void driveBlind(double distance)
 {
-  moveWheelSide(left, distance, BASE_SPEED_CMPS);
-  moveWheelSide(right, distance, BASE_SPEED_CMPS);
+  moveWheelSide(wheels_left, distance, BASE_SPEED_CMPS);
+  moveWheelSide(wheels_right, distance, BASE_SPEED_CMPS);
   letWheelsTurn();
+}
+
+double startPositionEncoderLF = 0;
+double startPositionEncoderLB = 0;
+double startPositionEncoderRF = 0;
+double startPositionEncoderRB = 0;
+
+
+void startDistanceMeasure()
+{
+  startPositionEncoderLF = encoderLF.getCurPos();
+  startPositionEncoderLB = encoderLB.getCurPos();
+  startPositionEncoderRF = encoderRF.getCurPos();
+  startPositionEncoderRB = encoderRB.getCurPos();
+}
+
+long turns = 0;
+
+void testDistanceMeasureLeft()
+{
+  double distanceEncoderLF = encoderLF.getCurPos()-startPositionEncoderLF;
+  Serial.println(distanceEncoderLF);
+}
+
+void testDistanceMeasureRight()
+{
+  double distanceEncoderRF = encoderRF.getCurPos()-startPositionEncoderRF;
+  Serial.println(distanceEncoderRF);
+}
+
+// Returns the distance driven by the robot since startDistanceMeasure() was called. Return is in cm.
+// Idea: Handle if one encoder is very off?
+double getDistanceDriven()
+{
+  double distanceEncoderLF = encoderLF.getCurPos()-startPositionEncoderLF;
+  double distanceEncoderLB = encoderLB.getCurPos()-startPositionEncoderLB;
+  double distanceEncoderRF = -(encoderRF.getCurPos()-startPositionEncoderRF);
+  double distanceEncoderRB = -(encoderRB.getCurPos()-startPositionEncoderRB);
+
+  return ((distanceEncoderLF+distanceEncoderLB+distanceEncoderRF+distanceEncoderRB)/4.0)/360*WHEEL_CIRCUMFERENCE; // Returns the average
+
+}
+
+// PID coefficients for wall following.
+double angleP = 1;
+double distanceP = 1;
+
+// Drive with wall following
+// wallSide - which wall to follow. Can be wall_left, wall_right or wall_both. Directions relative to the robot.
+void pidDrive(WallSide wallSide, double driveDistance)
+{
+  startDistanceMeasure();
+  double wallDistance = 0;
+  double robotAngle = 0;
+  while(getDistanceDriven()<driveDistance) {
+    getUltrasonics();
+    calcRobotPose(wallSide, robotAngle, wallDistance); // Can be used regardless of which side is being used
+    double distanceError = 0; // positive means that we are to the right of where we want to be.
+    
+    if (wallSide==wall_left)
+    {
+      distanceError = wallDistance - ultrasonicDistanceToWall;
+    }
+    else if (wallSide==wall_right)
+    { 
+      distanceError = ultrasonicDistanceToWall - wallDistance;
+    }
+    else if (wallSide==wall_both)
+    {
+      // Case not handled yet
+    }
+
+    double targetAngle = distanceError*distanceP; // Calculate the angle you want depending on the distance to the wall (error)
+    double angleError = targetAngle-robotAngle; // Calculate the correction needed in the wheels to get to the angle
+    double correction = angleP*angleError; // Calculate the correction in the wheels. Positive is counter-clockwise (math)
+
+
+    runWheelSide(wheels_left, BASE_SPEED_CMPS - correction);
+    runWheelSide(wheels_right, BASE_SPEED_CMPS + correction);
+    loopEncoders();
+  }
+  
+  
+
 }
 
 
 
 void driveStep()
 {
+  WallSide wallToFollow = wall_left; // Initialization of variable
+  getUltrasonics();
+  checkWallPresence();
+  if (leftWallPresent && rightWallPresent) wallToFollow = wall_both;
+  else if (leftWallPresent) wallToFollow = wall_left;
+  else if (rightWallPresent) wallToFollow = wall_right;
+  else
+  {
+    // No wall was found. Drive blind and check if you find a wall. Maybe also use gyro?
+  }
+
+  pidDrive(wallToFollow, 30);
+  stopWheels();
+  
 
 }
