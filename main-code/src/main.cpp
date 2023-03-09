@@ -26,45 +26,56 @@ double wallDistance = 0;
 void loop()
 {
   
-  if (Serial.available() >0)
+  if (Serial.available() > 0)
   {
-    char command = Serial.read();
+    /*
+    // For testing without the Pi:
+    int command = -1;
+    makeNavDecision(command);
+    */
+
+    // Add some kind of error correction or checking?
+    // Potential problem: Some bytes sent over serial may have some additional meaning, thus rendering them inappropriate for use by us
+    // Use an enum instead of integers? The enum will be easier to decipher and the integer representation could still be the same
+    int command = Serial.read();
     switch (command)
     {
       // Driving
-      case 'w': // drive one step forward
+      case 0: // drive one step forward
         driveStep();
         serialcomm::returnSuccess();
         break;
 
-      case 's': // drive one step backwards. Only used for testing/debugging
+      case 2: // drive one step backwards. Only used for testing/debugging
         driveBlind(-30, false);
         stopWheels();
         serialcomm::returnSuccess();
         break;
 
-      case 'a': // turn counterclockwise one step
+      case 1: // turn counterclockwise one step
         turnSteps(ccw, 1);
         serialcomm::returnSuccess();
         break;
 
-      case 'd': // turn clockwise one step
+      case 3: // turn clockwise one step
         turnSteps(cw, 1);
         serialcomm::returnSuccess();
         break;
       
-
+      
       // Sensors
-      case 'u': // Send the current state of the walls to the maze code (raspberry). 'u' for ultrasonic - bad name. Use 's' later?
+      case 4: // Send the current state of the walls to the maze code (raspberry). The form is 0bXYZ, where X, Y, Z are 0 or 1, 1 meaning the wall is present. X front, Y left, Z right.
         int wallStates = getWallStates();
         Serial.write(wallStates);
         break;
-
+      
+      /*
       // Rescue kits and victims
       case 'v':
         // The code for deployment goes here (structure planning not done yet)
         serialcomm::returnSuccess();
         break;
+        */
       default:
         break;
     }

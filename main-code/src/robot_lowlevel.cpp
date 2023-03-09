@@ -78,12 +78,12 @@ double targetAngle = 0;
 
 void serialcomm::returnSuccess()
 {
-  Serial.write(0);
+  Serial.write(69);
 }
 
 void serialcomm::returnFailure()
 {
-  Serial.write(1);
+  Serial.write(42);
 }
 
 
@@ -524,7 +524,8 @@ void pidDrive(WallSide wallSide)
   }
   else if (wallSide==wall_both)
   {
-    // Case not handled yet
+    // Follow the left wall if both are present. Change later.
+    distanceError = wallDistance - ultrasonicDistanceToWall;
   }
 
   double targetAngle = distanceError*distanceP; // Calculate the angle you want depending on the distance to the wall (error)
@@ -566,3 +567,24 @@ void driveStep()
   
 
 }
+
+// Make a navigation decision.
+// Simple algorithm just used for testing when the maze-code is not present
+int nextAction = -1;
+void makeNavDecision(int& action) {
+  if (nextAction == -1) { // If the given nextAction was nothing (x)
+    getUltrasonics();
+    checkWallPresence();
+    if (leftWallPresent && frontWallPresent) action = 3;
+    else if (leftWallPresent) action = 0; // If the left wall is there and not the front wall 
+    else { // If the left wall disappears for any reason, including when the front wall is present
+      action = 1;
+      nextAction = 0;
+    }
+  } else {
+      action = nextAction;
+      nextAction = -1;
+    }
+
+  }
+  

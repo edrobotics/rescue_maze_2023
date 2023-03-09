@@ -35,6 +35,10 @@ namespace serialcomm
     void returnFailure();
 }
 
+// Makes a navigation decision
+// For simple testing without the maze-code present
+void makeNavDecision(int& action);
+
 
 /////////////////// Private functions /////////////////////////////
 
