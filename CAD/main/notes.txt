@@ -1,9 +1,9 @@
 
 TODO:
 Check ultrasonic sensor heights
-Check ground clearance (wheel design)
-Add zip-tie holes for cables for colour sensor (?)
-Add battery mounting system to undercover
+Addd a front ramp to aid in driving over speedbumps
+Idea - add small wheell beside the coloursensor -> it can sit down low and still be safe from impact, because the wheels will lift it if it drives over something
+
 
 
 

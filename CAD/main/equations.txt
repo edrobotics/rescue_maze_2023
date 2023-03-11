@@ -5,7 +5,7 @@
 "threaded_hole"= 3.9
 "fillet_radius"= 2
 "ground_clearance"= 25
-"tire_thk"= 4
+"tire_thk"= 3
 "innerwheel_diam" = "wheel_diam"-2*"tire_thk"
 "innerwheel_thk"= 8
 "wheel_diam"= 2*("width"/2+"ground_clearance")
