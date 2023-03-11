@@ -70,8 +70,8 @@ bool rightWallPresent = false;
 bool frontWallPresent = false;
 
 // For gyro turning
-double currentAngle = 0;
-double targetAngle = 0;
+double currentGyroAngle = 0;
+double targetGyroAngle = 0;
 
 
 //------------------ Serial communication -------------------------------//
@@ -313,13 +313,13 @@ void gyroTurn(double turnAngle, bool stopMoving, double baseSpeed = 0)
     if (turnAngle<0) multiplier=-1; // Negative is cw
     
     gyro.update();
-    currentAngle = gyroAngleToMathAngle(gyro.getAngleZ()); // Sets positive to be counter-clockwise and makes all valid values between 0 and 360
-    targetAngle = (currentAngle + turnAngle);
-    if (targetAngle<0) {
-    targetAngle = 360+targetAngle; // If the target angle is negative, subtract it from 360. As the turnAngle cannot be greater than 360 (should always be 90), this will also bind the value between 0 and 360.
+    currentGyroAngle = gyroAngleToMathAngle(gyro.getAngleZ()); // Sets positive to be counter-clockwise and makes all valid values between 0 and 360
+    targetGyroAngle = (currentGyroAngle + turnAngle);
+    if (targetGyroAngle<0) {
+    targetGyroAngle = 360+targetGyroAngle; // If the target angle is negative, subtract it from 360. As the turnAngle cannot be greater than 360 (should always be 90), this will also bind the value between 0 and 360.
     crossingZero = true;
-  } else if (targetAngle >= 360) {
-    targetAngle = targetAngle - 360; // Should bind the value to be between 0 and 360 for positive target angles ( no angle should be 720 degrees or greater, so this should work)
+  } else if (targetGyroAngle >= 360) {
+    targetGyroAngle = targetGyroAngle - 360; // Should bind the value to be between 0 and 360 for positive target angles ( no angle should be 720 degrees or greater, so this should work)
     crossingZero = true;
   }
     //double speedToRun = multiplier*1.5*BASE_SPEED_CMPS*CMPS_TO_RPM;
@@ -328,13 +328,13 @@ void gyroTurn(double turnAngle, bool stopMoving, double baseSpeed = 0)
     runWheelSide(wheels_left, -speedToRun);
     runWheelSide(wheels_right, speedToRun);
 
-    double varLeftToTurn = leftToTurn(crossingZero, multiplier, targetAngle, currentAngle);
+    double varLeftToTurn = leftToTurn(crossingZero, multiplier, targetGyroAngle, currentGyroAngle);
 
     while (varLeftToTurn > 15) {
       gyro.update();
-      currentAngle = gyroAngleToMathAngle(gyro.getAngleZ());
+      currentGyroAngle = gyroAngleToMathAngle(gyro.getAngleZ());
       loopEncoders();
-      varLeftToTurn = leftToTurn(crossingZero, multiplier, targetAngle, currentAngle);
+      varLeftToTurn = leftToTurn(crossingZero, multiplier, targetGyroAngle, currentGyroAngle);
     }
 
     // Slowing down in the end of the turn.
@@ -346,9 +346,9 @@ void gyroTurn(double turnAngle, bool stopMoving, double baseSpeed = 0)
 
     while (varLeftToTurn > 2) {
       gyro.update();
-      currentAngle = gyroAngleToMathAngle(gyro.getAngleZ());
+      currentGyroAngle = gyroAngleToMathAngle(gyro.getAngleZ());
       loopEncoders();
-      varLeftToTurn = leftToTurn(crossingZero, multiplier, targetAngle, currentAngle);
+      varLeftToTurn = leftToTurn(crossingZero, multiplier, targetGyroAngle, currentGyroAngle);
     }
     
     if (stopMoving==true) stopWheels();
@@ -526,9 +526,14 @@ double getDistanceDriven()
 
 }
 
-// PID coefficients for wall following.
-double angleP = 1;
-double distanceP = 1;
+// PID coefficients for wall following (in the process of tuning)
+double angleP = 2;
+double distanceP = 3;
+double distanceD = 2;
+// Variables for derivative calculation
+double lastDistance = 0; // Used to calculate derivative term
+long lastExecutionTime = 0; // Used to calculate derivative term
+WallSide lastWallSide = wall_none; // Used to determine if the lastDistance is valid
 
 // Drive with wall following. Will do one iteration, so to actually follow the wall, call it multiple times in short succession.
 // wallSide - which wall to follow. Can be wall_left, wall_right or wall_both. Directions relative to the robot.
@@ -540,6 +545,7 @@ void pidDrive(WallSide wallSide, double startAngle = 555, double gyroOffset = 55
   double wallDistance = 0;
   double robotAngle = 0;
   double distanceError = 0; // positive means that we are to the right of where we want to be.
+  double distanceDerivative = 0; // The rate of change for the derivative term. Initialized to 0, so that it is only used if actively changed
   double currentGyroAngle = gyroAngleToMathAngle(gyro.getAngleZ());
   double tmpGyroOffset = gyroOffset;
   getUltrasonics();
@@ -566,37 +572,29 @@ void pidDrive(WallSide wallSide, double startAngle = 555, double gyroOffset = 55
     distanceError = wallDistance - ultrasonicDistanceToWall;
   }
 
+  if (lastWallSide == wallSide && lastWallSide != wall_none) distanceDerivative = 1000.0*(wallDistance - lastDistance)/(millis()-lastExecutionTime); // Calculate the derivative. (The 1000 is to make the time in seconds)
+  // Update variables for the next execution loop
+  lastExecutionTime = millis();
+  lastDistance = wallDistance;
+  lastWallSide = wallSide;
+
   double goalAngle = 0;
   if (wallSide == wall_none) { // If you do not have a wall, continue driving straight forwards with correction
     goalAngle = 0;
   } else {
-    goalAngle = distanceError*distanceP; // Calculate the angle you want depending on the distance to the wall (error)
+    goalAngle = distanceError*distanceP + distanceDerivative*distanceD; // Calculate the angle you want depending on the distance to the wall (error) and the speed at which you approach (derivative)
   }
   double angleError = goalAngle-robotAngle; // Calculate the correction needed in the wheels to get to the angle
   double correction = angleP*angleError; // Calculate the correction in the wheels. Positive is counter-clockwise (math)
 
+  if (correction > 10) correction = 10;
+  else if (correction < -10) correction = -10;
+
 
   runWheelSide(wheels_left, BASE_SPEED_CMPS - correction);
   runWheelSide(wheels_right, BASE_SPEED_CMPS + correction);
-  loopEncoders();  
+  loopEncoders();
 
-}
-
-// Drive using the gyro to keep your angle.
-// The calling function has to decide the travelled distance itself and it has to loop this function to continue the correction
-// Problem: How will you keep the wall distance?
-//  Solution1: Use the gyro angle instead of the angle calculated from the wall distances, and run pidDrive();
-//  Solution2: Get both the angle and distance in the beginning, and then correct blindly using only the angle and speed
-// UNFINISHED. DO NOT USE.
-void gyroDrive(WallSide wallToMeasure)
-{
-  gyro.update(); // Update gyro
-  double wallDistance = 0;
-  double robotAngle = 0;
-  getUltrasonics();
-  calcRobotPose(wallToMeasure, robotAngle, wallDistance, false); // Can be used regardless of which side is being used
-  gyro.update(); // Update gyro again, for maximum precision (if the ultrasonic measurements take significant time)
-  
 }
 
 // Takes the average of a double array containg 10 elements
@@ -611,6 +609,8 @@ double measurementAverage(double arrayToCalc[]) // Use a reference to the array 
   }
   return sum/10.0;
 }
+
+double lastWallAngle = 0; // Used to determine the angle in relation to the wall when a move ends
 
 void driveStep()
 {
@@ -643,12 +643,10 @@ void driveStep()
   }
   
   double startAngle = measurementAverage(angleMeasurements); // Angle in relation to the wall at the beginning of the move. If no wall is present, the angle is set to 0 (meaning the current angle will be the goal)
-  //double currentAngle = startAngle; // The current angle in relation to the wall. Will later determined by gyro angles.
-  //double currentGyroAngle = gyroAngleToMathAngle(gyro.getAngleZ()); // The current angle measured by the gyro (absolute angle). It is a mathangle though (0-360, see definition above)!
   double gyroOffset = gyroAngleToMathAngle(gyro.getAngleZ());// The angle measured by the gyro (absolute angle) in the beginning.
-  //double tmpGyroOffset = gyroOffset; // Temporary gyro offset for use in the angle difference calculation in the loop
-  //double startDistance = measurementAverage(distanceMeasurements);
   
+
+  lastWallSide = wall_none; // Tells pidDrive that derivative term should not be used
 
   while (getDistanceDriven() < 30) { // Drive while you have travelled less than 30cm
     gyro.update();
@@ -662,13 +660,11 @@ void driveStep()
     gyro.update();
     
     
-    pidDrive(wallToUse, startAngle, gyroOffset);
+    //pidDrive(wallToUse, startAngle, gyroOffset);
+    pidDrive(wallToUse);
   }
 
   stopWheels();
-  
-
-
 
 }
 
