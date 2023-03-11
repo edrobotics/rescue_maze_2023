@@ -23,21 +23,30 @@ void setup()
 double robotAngle = 0;
 double wallDistance = 0;
 
+//#define PICODE
+#define TESTING_NAV
+
 void loop()
 {
-  
+
+  #ifdef PICODE
   if (Serial.available() > 0)
   {
-    /*
+  #endif
+    #ifdef TESTING_NAV
     // For testing without the Pi:
     int command = -1;
     makeNavDecision(command);
-    */
+    delay(500);
+    #endif
+    
 
     // Add some kind of error correction or checking?
     // Potential problem: Some bytes sent over serial may have some additional meaning, thus rendering them inappropriate for use by us
     // Use an enum instead of integers? The enum will be easier to decipher and the integer representation could still be the same
+    #ifdef PICODE
     int command = Serial.read();
+    #endif
     switch (command)
     {
       // Driving
@@ -79,8 +88,9 @@ void loop()
       default:
         break;
     }
-
+  #ifdef PICODE
   }
+  #endif
 
 
 }

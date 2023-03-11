@@ -53,7 +53,7 @@ const double BASE_SPEED_RPM = CMPS_TO_RPM*BASE_SPEED_CMPS; // The base speed of 
 
 // Sensor constants
 const double ultrasonicSpacing = 14; // The distance between the centers two ultrasonic sensors.
-const double ultrasonicDistanceToWall = 6; // The distance between the ultrasonic sensor (edge of the robot) and the wall when the robot is centered. Not calibrated !!!!! just a guess!!!
+const double ultrasonicDistanceToWall = 7.1; // The distance between the ultrasonic sensor (edge of the robot) and the wall when the robot is centered.
 const double wallPresenceTreshold = 20; // Not calibrated !!!!!!!!!!!!!!!!!!!!!!!! Just a guess!!!!!!!!!!!!!!!!!!!!!!!
 
 // Sensor data
@@ -250,10 +250,25 @@ double gyroAngleToMathAngle(double angle) {return -angle + 180;}
 // Does the opposite of above. They are inverse of eachother
 double mathAngleToGyroAngle(double angle) {return -angle + 180;}
 
+// Offsets the angles so that one is 180 degrees.
+// refAngle - the angle that will become 180 degrees.
+// calcAngle - the angle that will be adjusted in accordance.
+// The angles should conform to the mathangle standard outlined above. Both input and output should conform.
+// Should only be used when the difference between the angles is < 180 degrees
+void centerAngle180(double& refAngle, double& calcAngle)
+{
+  double angleDiff = 180-refAngle; // Will always give a valid result if: 0 <= refAngle < 360
+  refAngle += angleDiff; // Should always evaluate to 180, but in case there is a small error I still use this way of doing it.
+  calcAngle += angleDiff;
+  while (calcAngle >= 360) calcAngle -= 360; // Bind calcAngle to valid mathangle interval.
+  while (calcAngle < 0) calcAngle += 360; // Bind calcAngle to valid mathangle interval.
+}
+
 // Returns the distance left to turn in degrees. When you get closer, it decreases. When you have overshot, it will be negative.
 // Can we omit zerocross, and just give the turn angle instead?
 // zeroCross - if the turn will cross over 0
 // turningdirection - which direction you will turn. 1 is counter-clockwise and -1 is clockwise (math angles)
+// TODO: Make use of centerAngle180()?
 double leftToTurn(bool zeroCross, int turningDirection, double tarAng, double curAng)
 {
 
@@ -284,9 +299,13 @@ double leftToTurn(bool zeroCross, int turningDirection, double tarAng, double cu
  // Alternative method: Calculate the difference between any two angles (maybe constrain to some range).
 }
 
+
+double gyroDriveCorrectionCoeff = 0.1;
 // Turn using the gyro
-// The move angle is the angle to turn, in degrees. Positive is counter-clockwise (math angle)
-void gyroTurn(double turnAngle)
+// turnAngle - the angle to turn, in degrees. Should not be greater than 90 (only tested with 90). Positive is counter-clockwise (math angle)
+// stopMoving - Whether or not the robot should stop when the function is done. Set to false when driving continuously.
+// baseSpeed - Optional argument for specifying the speed to move at while turning. cm/s
+void gyroTurn(double turnAngle, bool stopMoving, double baseSpeed = 0)
 {
   // Used to determine turning direction of the wheels
     int multiplier = 1; // Positive is ccw
@@ -305,6 +324,7 @@ void gyroTurn(double turnAngle)
   }
     //double speedToRun = multiplier*1.5*BASE_SPEED_CMPS*CMPS_TO_RPM;
     double speedToRun = multiplier*69/CMPS_TO_RPM;
+    if (baseSpeed != 0) speedToRun = baseSpeed + speedToRun*gyroDriveCorrectionCoeff;
     runWheelSide(wheels_left, -speedToRun);
     runWheelSide(wheels_right, speedToRun);
 
@@ -320,6 +340,7 @@ void gyroTurn(double turnAngle)
     // Slowing down in the end of the turn.
     // All of this code could be placed inside of the first while-loop, but then every iteration would take more time because of checks and the gyro would become less accurate due to that.
     speedToRun = multiplier*30/CMPS_TO_RPM;
+    if (baseSpeed != 0) speedToRun = baseSpeed + speedToRun*gyroDriveCorrectionCoeff; // If driving forward, make the correction smaller
     runWheelSide(wheels_left, -speedToRun);
     runWheelSide(wheels_right, speedToRun);
 
@@ -330,7 +351,7 @@ void gyroTurn(double turnAngle)
       varLeftToTurn = leftToTurn(crossingZero, multiplier, targetAngle, currentAngle);
     }
     
-    stopWheels();
+    if (stopMoving==true) stopWheels();
 }
 
 // Turns the specified steps (90 degrees) in the direction specified above.
@@ -341,7 +362,7 @@ void gyroTurnSteps(TurningDirection direction, int steps)
   int multiplier=-1;
   if (direction==ccw) multiplier=1;
 
-  gyroTurn(multiplier*90);
+  gyroTurn(multiplier*90, true);
 
 }
 
@@ -358,13 +379,14 @@ void turnSteps(TurningDirection direction, int steps)
 // Perhaps return an array in the future (or take on as a mutable(?) argument?)
 void getUltrasonics()
 {
-  //TODO: Add limit to how quickly you can call it
+  //TODO: Add limit to how often you can call it (?)
 
-  ultrasonicDistanceF = ultrasonicF.distanceCm();
+  // The order of calling should be optimized to minimize interference
   ultrasonicDistanceLF = ultrasonicLF.distanceCm();
+  ultrasonicDistanceRB = ultrasonicRB.distanceCm();
+  ultrasonicDistanceF = ultrasonicF.distanceCm();
   ultrasonicDistanceLB = ultrasonicLB.distanceCm();
   ultrasonicDistanceRF = ultrasonicRF.distanceCm();
-  ultrasonicDistanceRB = ultrasonicRB.distanceCm();
 }
 
 void printUltrasonics()
@@ -389,10 +411,13 @@ void checkWallPresence()
 
 
 // Update the "true" distance to the wall and the angle from upright
-// wallSide - which wallSide to check. wall_left, wall_right or wall_both
 // Other code should call the getUltrasonics() beforehand
-// How do I get the return values?
-void calcRobotPose(WallSide wallSide, double& angle, double& trueDistance)
+// wallSide - which wallSide to check. wall_left, wall_right or wall_both
+// angle - the variable to return the calculated angle to. Returned in degrees.
+// angle (if useGyroAngle == true) - the angle calculated by the gyro. Will be used in the calculation and not modified. Degrees. 0 is forward, positive against the left wall and negative against the right wall
+// trueDistance - the variable to return the calculated distance to. Returned in cm.
+// useGyroAngle - whether to use the angle calculated by the gyro (true) or calculate the angle youself (false)
+void calcRobotPose(WallSide wallSide, double& angle, double& trueDistance, bool useGyroAngle)
 {
   double d1 = 0;
   double d2 = 0;
@@ -412,7 +437,8 @@ void calcRobotPose(WallSide wallSide, double& angle, double& trueDistance)
     // Do nothing for now? Make it like if the left wall was followed?
   }
 
-  angle = atan((d2 - d1)/ultrasonicSpacing);
+  if (useGyroAngle==false) angle = atan((d2 - d1)/ultrasonicSpacing);
+  else angle *= DEG_TO_RAD; // Convert the angle to radians to execute the calculation
   trueDistance = cos(angle) * ((d1 + d2)/(double)2);
   angle *= RAD_TO_DEG; // Convert the angle to degrees
   
@@ -506,13 +532,25 @@ double distanceP = 1;
 
 // Drive with wall following. Will do one iteration, so to actually follow the wall, call it multiple times in short succession.
 // wallSide - which wall to follow. Can be wall_left, wall_right or wall_both. Directions relative to the robot.
-void pidDrive(WallSide wallSide)
+// startAngle - optional argument for the angle relative to the wall for the begin of the move (degrees, mathangle)
+// gyroOffset  - optional argument for the angle that the gyro read for the begin of the move (degrees, mathangle)
+void pidDrive(WallSide wallSide, double startAngle = 555, double gyroOffset = 555)
 {
+  gyro.update();
   double wallDistance = 0;
   double robotAngle = 0;
-  getUltrasonics();
-  calcRobotPose(wallSide, robotAngle, wallDistance); // Can be used regardless of which side is being used
   double distanceError = 0; // positive means that we are to the right of where we want to be.
+  double currentGyroAngle = gyroAngleToMathAngle(gyro.getAngleZ());
+  double tmpGyroOffset = gyroOffset;
+  getUltrasonics();
+  if (startAngle==555 || gyroOffset == 555) {
+    calcRobotPose(wallSide, robotAngle, wallDistance, false); // Can be used regardless of which side is being used
+  } else {
+    centerAngle180(currentGyroAngle, tmpGyroOffset);
+    robotAngle = startAngle + currentGyroAngle - tmpGyroOffset; // Safe to do because we moved the angles to 180 degrees, meaning that there will not be a zero-cross
+    calcRobotPose(wallSide, robotAngle, wallDistance, true);
+  }
+  
   
   if (wallSide==wall_left)
   {
@@ -528,8 +566,13 @@ void pidDrive(WallSide wallSide)
     distanceError = wallDistance - ultrasonicDistanceToWall;
   }
 
-  double targetAngle = distanceError*distanceP; // Calculate the angle you want depending on the distance to the wall (error)
-  double angleError = targetAngle-robotAngle; // Calculate the correction needed in the wheels to get to the angle
+  double goalAngle = 0;
+  if (wallSide == wall_none) { // If you do not have a wall, continue driving straight forwards with correction
+    goalAngle = 0;
+  } else {
+    goalAngle = distanceError*distanceP; // Calculate the angle you want depending on the distance to the wall (error)
+  }
+  double angleError = goalAngle-robotAngle; // Calculate the correction needed in the wheels to get to the angle
   double correction = angleP*angleError; // Calculate the correction in the wheels. Positive is counter-clockwise (math)
 
 
@@ -539,40 +582,102 @@ void pidDrive(WallSide wallSide)
 
 }
 
+// Drive using the gyro to keep your angle.
+// The calling function has to decide the travelled distance itself and it has to loop this function to continue the correction
+// Problem: How will you keep the wall distance?
+//  Solution1: Use the gyro angle instead of the angle calculated from the wall distances, and run pidDrive();
+//  Solution2: Get both the angle and distance in the beginning, and then correct blindly using only the angle and speed
+// UNFINISHED. DO NOT USE.
+void gyroDrive(WallSide wallToMeasure)
+{
+  gyro.update(); // Update gyro
+  double wallDistance = 0;
+  double robotAngle = 0;
+  getUltrasonics();
+  calcRobotPose(wallToMeasure, robotAngle, wallDistance, false); // Can be used regardless of which side is being used
+  gyro.update(); // Update gyro again, for maximum precision (if the ultrasonic measurements take significant time)
+  
+}
 
+// Takes the average of a double array containg 10 elements
+// Returns the average
+// TODO: make it more general - accept a double array of any size
+//------------------------------------------------------------------WARNING!!!!!! Potential try to access value not in array. Be careful.
+double measurementAverage(double arrayToCalc[]) // Use a reference to the array instead? Less expensive?
+{
+  double sum = 0;
+  for (int i=0; i<10; ++i) {
+    sum += arrayToCalc[i];
+  }
+  return sum/10.0;
+}
 
 void driveStep()
 {
-  WallSide wallToFollow; // Declare a variable for which wall to follow
+  WallSide wallToUse; // Declare a variable for which wall to follow
   startDistanceMeasure(); // Starts the distance measuring
+
+  // Get sensor data for initial values
+  getUltrasonics();
+  checkWallPresence();
+  if (leftWallPresent && rightWallPresent) wallToUse = wall_both;
+  else if (leftWallPresent) wallToUse = wall_left;
+  else if (rightWallPresent) wallToUse = wall_right;
+  else wallToUse = wall_none; // If no wall was detected
+
   
+  // Calculate the current values precisely
+  // Maybe I need to add a delay in the loop because of ultrasonic measurements time limits? (it wont make multiple measurements if the polling speed is too fast)
+  double angleMeasurements[10];
+  double distanceMeasurements[10];
+  if (wallToUse == wall_none) {
+    for (int i=0; i<10; ++i) { // Fill the measurements with 0
+      angleMeasurements[i] = 0;
+      distanceMeasurements[i] = 0;
+  }
+  } else {
+    for (int i=0; i<10; ++i) { // Get 10 measurements
+      getUltrasonics();
+      calcRobotPose(wallToUse, angleMeasurements[i], distanceMeasurements[i], false);
+    }
+  }
+  
+  double startAngle = measurementAverage(angleMeasurements); // Angle in relation to the wall at the beginning of the move. If no wall is present, the angle is set to 0 (meaning the current angle will be the goal)
+  //double currentAngle = startAngle; // The current angle in relation to the wall. Will later determined by gyro angles.
+  //double currentGyroAngle = gyroAngleToMathAngle(gyro.getAngleZ()); // The current angle measured by the gyro (absolute angle). It is a mathangle though (0-360, see definition above)!
+  double gyroOffset = gyroAngleToMathAngle(gyro.getAngleZ());// The angle measured by the gyro (absolute angle) in the beginning.
+  //double tmpGyroOffset = gyroOffset; // Temporary gyro offset for use in the angle difference calculation in the loop
+  //double startDistance = measurementAverage(distanceMeasurements);
+  
+
   while (getDistanceDriven() < 30) { // Drive while you have travelled less than 30cm
+    gyro.update();
     getUltrasonics();
     checkWallPresence();
-    if (leftWallPresent && rightWallPresent) wallToFollow = wall_both;
-    else if (leftWallPresent) wallToFollow = wall_left;
-    else if (rightWallPresent) wallToFollow = wall_right;
-    else wallToFollow = wall_none; // If no wall was detected
-
-    if (wallToFollow==wall_none) {
-      // Drive at base speed
-      driveSpeed(BASE_SPEED_CMPS);
-      loopEncoders();
-    } else {
-      pidDrive(wallToFollow);
-    }
+    // Separate this out into its own function? (deciding what wall to follow)
+    if (leftWallPresent && rightWallPresent) wallToUse = wall_both;
+    else if (leftWallPresent) wallToUse = wall_left;
+    else if (rightWallPresent) wallToUse = wall_right;
+    else wallToUse = wall_none; // If no wall was detected
+    gyro.update();
+    
+    
+    pidDrive(wallToUse, startAngle, gyroOffset);
   }
 
   stopWheels();
   
+
+
 
 }
 
 // Make a navigation decision.
 // Simple algorithm just used for testing when the maze-code is not present
 int nextAction = -1;
-void makeNavDecision(int& action) {
-  if (nextAction == -1) { // If the given nextAction was nothing (x)
+void makeNavDecision(int& action)
+{
+  if (nextAction == -1) { // If the given nextAction was nothing (x, -1)
     getUltrasonics();
     checkWallPresence();
     if (leftWallPresent && frontWallPresent) action = 3;

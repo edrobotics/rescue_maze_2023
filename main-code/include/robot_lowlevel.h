@@ -111,10 +111,10 @@ double leftToTurn(bool zeroCross, int turningDirection, double tarAng, double cu
 
 
 // Turn using the gyro
-// The move angle is the angle to turn, in degrees. Positive is counter-clockwise.
-// Improvement: Slow down when you get closer to turn more precisely
-// turnAngle - the angle to turn, in degrees. Should not be greater than 90 (only tested with 90)
-void gyroTurn(double turnAngle);
+// turnAngle - the angle to turn, in degrees. Should not be greater than 90 (only tested with 90). Positive is counter-clockwise (math angle)
+// stopMoving - Whether or not the robot should stop when the function is done. Set to false when driving continuously.
+// baseSpeed - Optional argument for specifying the speed to move at while turning. cm/s
+void gyroTurn(double turnAngle, bool stopMoving, double baseSpeed = 0);
 
 // Turns the specified steps (90 degrees) in the direction specified above
 // steps - the amount of steps to turn (positive int)
@@ -141,9 +141,13 @@ enum WallSide {
 };
 
 // Update the "true" distance to the wall and the angle from upright
-// wallSide - which wallSide to check. wall_left, wall_right or wall_both
 // Other code should call the getUltrasonics() beforehand
-void calcRobotPose(WallSide wallSide, double& angle, double& trueDistance);
+// wallSide - which wallSide to check. wall_left, wall_right or wall_both
+// angle - the variable to return the calculated angle to. Returned in degrees.
+// angle (if useGyroAngle == true) - the angle calculated by the gyro. Will be used in the calculation and not modified. Degrees.
+// trueDistance - the variable to return the calculated distance to. Returned in cm.
+// useGyroAngle - whether to use the angle calculated by the gyro (true) or calculate the angle youself (false)
+void calcRobotPose(WallSide wallSide, double& angle, double& trueDistance, bool useGyroAngle);
 
 
 
@@ -167,7 +171,11 @@ double getDistanceDriven();
 
 // Drive with wall following
 // wallSide - which wall to follow. Can be wall_left, wall_right or wall_both. Directions relative to the robot.
-void pidDrive(WallSide wallSide);
+void pidDrive(WallSide wallSide, double startAngle);
+
+// Drive using the gyro to keep your angle
+// The calling function has to decide the travelled distance itself and it has to loop this function to continue the correction
+void gyroDrive(double angleToWall);
 
 
 //------------------------- Rescue kits -----------------------------------//
