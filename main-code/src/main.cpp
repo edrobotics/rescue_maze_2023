@@ -32,8 +32,7 @@ void loop()
 
   #ifdef TESTING
   driveStep();
-  delay(500);
-  turnSteps(ccw, 1);
+  delay(1500);
 
   #else
 

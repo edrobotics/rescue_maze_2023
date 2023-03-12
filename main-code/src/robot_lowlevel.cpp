@@ -551,9 +551,10 @@ double getDistanceDriven()
 }
 
 // PID coefficients for wall following (in the process of tuning)
-double angleP = 2;
-double distanceP = 3;
-double distanceD = 2;
+// The comments after the coefficients are a history of coefficients that worked allright
+double angleP = 1; //    1  , 1, 1  ,
+double distanceP = 3; // 2.2, 3, 3  ,
+double distanceD = 1; // 0, 1, 0.5,
 // Variables for derivative calculation
 double lastDistance = 0; // Used to calculate derivative term
 unsigned long lastExecutionTime = 0; // Used to calculate derivative term
@@ -612,6 +613,7 @@ void pidDrive(WallSide wallSide, double startAngle, double gyroOffset)
   double angleError = goalAngle-robotAngle; // Calculate the correction needed in the wheels to get to the angle
   double correction = angleP*angleError; // Calculate the correction in the wheels. Positive is counter-clockwise (math)
 
+  // Filter out the extreme cases
   if (correction > 10) correction = 10;
   else if (correction < -10) correction = -10;
 
@@ -620,6 +622,8 @@ void pidDrive(WallSide wallSide, double startAngle, double gyroOffset)
   runWheelSide(wheels_right, BASE_SPEED_CMPS + correction);
   loopEncoders();
   lastWallAngle = robotAngle; // Update the lastWallAngle - okay to do because this will not be read during the execution loop of pidTurn. It will only be used before.
+
+  //Serial.println(correction); // Debugging
 
 }
 
@@ -665,10 +669,11 @@ void driveStepDriveLoop(WallSide& wallToUse, double& startAngle, double& gyroOff
   dumbDistanceDriven = getDistanceDriven();
 
   // Checking if you are done
-  if (ultrasonicDistanceF < (15 - ultrasonicFrontOffset)) // If the robot is the correct distance away from the front wall
+  if (ultrasonicDistanceF < (15 - ultrasonicFrontOffset + 3)) // If the robot is the correct distance away from the front wall. The goal is that ultrasonicDistanceF is 5.2 when the robot stops.
   {
     trueDistanceDriven = 30; // The robot has arrived
   }
+  Serial.println(ultrasonicDistanceF);
 
   // Checking for wallchanges (to be done)
 }
@@ -739,9 +744,9 @@ void driveStep()
   dumbDistanceDriven = 0;
   trueDistanceDriven = 0;
   // Continue driving forward if necessary (close enough to the wall in front)
-  if (ultrasonicDistanceF < (15-ultrasonicFrontOffset + 5))
+  if (ultrasonicDistanceF < (15-ultrasonicFrontOffset + 10))
   {
-    while (ultrasonicDistanceF < (15-ultrasonicFrontOffset) && trueDistanceDriven < 7) // The part about trueDistance is a failsafe in case the sensor fails
+    while (ultrasonicDistanceF < (15-ultrasonicFrontOffset + 3) && trueDistanceDriven < 7) // The part about trueDistance is a failsafe in case the sensor fails
     {
       driveStepDriveLoop(wallToUse, startAngle, gyroOffset, dumbDistanceDriven);
     }

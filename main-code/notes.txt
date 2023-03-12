@@ -5,3 +5,6 @@ pidDrive() - the distance error when both sides are present can be calculated (l
 gyroTurn() - can turn more than 180 degrees. Divide it into < 180 degree segments.
 
 General - add some way of filtering out unreasonable results and falling back to "dumb" methods in those cases.
+
+Bugs:
+Sometimes when the robot is close to a wall, it drives slowly forward and sometimes does not recognise the wall.
