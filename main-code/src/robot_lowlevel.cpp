@@ -25,6 +25,11 @@ MeUltrasonicSensor ultrasonicF(PORT_7); // Front
 // Gyro definition
 MeGyro gyro(0, 0x69);
 
+// Buzzer (for debugging)
+MeBuzzer buzzer;
+
+
+
 /*
 enum TurningDirection {
     cw,
@@ -64,6 +69,11 @@ double ultrasonicDistanceLB = 0;
 double ultrasonicDistanceRF = 0;
 double ultrasonicDistanceRB = 0;
 double ultrasonicDistanceF = 0;
+// Whether or not the sensor detected a wall the previous time when checkWallChanges was run
+bool previousLFState = false;
+bool previousLBState = false;
+bool previousRFState = false;
+bool previousRBState = false;
 
 
 // Wall presence
@@ -87,6 +97,14 @@ void serialcomm::returnSuccess()
 void serialcomm::returnFailure()
 {
   Serial.write(42);
+}
+
+
+//---------------------- Buzzer and lights (for debugging) ------------------//
+
+void lightsAndBuzzerInit()
+{
+  buzzer.setpin(45); // Should not really be here but what other choice is there?
 }
 
 
@@ -370,7 +388,7 @@ void gyroTurn(double turnAngle, bool stopMoving, double baseSpeed = 0)
 // Turns the specified steps (90 degrees) in the direction specified above.
 // Automatic correction for the last angle to the wall can be specified by the last argument. Make sure that the lastWallAngle is up to date!
 // direction - cw (clockwise) or ccw (counter-clockwise) turn.
-// steps - the amount of 90-degree turns to do in the chosen direction.
+// steps - the amount of 90-degree turns to do in the chosen direction. (NOT YET IMPLEMENTED!)
 // doCorrection - Whether or not you should correct for the lastWallAngle
 void gyroTurnSteps(TurningDirection direction, int steps, bool doCorrection)
 {
@@ -421,15 +439,46 @@ void printUltrasonics()
   Serial.println(ultrasonicDistanceRB);
 }
 
+// For determining wall presence for individual sensors
+bool wallPresentLF = false;
+bool wallPresentRF = false;
+bool wallPresentLB = false;
+bool wallPresentRB = false;
+bool wallPresentF = false;
+
 // Check if the walls are present. Uses raw distance data instead of "true" distance data.
 void checkWallPresence()
 {
-  leftWallPresent = false;
-  rightWallPresent = false;
-  frontWallPresent = false;
-  if (ultrasonicDistanceLF < wallPresenceTreshold && ultrasonicDistanceLB < wallPresenceTreshold) leftWallPresent = true;
-  if (ultrasonicDistanceRF < wallPresenceTreshold && ultrasonicDistanceRB < wallPresenceTreshold) rightWallPresent = true;
-  if (ultrasonicDistanceF < wallPresenceTreshold) frontWallPresent = true;
+  // Individual presence
+  if (ultrasonicDistanceLF < wallPresenceTreshold) wallPresentLF = true;
+  else wallPresentLF = false;
+  if (ultrasonicDistanceRF < wallPresenceTreshold) wallPresentRF = true;
+  else wallPresentRF = false;
+  if (ultrasonicDistanceLB < wallPresenceTreshold) wallPresentLB = true;
+  else wallPresentLB = false;
+  if (ultrasonicDistanceRB < wallPresenceTreshold) wallPresentRB = true;
+  else wallPresentRB = false;
+  if (ultrasonicDistanceF < wallPresenceTreshold) wallPresentF = true; // The offset here will probably have to be adjusted
+  else wallPresentF = false;
+
+  //Serial.print(wallPresentLF); Serial.print(" "); Serial.print(wallPresentLB); Serial.print(" "); Serial.print(wallPresentRF); Serial.print(" "); Serial.println(wallPresentRB); // Debugging
+
+  // Wall presence
+  if (wallPresentLF && wallPresentLB) leftWallPresent = true;
+  else leftWallPresent = false;
+  if (wallPresentRF && wallPresentRB) rightWallPresent = true;
+  else rightWallPresent = false;
+  frontWallPresent = wallPresentF;
+}
+
+// Sets the vairable for previous wall states to the current ones
+void setPreviousWallStates()
+{
+  previousLFState = wallPresentLF;
+  previousRFState = wallPresentRF;
+  previousLBState = wallPresentLB;
+  previousRBState = wallPresentRB;
+
 }
 
 
@@ -484,6 +533,47 @@ int getWallStates()
   return wallStates;
 }
 
+
+
+
+
+// Checking for wall changes
+// Needs to be more robust
+WallChangeType checkWallChanges(UltrasonicGroup ultrasonicGroup)
+{
+
+  if (ultrasonicGroup == ultrasonics_front)
+  {
+    if (wallPresentLF != previousLFState)
+    {
+      previousLFState = wallPresentLF;
+      if (wallPresentLF == true) return wallchange_approaching;
+      else return wallchange_leaving;
+    }
+    if (wallPresentRF != previousRFState)
+    {
+      previousRFState = wallPresentRF;
+      if (wallPresentRF == true) return wallchange_approaching;
+      else return wallchange_leaving;
+    }
+  }
+  else if (ultrasonicGroup == ultrasonics_back)
+  {
+    if (wallPresentLB != previousLBState)
+    {
+      previousLBState = wallPresentLB;
+      if (wallPresentLB == true) return wallchange_approaching;
+      else return wallchange_leaving;
+    }
+    if (wallPresentRB != previousRBState)
+    {
+      previousRBState = wallPresentRB;
+      if (wallPresentRB == true) return wallchange_approaching;
+      else return wallchange_leaving;
+    }
+  }
+  return wallchange_none; // If the program made it here, no wall change was detected or an incorrect parameter was given.
+}
 
 
 
@@ -673,9 +763,35 @@ void driveStepDriveLoop(WallSide& wallToUse, double& startAngle, double& gyroOff
   {
     trueDistanceDriven = 30; // The robot has arrived
   }
-  Serial.println(ultrasonicDistanceF);
+  //Serial.println(ultrasonicDistanceF); // Debugging
 
-  // Checking for wallchanges (to be done)
+  // Checking for wallchanges (needs some more robustness!)
+  WallChangeType backWallCheck = checkWallChanges(ultrasonics_back);
+  WallChangeType frontWallCheck = checkWallChanges(ultrasonics_front);
+  if (backWallCheck == wallchange_leaving)
+  {
+    //buzzer.tone(440, 30); // Debugging
+    //buzzer.tone(220, 30); // Debugging
+    trueDistanceDriven = 15 + ultrasonicSpacing/2.0 + 7; // The math should be correct, but the robot drives too far without the addition. The same amount of wrong as below.
+  }
+  else if (backWallCheck == wallchange_approaching)
+  {
+    //buzzer.tone(220, 30); // Debugging
+    //buzzer.tone(440, 30); // Debugging
+    trueDistanceDriven = 15 + ultrasonicSpacing/2.0 - 1; // The math should be correct, but the robot drives too far without the addition. The same amount of wrong as below.
+  }
+  if (frontWallCheck == wallchange_leaving)
+  {
+    //buzzer.tone(880, 30); // Debugging
+    //buzzer.tone(440, 30); // Debugging
+    trueDistanceDriven = 15 - ultrasonicSpacing/2 + 7; // The math should be correct, but the robot drives too far without the addition. The same amount of wrong as above.
+  }
+  else if (frontWallCheck == wallchange_approaching)
+  {
+    //buzzer.tone(440, 30); // Debugging
+    //buzzer.tone(880, 30); // Debugging
+    trueDistanceDriven = 15 - ultrasonicSpacing/2 - 1; // The math should be correct, but the robot drives too far without the addition. The same amount of wrong as above.
+  }
 }
 
 
@@ -689,6 +805,7 @@ void driveStep()
   // Get sensor data for initial values
   getUltrasonics();
   checkWallPresence();
+  setPreviousWallStates();
   if (leftWallPresent && rightWallPresent) wallToUse = wall_both;
   else if (leftWallPresent) wallToUse = wall_left;
   else if (rightWallPresent) wallToUse = wall_right;
@@ -721,10 +838,10 @@ void driveStep()
   lastWallSide = wall_none; // Tells pidDrive that derivative term should not be used
   
   
-// Drive until the truDistanceDriven is 30 or greater. This is the original way I did it, but the alternative way below may be used if the later parts of this code are changed.
+  // Drive until the truDistanceDriven is 30 or greater. This is the original way I did it, but the alternative way below may be used if the later parts of this code are changed.
   while (trueDistanceDriven < 30)
   {
-  driveStepDriveLoop(wallToUse, startAngle, gyroOffset, dumbDistanceDriven);
+  driveStepDriveLoop(wallToUse, startAngle, gyroOffset, dumbDistanceDriven); // There does not seem to be a time difference between calling the function like this and pasting in the code
   }
 
   /* Alternative way of doing it. Because it does some of the things from down below, those have to be removed if this code is used:

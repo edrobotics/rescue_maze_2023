@@ -133,6 +133,13 @@ void gyroTurnSteps(TurningDirection direction, int steps, bool doCorrection);
 
 //--------------------- Sensors ----------------------------------------//
 
+enum UltrasonicGroup {
+  ultrasonics_front,
+  ultrasonics_back,
+  ultrasonics_left,
+  ultrasonics_right,
+};
+
 // Get all ultrasonic sensors
 // Perhaps return an array in the future (or take on as a mutable(?) argument?)
 void getUltrasonics();
@@ -158,6 +165,14 @@ enum WallSide {
 // trueDistance - the variable to return the calculated distance to. Returned in cm.
 // useGyroAngle - whether to use the angle calculated by the gyro (true) or calculate the angle youself (false)
 void calcRobotPose(WallSide wallSide, double& angle, double& trueDistance, bool useGyroAngle);
+
+enum WallChangeType {
+  wallchange_approaching,
+  wallchange_leaving,
+  wallchange_none,
+};
+
+WallChangeType checkWallChanges(UltrasonicGroup ultrasonicGroup);
 
 
 

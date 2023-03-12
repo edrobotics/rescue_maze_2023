@@ -14,7 +14,8 @@ void setup()
   // Init hardware
   gyroInit();
   encodersInit();
-  startDistanceMeasure();
+  startDistanceMeasure(); // Why is this here?
+  
 
   // Wait for beginning (to give time to remove hands etc.)
   delay(1000);
@@ -27,12 +28,13 @@ double wallDistance = 0;
 //#define TESTING_NAV
 #define TESTING
 
+
 void loop()
 {
 
   #ifdef TESTING
   driveStep();
-  delay(1500);
+  delay(2000);
 
   #else
 
