@@ -103,6 +103,14 @@ double gyroAngleToMathAngle(double angle);
 // Does the opposite of above. They are inverse of eachother
 double mathAngleToGyroAngle(double angle);
 
+
+//// Offsets the angles so that one is 180 degrees.
+// refAngle - the angle that will become 180 degrees.
+// calcAngle - the angle that will be adjusted in accordance.
+// The angles should conform to the mathangle standard outlined above. Both input and output should conform.
+// Should only be used when the difference between the angles is < 180 degrees
+void centerAngle180(double& refAngle, double& calcAngle);
+
 // Returns the distance left to turn in degrees. When you get closer, it decreases. When you have overshot, it will be negative.
 // Can we omit zerocross, and just give the turn angle instead?
 // zeroCross - if the turn will cross over 0
@@ -116,10 +124,12 @@ double leftToTurn(bool zeroCross, int turningDirection, double tarAng, double cu
 // baseSpeed - Optional argument for specifying the speed to move at while turning. cm/s
 void gyroTurn(double turnAngle, bool stopMoving, double baseSpeed = 0);
 
-// Turns the specified steps (90 degrees) in the direction specified above
-// steps - the amount of steps to turn (positive int)
-// direction - the direction to turn (cw or ccw)
-void gyroTurnSteps(TurningDirection direction, int steps);
+// Turns the specified steps (90 degrees) in the direction specified above.
+// Automatic correction for the last angle to the wall can be specified by the last argument. Make sure that the lastWallAngle is up to date!
+// direction - cw (clockwise) or ccw (counter-clockwise) turn.
+// steps - the amount of 90-degree turns to do in the chosen direction.
+// doCorrection - Whether or not you should correct for the lastWallAngle
+void gyroTurnSteps(TurningDirection direction, int steps, bool doCorrection);
 
 //--------------------- Sensors ----------------------------------------//
 
@@ -172,10 +182,6 @@ double getDistanceDriven();
 // Drive with wall following
 // wallSide - which wall to follow. Can be wall_left, wall_right or wall_both. Directions relative to the robot.
 void pidDrive(WallSide wallSide, double startAngle);
-
-// Drive using the gyro to keep your angle
-// The calling function has to decide the travelled distance itself and it has to loop this function to continue the correction
-void gyroDrive(double angleToWall);
 
 
 //------------------------- Rescue kits -----------------------------------//

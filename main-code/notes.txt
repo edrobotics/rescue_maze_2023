@@ -1,0 +1,5 @@
+Make a function to calculate the difference between any angles - can replace some code present now.
+
+pidDrive() - the distance error when both sides are present can be calculated (left-right)/2
+
+gyroTurn() - can turn more than 180 degrees. Divide it into < 180 degree segments.

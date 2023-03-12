@@ -24,10 +24,18 @@ double robotAngle = 0;
 double wallDistance = 0;
 
 //#define PICODE
-#define TESTING_NAV
+//#define TESTING_NAV
+#define TESTING
 
 void loop()
 {
+
+  #ifdef TESTING
+  driveStep();
+  delay(500);
+  turnSteps(ccw, 1);
+
+  #else
 
   #ifdef PICODE
   if (Serial.available() > 0)
@@ -90,6 +98,8 @@ void loop()
     }
   #ifdef PICODE
   }
+  #endif
+
   #endif
 
 

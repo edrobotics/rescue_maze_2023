@@ -266,13 +266,31 @@ void centerAngle180(double& refAngle, double& calcAngle)
 }
 
 // Returns the distance left to turn in degrees. When you get closer, it decreases. When you have overshot, it will be negative.
-// Can we omit zerocross, and just give the turn angle instead?
 // zeroCross - if the turn will cross over 0
 // turningdirection - which direction you will turn. 1 is counter-clockwise and -1 is clockwise (math angles)
-// TODO: Make use of centerAngle180()?
+// tarAng - the angle you want to turn to.
+// curAng - the angle you are currently at.
+// The maximum allowed difference between the angles is <180
 double leftToTurn(bool zeroCross, int turningDirection, double tarAng, double curAng)
 {
 
+  double targetAngle = tarAng;
+  double currentAngle = curAng;
+  centerAngle180(targetAngle, currentAngle);
+  if (turningDirection==1)
+  {
+    return targetAngle - currentAngle;
+  }
+  else if (turningDirection == -1)
+  {
+    return currentAngle - targetAngle;
+  }
+
+  return -100; // If something went wrong. Normally you should never get -100 (overshoot of 100 degrees)
+
+  
+  
+  /* The old code:
   if (zeroCross==false) { // Normal turn
     if (turningDirection == 1) {
       if (tarAng>300 && curAng<180) return 360 - tarAng + curAng; // If you have overshot so much that you passed zero
@@ -289,15 +307,7 @@ double leftToTurn(bool zeroCross, int turningDirection, double tarAng, double cu
     else return turningDirection*(tarAng-curAng); // When curAng has passed 0, it is just lika a normal turn (like above)
   }
   return -100; // Return -100 if nothing matched (which should never happen)
-
-  
-  /* Fungerar ej korrekt (varför?). Kan dock vara inspiration.
-  if (curAng>=270 && turningDirection==-1) return 360 - curAng + tarAng;
-  else if (curAng<90 && turningDirection==1) return curAng + 360-tarAng;
-  return -turningDirection*(tarAng-curAng);
   */
-
- // Alternative method: Calculate the difference between any two angles (maybe constrain to some range).
 }
 
 
@@ -317,10 +327,10 @@ void gyroTurn(double turnAngle, bool stopMoving, double baseSpeed = 0)
     currentGyroAngle = gyroAngleToMathAngle(gyro.getAngleZ()); // Sets positive to be counter-clockwise and makes all valid values between 0 and 360
     targetGyroAngle = (currentGyroAngle + turnAngle);
     if (targetGyroAngle<0) {
-    targetGyroAngle = 360+targetGyroAngle; // If the target angle is negative, subtract it from 360. As the turnAngle cannot be greater than 360 (should always be 90), this will also bind the value between 0 and 360.
+    targetGyroAngle +=360; // If the target angle is negative, add 360 to make it between 0 and 360 (no angle should be smaller than -360)
     crossingZero = true;
   } else if (targetGyroAngle >= 360) {
-    targetGyroAngle = targetGyroAngle - 360; // Should bind the value to be between 0 and 360 for positive target angles ( no angle should be 720 degrees or greater, so this should work)
+    targetGyroAngle -= 360; // Should bind the value to be between 0 and 360 for positive target angles ( no angle should be 720 degrees or greater, so this should work)
     crossingZero = true;
   }
     //double speedToRun = multiplier*1.5*BASE_SPEED_CMPS*CMPS_TO_RPM;
@@ -356,20 +366,30 @@ void gyroTurn(double turnAngle, bool stopMoving, double baseSpeed = 0)
 }
 
 // Turns the specified steps (90 degrees) in the direction specified above.
+// Automatic correction for the last angle to the wall can be specified by the last argument. Make sure that the lastWallAngle is up to date!
 // direction - cw (clockwise) or ccw (counter-clockwise) turn.
 // steps - the amount of 90-degree turns to do in the chosen direction.
-void gyroTurnSteps(TurningDirection direction, int steps)
+// doCorrection - Whether or not you should correct for the lastWallAngle
+void gyroTurnSteps(TurningDirection direction, int steps, bool doCorrection)
 {
   int multiplier=-1;
   if (direction==ccw) multiplier=1;
+  double turnAngle = multiplier*90;
 
-  gyroTurn(multiplier*90, true);
+  if (doCorrection == true)
+  {
+    turnAngle = turnAngle - lastWallAngle;
+    lastWallAngle = 0; // You should have turned perfectly. Should be replaced by actually checking how far you have turned.
+  }
+
+
+  gyroTurn(turnAngle, true);
 
 }
 
 void turnSteps(TurningDirection direction, int steps)
 {
-  gyroTurnSteps(direction, steps);
+  gyroTurnSteps(direction, steps, true);
 }
 
 
