@@ -179,9 +179,20 @@ void testDistanceMeasureRight();
 double getDistanceDriven();
 
 
-// Drive with wall following
+// Drive with wall following. Will do one iteration, so to actually follow the wall, call it multiple times in short succession.
 // wallSide - which wall to follow. Can be wall_left, wall_right or wall_both. Directions relative to the robot.
-void pidDrive(WallSide wallSide, double startAngle);
+// startAngle - The angle relative to the wall for the begin of the move (degrees, mathangle)
+// gyroOffset  - The angle that the gyro read for the begin of the move (degrees, mathangle)
+// The last two arguments are only used if the wallSide == wall_none
+void pidDrive(WallSide wallSide, double startAngle, double gyroOffset);
+
+// What to run inside of the driveStep loop (the driving forward-portion)
+// Arguments have the same names as the variables they should accept in driveStep.
+// wallToUse - which wall to follow/measure
+// startAngle - what the angle is when starting the step (mathangle)
+// gyroOffset - which angle the gyro indicates when the step starts (mathangle)
+// dumbDistanceDriven - used to keep track of the distance travelled measured by the encoder
+void driveStepDriveLoop(WallSide& wallToUse, double& startAngle, double& gyroOffset, double& dumbDistanceDriven);
 
 
 //------------------------- Rescue kits -----------------------------------//

@@ -49,10 +49,12 @@ const double WHEELBASE_CIRCUMFERENCE = PI*WHEEL_DISTANCE;
 const double CMPS_TO_RPM = 1.0/WHEEL_CIRCUMFERENCE*60.0; // Constant to convert from cm/s to rpm
 const double BASE_SPEED_CMPS = 20; // The base speed of driving (cm/s)
 const double BASE_SPEED_RPM = CMPS_TO_RPM*BASE_SPEED_CMPS; // The base speed of driving (rpm)
+double trueDistanceDriven = 0; // The correct driven distance. Measured as travelling along the wall and also updated when landmarks are seen
 
 
 // Sensor constants
 const double ultrasonicSpacing = 14; // The distance between the centers two ultrasonic sensors.
+const double ultrasonicFrontOffset = 10; // The distance from the front sensor to the center of the robot
 const double ultrasonicDistanceToWall = 7.1; // The distance between the ultrasonic sensor (edge of the robot) and the wall when the robot is centered.
 const double wallPresenceTreshold = 20; // Not calibrated !!!!!!!!!!!!!!!!!!!!!!!! Just a guess!!!!!!!!!!!!!!!!!!!!!!!
 
@@ -634,11 +636,50 @@ double measurementAverage(double arrayToCalc[]) // Use a reference to the array 
   return sum/10.0;
 }
 
+// What to run inside of the driveStep loop (the driving forward-portion)
+// Arguments have the same names as the variables they should accept in driveStep.
+// wallToUse - which wall to follow/measure
+// startAngle - what the angle is when starting the step (mathangle)
+// gyroOffset - which angle the gyro indicates when the step starts (mathangle)
+// dumbDistanceDriven - used to keep track of the distance travelled measured by the encoder
+void driveStepDriveLoop(WallSide& wallToUse, double& startAngle, double& gyroOffset, double& dumbDistanceDriven)
+{
+  gyro.update();
+  getUltrasonics();
+  checkWallPresence();
+  // Separate this out into its own function? (deciding what wall to follow)
+  if (leftWallPresent && rightWallPresent) wallToUse = wall_both;
+  else if (leftWallPresent) wallToUse = wall_left;
+  else if (rightWallPresent) wallToUse = wall_right;
+  else wallToUse = wall_none; // If no wall was detected
+  gyro.update();
+
+
+  //pidDrive(wallToUse, startAngle, gyroOffset);
+  pidDrive(wallToUse, startAngle, gyroOffset);
+
+  // Updating the distances
+  // Increment the true distance driven.
+  // Done by calculating the leg parallell to the wall in the right triangle formed by the distance travelled and the lines parallell to walls in both directions (see notes on paper)
+  trueDistanceDriven += (getDistanceDriven()-dumbDistanceDriven) * cos(abs(lastWallAngle*DEG_TO_RAD));
+  dumbDistanceDriven = getDistanceDriven();
+
+  // Checking if you are done
+  if (ultrasonicDistanceF < (15 - ultrasonicFrontOffset)) // If the robot is the correct distance away from the front wall
+  {
+    trueDistanceDriven = 30; // The robot has arrived
+  }
+
+  // Checking for wallchanges (to be done)
+}
+
 
 void driveStep()
 {
   WallSide wallToUse; // Declare a variable for which wall to follow
   startDistanceMeasure(); // Starts the distance measuring
+  trueDistanceDriven = 0;
+  double dumbDistanceDriven = 0;
 
   // Get sensor data for initial values
   getUltrasonics();
@@ -673,21 +714,37 @@ void driveStep()
   
 
   lastWallSide = wall_none; // Tells pidDrive that derivative term should not be used
+  
+  
+// Drive until the truDistanceDriven is 30 or greater. This is the original way I did it, but the alternative way below may be used if the later parts of this code are changed.
+  while (trueDistanceDriven < 30)
+  {
+  driveStepDriveLoop(wallToUse, startAngle, gyroOffset, dumbDistanceDriven);
+  }
 
-  while (getDistanceDriven() < 30) { // Drive while you have travelled less than 30cm
-    gyro.update();
-    getUltrasonics();
-    checkWallPresence();
-    // Separate this out into its own function? (deciding what wall to follow)
-    if (leftWallPresent && rightWallPresent) wallToUse = wall_both;
-    else if (leftWallPresent) wallToUse = wall_left;
-    else if (rightWallPresent) wallToUse = wall_right;
-    else wallToUse = wall_none; // If no wall was detected
-    gyro.update();
-    
-    
-    //pidDrive(wallToUse, startAngle, gyroOffset);
-    pidDrive(wallToUse, startAngle, gyroOffset);
+  /* Alternative way of doing it. Because it does some of the things from down below, those have to be removed if this code is used:
+  // If the driven distance exceeds 30 or the front distance gets too small, the loop will end if the robot is not in the specified interval to the right.
+  while ((trueDistanceDriven < 30 && (ultrasonicDistanceF > (15-ultrasonicFrontOffset))) || ((ultrasonicDistanceF < (15-ultrasonicFrontOffset + 5)) && (ultrasonicDistanceF > (15-ultrasonicFrontOffset)))) {
+    driveStepDriveLoop(wallToUse, startAngle, gyroOffset, dumbDistanceDriven);
+  }
+  */
+
+  
+  // Checking how far you have driven
+  // Get new sensor data
+  getUltrasonics();
+  checkWallPresence();
+  // Reset drive variables
+  startDistanceMeasure();
+  dumbDistanceDriven = 0;
+  trueDistanceDriven = 0;
+  // Continue driving forward if necessary (close enough to the wall in front)
+  if (ultrasonicDistanceF < (15-ultrasonicFrontOffset + 5))
+  {
+    while (ultrasonicDistanceF < (15-ultrasonicFrontOffset) && trueDistanceDriven < 7) // The part about trueDistance is a failsafe in case the sensor fails
+    {
+      driveStepDriveLoop(wallToUse, startAngle, gyroOffset, dumbDistanceDriven);
+    }
   }
 
   stopWheels();

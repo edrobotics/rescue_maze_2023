@@ -3,3 +3,5 @@ Make a function to calculate the difference between any angles - can replace som
 pidDrive() - the distance error when both sides are present can be calculated (left-right)/2
 
 gyroTurn() - can turn more than 180 degrees. Divide it into < 180 degree segments.
+
+General - add some way of filtering out unreasonable results and falling back to "dumb" methods in those cases.
