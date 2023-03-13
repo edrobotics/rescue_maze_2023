@@ -58,3 +58,21 @@ This section handles the communication between serialServer and the auriga.
 
 ## General communication format
 Data will either be sent as chars or as strings (?).
+
+Commands: !\<command>,\<data>
+
+Return: !a,\<data>
+
+Return !f when done with an action
+
+## Commands
+- !d - driveStep
+  - Return:
+- !t,<direction> - turn
+  - direction - which way to turn. 'r' (right), 'l' (left)
+- !k,\<amount> - drop rescue kit
+  - amount - the amount of rescue kits to deploy (maybe not used?)
+- !w - getWallStates
+  - !r,\<walldata> - walldata is a byte where the 3 last bytes represent the wall states. 0b\<front>\<left>\<right>. 1 is present, 0 is not present.
+- !i - interrupt the current action
+- !r - resume the current action after an interrupt
