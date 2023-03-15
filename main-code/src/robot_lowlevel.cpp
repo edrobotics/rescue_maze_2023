@@ -521,6 +521,10 @@ void gyroTurn(double turnAngle, bool stopMoving, double baseSpeed = 0)
     int multiplier = 1; // Positive is ccw
     bool crossingZero = false;
     if (turnAngle<0) multiplier=-1; // Negative is cw
+
+    // Checking for unreasonable values:
+    if (turnAngle > 170) turnAngle = 90;
+    if (turnAngle < -170) turnAngle = -90;
     
     gyro.update();
     currentGyroAngle = gyroAngleToMathAngle(gyro.getAngleZ()); // Sets positive to be counter-clockwise and makes all valid values between 0 and 360
