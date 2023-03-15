@@ -57,22 +57,24 @@ Gives data to serialServer about victim type and position. Sent from the vision-
 This section handles the communication between serialServer and the auriga.
 
 ## General communication format
-Data will either be sent as chars or as strings (?).
+Data will either be sent as chars and the termination character will be '\n'.
 
-Commands: !\<command>,\<data>
+Commands: !\<command>,\<data>'\n'
 
 Return: !a,\<data>
 
-Return !f when done with an action
+Return !s (success) or !f (failed) when done with an action
+
+!b may be used for sending debugging information from the auriga to the raspberry (?).
 
 ## Commands
 - !d - driveStep
   - Return:
-- !t,<direction> - turn
+- !t,\<direction> - turn
   - direction - which way to turn. 'r' (right), 'l' (left)
 - !k,\<amount> - drop rescue kit
   - amount - the amount of rescue kits to deploy (maybe not used?)
 - !w - getWallStates
-  - !r,\<walldata> - walldata is a byte where the 3 last bytes represent the wall states. 0b\<front>\<left>\<right>. 1 is present, 0 is not present.
+  - !a,\<walldata> - walldata is a byte where the 3 last bits represent the wall states. 0b\<front>\<left>\<right>. 1 is present, 0 is not present.
 - !i - interrupt the current action
 - !r - resume the current action after an interrupt
