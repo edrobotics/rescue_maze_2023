@@ -1,0 +1,13 @@
+﻿"width"= 24
+"thk"= 3
+"holesize"= 4.2
+"holedistance"= ( 20 + 12 ) / 2
+"threaded_hole"= 3.9
+"fillet_radius"= 2
+"ground_clearance"= 25
+"tire_thk"= 3
+"innerwheel_diam" = "wheel_diam"-2*"tire_thk"
+"innerwheel_thk"= 8
+"wheel_diam"= 2*("width"/2+"ground_clearance")
+"coloursensor_holesize"= 2.65
+"hole_to_edge" = 4
