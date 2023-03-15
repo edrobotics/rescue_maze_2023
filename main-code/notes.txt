@@ -1,7 +1,5 @@
 Make a function to calculate the difference between any angles - can replace some code present now.
 
-pidDrive() - the distance error when both sides are present can be calculated (left-right)/2
-
 gyroTurn() - can turn more than 180 degrees. Divide it into < 180 degree segments.
 
 General - add some way of filtering out unreasonable results and falling back to "dumb" methods in those cases.
@@ -9,7 +7,7 @@ General - add some way of filtering out unreasonable results and falling back to
 General - if I call the MeUltrasonicSensor::distanceCm() too rapidly, will the distances update every time?
 
 The method to check for wall changes will have to be updated - right now it will fail if a sensor mistakenly measures so wrong that the wallPresence changes.
-    Maybe calculate some kind of average and round it to 1 or 0?
+    Maybe calculate some kind of average and round it to 1 or 0? (so that a temporary error won't destroy everything)
 
 Design of driveStep(): Should the checks modify trueDistanceDriven or should they just break and then the program will decide outside of the loop whether the distance has been drive or not?
 
@@ -17,4 +15,8 @@ Bugs:
 
 Sometimes when the robot is close to a wall, it drives slowly forward and sometimes does not recognise the wall. (potentially fixed?)
 
-When the robot corrects trueDistanceDrive with wallchanges, it drives too far when driving away from a wall and too little when approaching one. Need to separate the cases
+
+Other (not necessarily bugs, but things to fix):
+In driveStep(), when the first measurements are taken, the robot only uses one wall even if both are present.
+
+When turning, limit the input to ~170deg in each direction. Values outside of that will caused unexpected behaviour.

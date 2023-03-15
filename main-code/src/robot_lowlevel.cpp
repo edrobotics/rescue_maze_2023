@@ -1068,7 +1068,7 @@ void driveStepDriveLoop(WallSide& wallToUse, double& startAngle, double& gyroOff
   lights::turnOff();
 
   // Checking for ground colour
-  // ColourSensor::FloorColour identifiedColour = colourSensor.checkFloorColour();
+  ColourSensor::FloorColour identifiedColour = colourSensor.checkFloorColour();
 
   // switch (identifiedColour)
   // {
@@ -1173,6 +1173,8 @@ bool driveStep()
   stopWheels();
   if (colourSensor.lastKnownFloorColour == ColourSensor::floor_reflective)
   {
+    delay(300);
+    colourSensor.checkFloorColour();
     // Handle checkpoints.
   }
 

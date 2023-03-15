@@ -1,0 +1,26 @@
+#ifndef ULTRASONIC_SENSOR
+#define ULTRASONIC_SENSOR
+
+#include <Arduino.h>
+#include <MeAuriga.h> // Could cause problems
+class UltrasonicSensor
+{
+    private:
+        void pushBackArray(double curDistanceData);
+        double calcDistanceAverage();
+
+
+
+    public:
+        UltrasonicSensor(uint8_t port);
+        void update();
+        void flushDistanceArray();
+
+        double curDistAvg {0};
+        
+};
+
+
+
+
+#endif // ULTRASONIC_SENSOR
