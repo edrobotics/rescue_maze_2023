@@ -11,7 +11,7 @@
 
 // Drives one step (30cm) forwards.
 // Could take a speed argument
-void driveStep();
+bool driveStep();
 
 enum TurningDirection {
     cw,
@@ -24,20 +24,96 @@ enum TurningDirection {
 void turnSteps(TurningDirection direction, int steps);
 
 
-// Returns an array of bools giving information about whether the walls are present
+// Returns an byte giving information about whether the walls are present
 int getWallStates();
 
+
+enum Command
+{
+  command_driveStep,
+  command_driveBack, // Should not be used.
+  command_turnLeft,
+  command_turnRight,
+  command_getWallStates,
+  command_invalid,
+  command_none,
+};
 
 namespace serialcomm
 {
     void returnSuccess();
 
     void returnFailure();
+
+    void returnAnswer(int answer);
+
+    char readChar();
+    // Read a command following the outlined standard
+    // Returns data of type Command.
+    Command readCommand();
+
+    void clearBuffer();
+
+    // Sends data that will be printed to the console / other debugging method
+    // Should accept types in the same way that Serial.print() does.
+    bool sendDebug();
 }
 
 // Makes a navigation decision
 // For simple testing without the maze-code present
-void makeNavDecision(int& action);
+void makeNavDecision(Command& action);
+
+void lightsAndBuzzerInit();
+
+struct RGBColour
+{
+    int red;
+    int green;
+    int blue;
+};
+
+namespace lights
+{
+    enum LedDirection
+    {
+        front = 0,
+        left = 3,
+        right = 1,
+        back = 2,
+    };
+
+
+
+    // Turns all lights off
+    void turnOff();
+
+    void setColour(int index, RGBColour colour, bool showColour);
+
+    // Shows the 3 leds facing in the requested direction
+    void showDirection(LedDirection direction);
+
+    void affirmativeBlink();
+    
+    void disabled();
+
+    void activated();
+
+    void checkPointRestored();
+
+}
+
+namespace sounds
+{
+    // Silence all sound
+    void silence();
+
+    // Beep indicating an error. Should maybe accept an error type as an argument?
+    void errorBeep();
+
+    void tone(int freq, int duration);
+}
+
+void initColourSensor();
 
 
 /////////////////// Private functions /////////////////////////////
@@ -133,12 +209,24 @@ void gyroTurnSteps(TurningDirection direction, int steps, bool doCorrection);
 
 //--------------------- Sensors ----------------------------------------//
 
+
+
 enum UltrasonicGroup {
   ultrasonics_front,
   ultrasonics_back,
   ultrasonics_left,
   ultrasonics_right,
 };
+
+// For smoothing out the recieved distance measurements
+
+const int DISTANCE_MEASUREMENT_SIZE = 5;
+
+void pushBackArray(double curDistanceData, double distanceArray[DISTANCE_MEASUREMENT_SIZE]);
+
+double calcDistanceAverage(double distanceArray[DISTANCE_MEASUREMENT_SIZE]);
+
+void flushDistanceArrays();
 
 // Get all ultrasonic sensors
 // Perhaps return an array in the future (or take on as a mutable(?) argument?)
