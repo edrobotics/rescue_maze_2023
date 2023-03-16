@@ -289,19 +289,38 @@ double getDistanceDriven();
 // The last two arguments are only used if the wallSide == wall_none
 void pidDrive(WallSide wallSide, double startAngle, double gyroOffset);
 
+enum StoppingReason
+{
+  stop_none,
+  stop_frontWallPresent,
+  stop_frontWallPresentFaraway,
+  stop_frontWallChangeApproaching,
+  stop_frontWallChangeLeaving,
+  stop_backWallChangeApproaching,
+  stop_backWallChangeLeaving,
+  stop_deadReckoning,
+};
+
 // What to run inside of the driveStep loop (the driving forward-portion)
 // Arguments have the same names as the variables they should accept in driveStep.
 // wallToUse - which wall to follow/measure
 // startAngle - what the angle is when starting the step (mathangle)
 // gyroOffset - which angle the gyro indicates when the step starts (mathangle)
 // dumbDistanceDriven - used to keep track of the distance travelled measured by the encoder
-void driveStepDriveLoop(WallSide& wallToUse, double& startAngle, double& gyroOffset, double& dumbDistanceDriven);
+bool driveStepDriveLoop(WallSide& wallToUse, double& startAngle, double& gyroOffset, double& dumbDistanceDriven, StoppingReason& stopReason);
 
 
 //------------------------- Rescue kits -----------------------------------//
 
 // Deploy a rescue kit in the current position
 void deployRescueKit();
+
+
+
+
+
+
+void testWallChanges();
 
 
 

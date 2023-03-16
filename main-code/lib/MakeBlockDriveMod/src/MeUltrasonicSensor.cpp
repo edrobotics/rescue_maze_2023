@@ -122,11 +122,11 @@ void MeUltrasonicSensor::setpin(uint8_t SignalPin)
  */
 double MeUltrasonicSensor::distanceCm(uint16_t MAXcm)
 {
-  long distance = measure();
+  long distance = measure(MAXcm*58.0);
 
-  if((((double)distance / 58.0) >= 400.0) || (distance == 0))
+  if((((double)distance / 58.0) >= MAXcm) || (distance == 0))
   {
-    return( (double)400.0);//MAXcm
+    return( (double)MAXcm);//MAXcm
   }
   else
   {
@@ -195,7 +195,7 @@ long MeUltrasonicSensor::measure(unsigned long timeout)
     delayMicroseconds(10);
     MePort::dWrite2(LOW);
     pinMode(s2, INPUT);
-    duration = pulseIn(s2, HIGH);
+    duration = pulseIn(s2, HIGH, timeout);
     _measureValue = duration;
   }
   else

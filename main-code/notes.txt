@@ -11,12 +11,22 @@ The method to check for wall changes will have to be updated - right now it will
 
 Design of driveStep(): Should the checks modify trueDistanceDriven or should they just break and then the program will decide outside of the loop whether the distance has been drive or not?
 
+Note: I modified the source code of MeUltrasonicSensor.cpp to be able to specify the maximum distance measurement
+
 Bugs:
 
 Sometimes when the robot is close to a wall, it drives slowly forward and sometimes does not recognise the wall. (potentially fixed?)
+
+The back sensors seem to detect a wall change even though the sensor data suggests that no such thing happened.
+    Possible explanation: The sensor interfere with eachother
 
 
 Other (not necessarily bugs, but things to fix):
 In driveStep(), when the first measurements are taken, the robot only uses one wall even if both are present.
 
-When turning, limit the input to ~170deg in each direction. Values outside of that will caused unexpected behaviour.
+
+After you have stopped, flush the distance arrays and update the robotAngle somehow. This should also be done before and after turning.
+
+The driveStepDriveLoop takes too much time. How can I improve it?
+    Make the getUltrasonics() function take less time
+    Perhaps not calculate the angle every time (how mush time does it take?)- just the difference? Then calculate the angle only when needed (say when you left the wall you calculate the angle based on the previous data. also in the end)

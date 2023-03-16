@@ -27,12 +27,13 @@ void setup()
   delay(100);
 }
 
-double robotAngle = 0;
-double wallDistance = 0;
+// Why are these here?
+// double robotAngle = 0;
+// double wallDistance = 0;
 
 // #define PICODE
-#define TESTING_NAV
-// #define TESTING
+// #define TESTING_NAV
+#define TESTING
 
 
 void loop()
@@ -69,8 +70,16 @@ void loop()
   // Serial.println("");
   // delay(200);
   
-  getUltrasonics();
-  printUltrasonics();
+  // getUltrasonics();
+  // printUltrasonics();
+
+  driveStep();
+  // driveBlind(30, true);
+  // long timeFlag = millis();
+  // getUltrasonics();
+  // Serial.println(millis()-timeFlag);
+  // printUltrasonics();
+  delay(2000);
   
 
   #else

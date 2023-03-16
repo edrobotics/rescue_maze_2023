@@ -53,10 +53,8 @@ enum WheelSide {
 //---------------------- Variable definitions ----------------------------//
 
 // Wheel and wheelbase dimensions (all in cm)
-const double WHEEL_DIAMETER = 7.3; 
+const double WHEEL_DIAMETER = 7.3;
 const double WHEEL_CIRCUMFERENCE = PI*WHEEL_DIAMETER;
-const double WHEEL_DISTANCE = 13.2+0.4; // Diameter of the wheelbase (distance between the wheels)
-const double WHEELBASE_CIRCUMFERENCE = PI*WHEEL_DISTANCE;
 
 // Driving
 const double CMPS_TO_RPM = 1.0/WHEEL_CIRCUMFERENCE*60.0; // Constant to convert from cm/s to rpm
@@ -69,7 +67,7 @@ double trueDistanceDriven = 0; // The correct driven distance. Measured as trave
 const double ultrasonicSpacing = 14; // The distance between the centers two ultrasonic sensors.
 const double ultrasonicFrontOffset = 10; // The distance from the front sensor to the center of the robot
 const double ultrasonicDistanceToWall = 7.1; // The distance between the ultrasonic sensor (edge of the robot) and the wall when the robot is centered.
-const double wallPresenceTreshold = 20; // Not calibrated !!!!!!!!!!!!!!!!!!!!!!!! Just a guess!!!!!!!!!!!!!!!!!!!!!!!
+const double wallPresenceTreshold = 15; // Not calibrated !!!!!!!!!!!!!!!!!!!!!!!! Just a guess!!!!!!!!!!!!!!!!!!!!!!!
 
 // Sensor data
 // const int DISTANCE_MEASUREMENT_SIZE = 5; // The number of measurements in the distance arrays
@@ -195,7 +193,7 @@ void lightsAndBuzzerInit()
 
 RGBColour colourBlack {0, 0, 0};
 RGBColour colourBase {5, 42, 0};
-RGBColour colourOrange {42, 20, 0};
+RGBColour colourOrange {42, 5, 0};
 RGBColour colourError {200, 10, 0};
 RGBColour colourAffirmative { 20, 150, 0};
 
@@ -433,6 +431,7 @@ void letWheelsTurn(bool stopWhenDone)
     }
     loopEncoders();
   }
+  stopWheels();
 }
 
 //----------------------- Turning -------------------------------------//
@@ -643,40 +642,66 @@ void getUltrasonics()
 {
   //TODO: Add limit to how often you can call it (?)
 
+  // It seems as if the time got worse when I added the while-loops and the functions contained within
+  // This loop ran instead of the delays.
+  // unsigned long timeFlag = millis();
+  // while (millis()-timeFlag < 5)
+  // {
+  //   loopEncoders();
+  //   gyro.update();
+  // }
+
   // The order of calling should be optimized to minimize interference
-  pushBackArray(ultrasonicLF.distanceCm(), ultrasonicDistancesLF);
+  // The delays are to prevent interference. 2 was too short, 10 worked, 5 seems to be working (not extensively tested)
+  pushBackArray(ultrasonicLF.distanceCm(90), ultrasonicDistancesLF);
   ultrasonicDistanceLF = calcDistanceAverage(ultrasonicDistancesLF);
+  delay(5);
   
-  pushBackArray(ultrasonicRB.distanceCm(), ultrasonicDistancesRB);
+  
+  pushBackArray(ultrasonicRB.distanceCm(90), ultrasonicDistancesRB);
   ultrasonicDistanceRB = calcDistanceAverage(ultrasonicDistancesRB);
+  delay(5);
   
-  pushBackArray(ultrasonicF.distanceCm(), ultrasonicDistancesF);
-  ultrasonicDistanceF = calcDistanceAverage(ultrasonicDistancesF);
-
-  pushBackArray(ultrasonicLB.distanceCm(), ultrasonicDistancesLB);
+  pushBackArray(ultrasonicLB.distanceCm(90), ultrasonicDistancesLB);
   ultrasonicDistanceLB = calcDistanceAverage(ultrasonicDistancesLB);
+  delay(5);
 
-  pushBackArray(ultrasonicRF.distanceCm(), ultrasonicDistancesRF);
+  pushBackArray(ultrasonicRF.distanceCm(90), ultrasonicDistancesRF);
   ultrasonicDistanceRF = calcDistanceAverage(ultrasonicDistancesRF);
+  delay(5);
+
+  pushBackArray(ultrasonicF.distanceCm(120), ultrasonicDistancesF);
+  ultrasonicDistanceF = calcDistanceAverage(ultrasonicDistancesF);
+  delay(5);
+
+  // Simple functions - no running average
+  // ultrasonicDistanceF = ultrasonicF.distanceCm(100);
+  // ultrasonicDistanceLF = ultrasonicLF.distanceCm(100);
+  // ultrasonicDistanceLB = ultrasonicLB.distanceCm(100);
+  // ultrasonicDistanceRF = ultrasonicRF.distanceCm(100);
+  // ultrasonicDistanceRB = ultrasonicRB.distanceCm(100);
 
 }
-
-void printUltrasonics()
-{
-  Serial.print(ultrasonicDistanceF); Serial.print(", ");
-  Serial.print(ultrasonicDistanceLF); Serial.print(", ");
-  Serial.print(ultrasonicDistanceLB); Serial.print(", ");
-  Serial.print(ultrasonicDistanceRF); Serial.print(", ");
-  Serial.print(ultrasonicDistanceRB);
-  Serial.println("");
-}
-
 // For determining wall presence for individual sensors
 bool wallPresentLF = false;
 bool wallPresentRF = false;
 bool wallPresentLB = false;
 bool wallPresentRB = false;
 bool wallPresentF = false;
+
+void printUltrasonics()
+{
+  
+  Serial.print("F:");Serial.print(ultrasonicDistanceF);
+  Serial.print(" LF:");Serial.print(ultrasonicDistanceLF);
+  Serial.print(" LB:");Serial.print(ultrasonicDistanceLB);
+  Serial.print(" RF:");Serial.print(ultrasonicDistanceRF);
+  Serial.print(" RB:");Serial.print(ultrasonicDistanceRB);
+  // Serial.print(" LBWall:");Serial.print(wallPresentLB);
+  // Serial.print(" RBWall: ");Serial.print(wallPresentRB);
+  Serial.println("");
+}
+
 
 // Check if the walls are present. Uses raw distance data instead of "true" distance data.
 void checkWallPresence()
@@ -778,12 +803,12 @@ WallChangeType checkWallChanges(UltrasonicGroup ultrasonicGroup)
       previousLFState = wallPresentLF;
       if (wallPresentLF == true)
       {
-        lights::setColour(1, colourBase, true);
+        // lights::setColour(1, colourBase, true);
         return wallchange_approaching;
       }
       else
       {
-        lights::setColour(1, colourOrange, true);
+        // lights::setColour(1, colourOrange, true);
         return wallchange_leaving;
       } 
     }
@@ -792,12 +817,12 @@ WallChangeType checkWallChanges(UltrasonicGroup ultrasonicGroup)
       previousRFState = wallPresentRF;
       if (wallPresentRF == true)
       {
-        lights::setColour(5, colourBase, true);
+        // lights::setColour(5, colourBase, true);
         return wallchange_approaching;
       }
       else
       {
-        lights::setColour(5, colourOrange, true);
+        // lights::setColour(5, colourOrange, true);
         return wallchange_leaving;
       } 
     }
@@ -809,12 +834,12 @@ WallChangeType checkWallChanges(UltrasonicGroup ultrasonicGroup)
       previousLBState = wallPresentLB;
       if (wallPresentLB == true)
       {
-        lights::setColour(11, colourBase, true);
+        // lights::setColour(11, colourBase, true);
         return wallchange_approaching;
       }
       else
       {
-        lights::setColour(11, colourBase, true);
+        // lights::setColour(11, colourBase, true);
         return wallchange_leaving;
       } 
     }
@@ -823,12 +848,12 @@ WallChangeType checkWallChanges(UltrasonicGroup ultrasonicGroup)
       previousRBState = wallPresentRB;
       if (wallPresentRB == true) 
       {
-        lights::setColour(7, colourBase, true);
+        // lights::setColour(7, colourBase, true);
         return wallchange_approaching;
       }
       else
       {
-        lights::setColour(7, colourOrange, true);
+        // lights::setColour(7, colourOrange, true);
         return wallchange_leaving;
       } 
     }
@@ -860,10 +885,10 @@ void driveSpeed(double speed)
   runWheelSide(wheels_right, speed);
 }
 
-double startPositionEncoderLF = 0;
-double startPositionEncoderLB = 0;
-double startPositionEncoderRF = 0;
-double startPositionEncoderRB = 0;
+long startPositionEncoderLF = 0;
+long startPositionEncoderLB = 0;
+long startPositionEncoderRF = 0;
+long startPositionEncoderRB = 0;
 
 
 void startDistanceMeasure()
@@ -876,26 +901,14 @@ void startDistanceMeasure()
 
 long turns = 0;
 
-void testDistanceMeasureLeft()
-{
-  double distanceEncoderLF = encoderLF.getCurPos()-startPositionEncoderLF;
-  Serial.println(distanceEncoderLF);
-}
-
-void testDistanceMeasureRight()
-{
-  double distanceEncoderRF = encoderRF.getCurPos()-startPositionEncoderRF;
-  Serial.println(distanceEncoderRF);
-}
-
 // Returns the distance driven by the robot since startDistanceMeasure() was called. Return is in cm.
 // Idea: Handle if one encoder is very off?
 double getDistanceDriven()
 {
-  double distanceEncoderLF = encoderLF.getCurPos()-startPositionEncoderLF;
-  double distanceEncoderLB = encoderLB.getCurPos()-startPositionEncoderLB;
-  double distanceEncoderRF = -(encoderRF.getCurPos()-startPositionEncoderRF);
-  double distanceEncoderRB = -(encoderRB.getCurPos()-startPositionEncoderRB);
+  long distanceEncoderLF = encoderLF.getCurPos()-startPositionEncoderLF;
+  long distanceEncoderLB = encoderLB.getCurPos()-startPositionEncoderLB;
+  long distanceEncoderRF = -(encoderRF.getCurPos()-startPositionEncoderRF);
+  long distanceEncoderRB = -(encoderRB.getCurPos()-startPositionEncoderRB);
 
   return ((distanceEncoderLF+distanceEncoderLB+distanceEncoderRF+distanceEncoderRB)/4.0)/360*WHEEL_CIRCUMFERENCE; // Returns the average
 
@@ -1000,13 +1013,16 @@ double measurementAverage(double arrayToCalc[]) // Use a reference to the array 
   return sum/10.0;
 }
 
+
+
 // What to run inside of the driveStep loop (the driving forward-portion)
 // Arguments have the same names as the variables they should accept in driveStep.
 // wallToUse - which wall to follow/measure
 // startAngle - what the angle is when starting the step (mathangle)
 // gyroOffset - which angle the gyro indicates when the step starts (mathangle)
 // dumbDistanceDriven - used to keep track of the distance travelled measured by the encoder
-void driveStepDriveLoop(WallSide& wallToUse, double& startAngle, double& gyroOffset, double& dumbDistanceDriven)
+// stopReason - gives the reason for why the robot stopped moving
+bool driveStepDriveLoop(WallSide& wallToUse, double& startAngle, double& gyroOffset, double& dumbDistanceDriven, StoppingReason& stopReason)
 {
   gyro.update();
   getUltrasonics();
@@ -1029,30 +1045,47 @@ void driveStepDriveLoop(WallSide& wallToUse, double& startAngle, double& gyroOff
   trueDistanceDriven += (getDistanceDriven()-dumbDistanceDriven) * cos(abs(lastWallAngle*DEG_TO_RAD));
   dumbDistanceDriven = getDistanceDriven();
 
+  gyro.update();
+
   // Checking if you are done
-  if (ultrasonicDistanceF < (15 - ultrasonicFrontOffset + 3)) // If the robot is the correct distance away from the front wall. The goal is that ultrasonicDistanceF is 5.2 when the robot stops.
+  if (ultrasonicDistanceF < (15 - ultrasonicFrontOffset + 6)) // If the robot is the correct distance away from the front wall. The goal is that ultrasonicDistanceF is 5.2 when the robot stops.
   {
-    lights::setColour(3, colourBase, true);
-    trueDistanceDriven = 30; // The robot has arrived
+    // lights::setColour(3, colourBase, true);
+    // trueDistanceDriven = 30; // The robot has arrived
+    stopReason = stop_frontWallPresent;
+    return true;
   }
   //Serial.println(ultrasonicDistanceF); // Debugging
+
+  if (trueDistanceDriven >= 30)
+  {
+    if (stopReason == stop_none) stopReason = stop_deadReckoning;
+    return true;
+  }
+
+  gyro.update();
 
   // Checking for wallchanges (needs some more robustness!)
   WallChangeType backWallCheck = checkWallChanges(ultrasonics_back);
   WallChangeType frontWallCheck = checkWallChanges(ultrasonics_front);
+  // Do as switch statement!
   if (backWallCheck == wallchange_leaving)
   {
     // buzzer.tone(440, 30); // Debugging
     // buzzer.tone(220, 30); // Debugging
     // Serial.println("Leaving back");
     trueDistanceDriven = 15 + ultrasonicSpacing/2.0 + 7; // The math should be correct, but the robot drives too far without the addition. The same amount of wrong as below.
+    stopReason = stop_backWallChangeLeaving;
+    // Serial.println("Leaving back");
   }
-  else if (backWallCheck == wallchange_approaching)
+  if (backWallCheck == wallchange_approaching)
   {
     // buzzer.tone(220, 30); // Debugging
     // buzzer.tone(440, 30); // Debugging
     // Serial.println("Approaching back");
     trueDistanceDriven = 15 + ultrasonicSpacing/2.0 - 1; // The math should be correct, but the robot drives too far without the addition. The same amount of wrong as below.
+    stopReason = stop_backWallChangeApproaching;
+    // Serial.println("Approaching back");
   }
   if (frontWallCheck == wallchange_leaving)
   {
@@ -1060,6 +1093,7 @@ void driveStepDriveLoop(WallSide& wallToUse, double& startAngle, double& gyroOff
     // buzzer.tone(440, 30); // Debugging
     // Serial.println("Leaving Front");
     trueDistanceDriven = 15 - ultrasonicSpacing/2 + 7; // The math should be correct, but the robot drives too far without the addition. The same amount of wrong as above.
+    stopReason = stop_frontWallChangeLeaving;
   }
   else if (frontWallCheck == wallchange_approaching)
   {
@@ -1067,12 +1101,24 @@ void driveStepDriveLoop(WallSide& wallToUse, double& startAngle, double& gyroOff
     // buzzer.tone(880, 30); // Debugging
     // Serial.println("Approaching front");
     trueDistanceDriven = 15 - ultrasonicSpacing/2 - 1; // The math should be correct, but the robot drives too far without the addition. The same amount of wrong as above.
+    stopReason = stop_frontWallChangeApproaching;
   }
+
+  gyro.update();
+  // printUltrasonics();
 
   lights::turnOff();
 
+  if (trueDistanceDriven >= 30)
+  {
+    if (stopReason == stop_none) stopReason = stop_deadReckoning;
+    return true;
+  }
+
+  return false; // The default return - not finished
+
   // Checking for ground colour
-  ColourSensor::FloorColour identifiedColour = colourSensor.checkFloorColour();
+  // ColourSensor::FloorColour identifiedColour = colourSensor.checkFloorColour();
 
   // switch (identifiedColour)
   // {
@@ -1095,7 +1141,7 @@ void driveStepDriveLoop(WallSide& wallToUse, double& startAngle, double& gyroOff
 bool driveStep()
 {
   WallSide wallToUse; // Declare a variable for which wall to follow
-  startDistanceMeasure(); // Starts the distance measuring
+  startDistanceMeasure(); // Starts the distance measuring (encoders)
   trueDistanceDriven = 0;
   double dumbDistanceDriven = 0;
 
@@ -1112,22 +1158,24 @@ bool driveStep()
   
   // Calculate the angles for use by pidDrive
   double startAngle = 0;
+  double startWallDistance = 0; // Just to have something to feed into calcRobotPose()
   // Calculate the current values precisely
   // Maybe I need to add a delay in the loop because of ultrasonic measurements time limits? (it wont make multiple measurements if the polling speed is too fast)
-  double angleMeasurements[10];
-  double distanceMeasurements[10];
+  // double angleMeasurements[10];
+  // double distanceMeasurements[10];
   if (wallToUse == wall_none) {
-    for (int i=0; i<10; ++i) { // Fill the measurements with 0
-      angleMeasurements[i] = 0;
-      distanceMeasurements[i] = 0;
-    }
+    // for (int i=0; i<10; ++i) { // Fill the measurements with 0
+    //   angleMeasurements[i] = 0;
+    //   distanceMeasurements[i] = 0;
+    // }
     startAngle = lastWallAngle;
   } else {
-    for (int i=0; i<10; ++i) { // Get 10 measurements
-      getUltrasonics();
-      calcRobotPose(wallToUse, angleMeasurements[i], distanceMeasurements[i], false); // If both walls are present, this only uses the left wall. Could fix in the future.
-    }
-    startAngle =  measurementAverage(angleMeasurements); // Angle in relation to the wall at the beginning of the move. If no wall is present, the angle is set to 0 (meaning the current angle will be the goal)
+    // for (int i=0; i<10; ++i) { // Get 10 measurements
+    //   getUltrasonics();
+    //   calcRobotPose(wallToUse, angleMeasurements[i], distanceMeasurements[i], false); // If both walls are present, this only uses the left wall. Could fix in the future.
+    // }
+    // startAngle =  measurementAverage(angleMeasurements); // Angle in relation to the wall at the beginning of the move. If no wall is present, the angle is set to 0 (meaning the current angle will be the goal)
+    calcRobotPose(wallToUse, startAngle, startWallDistance, false);
   }
   gyro.update();
   double gyroOffset = gyroAngleToMathAngle(gyro.getAngleZ());// The angle measured by the gyro (absolute angle) in the beginning.
@@ -1138,11 +1186,18 @@ bool driveStep()
 
   unsigned long timerFlag = millis();
   int iterations = 0;
+
+  StoppingReason stoppingReason = stop_none;
   
+
+  double shouldStop = false;
   // Drive until the truDistanceDriven is 30 or greater. This is the original way I did it, but the alternative way below may be used if the later parts of this code are changed.
-  while (trueDistanceDriven < 30)
+  while (shouldStop == false)
   {
-  driveStepDriveLoop(wallToUse, startAngle, gyroOffset, dumbDistanceDriven); // There does not seem to be a time difference between calling the function like this and pasting in the code
+  shouldStop = driveStepDriveLoop(wallToUse, startAngle, gyroOffset, dumbDistanceDriven, stoppingReason); // There does not seem to be a time difference between calling the function like this and pasting in the code
+  // Serial.print(dumbDistanceDriven);
+  // Serial.print("      ");
+  // Serial.println(trueDistanceDriven);
   ++iterations;
   }
   Serial.println((millis()-timerFlag)/double(iterations));
@@ -1162,25 +1217,62 @@ bool driveStep()
   // Reset drive variables
   startDistanceMeasure();
   dumbDistanceDriven = 0;
-  trueDistanceDriven = 0;
+  double trueDistanceDrivenFlag = trueDistanceDriven;
   // Continue driving forward if necessary (close enough to the wall in front)
   if (ultrasonicDistanceF < (15-ultrasonicFrontOffset + 10))
   {
     lights::setColour(3, colourOrange, true);
-    while (ultrasonicDistanceF < (15-ultrasonicFrontOffset + 3) && trueDistanceDriven < 7) // The part about trueDistance is a failsafe in case the sensor fails
+    while (ultrasonicDistanceF > (15-ultrasonicFrontOffset + 6) && (trueDistanceDriven-trueDistanceDrivenFlag) < 7) // The part about trueDistance is a failsafe in case the sensor fails
     {
-      driveStepDriveLoop(wallToUse, startAngle, gyroOffset, dumbDistanceDriven);
+      driveStepDriveLoop(wallToUse, startAngle, gyroOffset, dumbDistanceDriven, stoppingReason);
     }
-    lights::setColour(3, colourBase, true);
+    // lights::setColour(3, colourBase, true);
+    stoppingReason = stop_frontWallPresentFaraway;
   }
 
   stopWheels();
-  if (colourSensor.lastKnownFloorColour == ColourSensor::floor_reflective)
+
+  switch (stoppingReason)
   {
-    delay(300);
-    colourSensor.checkFloorColour();
-    // Handle checkpoints.
+    case stop_frontWallPresent:
+      lights::setColour(3, colourBase, true);
+      break;
+    case stop_frontWallPresentFaraway:
+      lights::setColour(3, colourOrange, true);
+      break;
+    case stop_frontWallChangeApproaching:
+      lights::setColour(1, colourBase, false);
+      lights::setColour(5, colourBase, true);
+      break;
+    case stop_frontWallChangeLeaving:
+      lights::setColour(1, colourOrange, false);
+      lights::setColour(5, colourOrange, true);
+      break;
+    case stop_backWallChangeApproaching:
+      lights::setColour(7, colourBase, false);
+      lights::setColour(11, colourBase, true);
+      break;
+    case stop_backWallChangeLeaving:
+      lights::setColour(7, colourOrange, false);
+      lights::setColour(11, colourOrange, true);
+      break;
+    case stop_deadReckoning:
+      lights::setColour(6, colourOrange, false);
+      lights::setColour(12, colourOrange, true);
+      break;
+    default:
+      lights::setColour(0, colourOrange, true);
+      break;
   }
+
+  // if (colourSensor.lastKnownFloorColour == ColourSensor::floor_reflective) // Double check that the floor is really reflective.
+  // {
+  //   delay(300);
+  //   colourSensor.checkFloorColour();
+  //   // Handle checkpoints.
+  // }
+
+  delay(500);
 
   lights::turnOff();
 
@@ -1210,3 +1302,54 @@ void makeNavDecision(Command& action)
     }
 
   }
+
+
+
+void testWallChanges()
+{
+  getUltrasonics();
+  checkWallPresence();
+  WallChangeType backWallCheck = checkWallChanges(ultrasonics_back);
+  WallChangeType frontWallCheck = checkWallChanges(ultrasonics_front);
+  printUltrasonics();
+  // Do as switch statement!
+  if (backWallCheck == wallchange_leaving)
+  {
+    // buzzer.tone(440, 30); // Debugging
+    // buzzer.tone(220, 30); // Debugging
+    // Serial.println("Leaving back");
+    trueDistanceDriven = 15 + ultrasonicSpacing/2.0 + 7; // The math should be correct, but the robot drives too far without the addition. The same amount of wrong as below.
+    // stopReason = stop_backWallChangeLeaving;
+    Serial.println("Leaving back");
+    delay(500);
+  }
+  if (backWallCheck == wallchange_approaching)
+  {
+    // buzzer.tone(220, 30); // Debugging
+    // buzzer.tone(440, 30); // Debugging
+    // Serial.println("Approaching back");
+    trueDistanceDriven = 15 + ultrasonicSpacing/2.0 - 1; // The math should be correct, but the robot drives too far without the addition. The same amount of wrong as below.
+    // stopReason = stop_backWallChangeApproaching;
+    Serial.println("Approaching back");
+    delay(500);
+  }
+  if (frontWallCheck == wallchange_leaving)
+  {
+    // buzzer.tone(880, 30); // Debugging
+    // buzzer.tone(440, 30); // Debugging
+    // Serial.println("Leaving Front");
+    trueDistanceDriven = 15 - ultrasonicSpacing/2 + 7; // The math should be correct, but the robot drives too far without the addition. The same amount of wrong as above.
+    // stopReason = stop_frontWallChangeLeaving;
+  }
+  else if (frontWallCheck == wallchange_approaching)
+  {
+    // buzzer.tone(440, 30); // Debugging
+    // buzzer.tone(880, 30); // Debugging
+    // Serial.println("Approaching front");
+    trueDistanceDriven = 15 - ultrasonicSpacing/2 - 1; // The math should be correct, but the robot drives too far without the addition. The same amount of wrong as above.
+    // stopReason = stop_frontWallChangeApproaching;
+  }
+  printUltrasonics();
+
+  lights::turnOff();
+}
