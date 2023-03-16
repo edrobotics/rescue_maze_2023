@@ -76,6 +76,6 @@ for frame in camera.capture_continuous(rawCapture, format="bgr", use_video_port=
             elif par > 50 and par < 100: 
                 print("H detected")
     rawCapture.truncate(0)
-    key = cv2.waitKey(1000)
+    key = cv2.waitKey(2)
     if key == 27:
         break
