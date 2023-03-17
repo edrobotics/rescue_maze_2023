@@ -32,8 +32,8 @@ void setup()
 // double wallDistance = 0;
 
 // #define PICODE
-// #define TESTING_NAV
-#define TESTING
+#define TESTING_NAV
+// #define TESTING
 
 
 void loop()

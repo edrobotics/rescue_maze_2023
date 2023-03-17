@@ -13,12 +13,15 @@ Design of driveStep(): Should the checks modify trueDistanceDriven or should the
 
 Note: I modified the source code of MeUltrasonicSensor.cpp to be able to specify the maximum distance measurement
 
+Note: The last thing that worked alright (?) was not checking the back sensors for wallchanges. The problem with interference did appear (even though it should have).
+
+Check colour sensor (and others) in getUltrasonics.
+
+Instead of moving every measurement in the array, keep the current index and just change that value. Could also calculate the average more efficiently.
+
 Bugs:
 
 Sometimes when the robot is close to a wall, it drives slowly forward and sometimes does not recognise the wall. (potentially fixed?)
-
-The back sensors seem to detect a wall change even though the sensor data suggests that no such thing happened.
-    Possible explanation: The sensor interfere with eachother
 
 
 Other (not necessarily bugs, but things to fix):
