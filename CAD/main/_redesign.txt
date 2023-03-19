@@ -1,0 +1,23 @@
+Things to change/update/add in the redesign:
+
+/Move the back motors inwards and increase the spacing to an appropriate amount
+Move the ultrasonic sensors inwards a bit
+	The front bracket can be partly under the auriga
+/Maybe put ultrasonic sensors sideways to improve camera view?
+
+/Make the baseplate thicker
+	/-> Enables the battery to be sunken in if needed
+	-> Allows space for the rescue kit mechanism
+
+/Battery mounting:
+	/Remove the baseplate and make the battery mount separate
+	
+Colour sensor mounting:
+	Flap that can move up and down
+	
+Rescue-kit mechanism mounting:
+	Some removable plate in the back
+	
+Mirrors go on top of the auriga. The same assembly could hold the mirrors
+
+/The carrying handle can Go on the back, alternatively from front and back up to middle

@@ -2,3 +2,5 @@
 ~$*
 # Ignores flashforge gcode print files to avoid mistakes when choosing the wrong printer
 *.gx
+# Ignores gcode print files for the same reason as for .gx files
+*.gcode
