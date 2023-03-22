@@ -187,6 +187,19 @@ double mathAngleToGyroAngle(double angle);
 // Should only be used when the difference between the angles is < 180 degrees
 void centerAngle180(double& refAngle, double& calcAngle);
 
+enum WallSide {
+    wall_left,
+    wall_right,
+    wall_both,
+    wall_none,
+};
+// Sets the global variables for angles and distances.
+// Does not update the gyro itself
+// secondaryWallDistance is supplied when both walls are present
+void updateRobotPose(WallSide wallSide, double secondaryWallDistance);
+// Alternate way of calling
+void updateRobotPose(WallSide wallSide);
+
 // Returns the distance left to turn in degrees. When you get closer, it decreases. When you have overshot, it will be negative.
 // Can we omit zerocross, and just give the turn angle instead?
 // zeroCross - if the turn will cross over 0
@@ -238,12 +251,6 @@ void printUltrasonics();
 // Check if the walls are present. Uses raw distance data instead of "true" distance data.
 void checkWallPresence();
 
-enum WallSide {
-    wall_left,
-    wall_right,
-    wall_both,
-    wall_none,
-};
 
 // Update the "true" distance to the wall and the angle from upright
 // Other code should call the getUltrasonics() beforehand
@@ -284,10 +291,7 @@ double getDistanceDriven();
 
 // Drive with wall following. Will do one iteration, so to actually follow the wall, call it multiple times in short succession.
 // wallSide - which wall to follow. Can be wall_left, wall_right or wall_both. Directions relative to the robot.
-// startAngle - The angle relative to the wall for the begin of the move (degrees, mathangle)
-// gyroOffset  - The angle that the gyro read for the begin of the move (degrees, mathangle)
-// The last two arguments are only used if the wallSide == wall_none
-void pidDrive(WallSide wallSide, double startAngle, double gyroOffset);
+void pidDrive(WallSide wallSide);
 
 enum StoppingReason
 {
@@ -302,12 +306,9 @@ enum StoppingReason
 };
 
 // What to run inside of the driveStep loop (the driving forward-portion)
-// Arguments have the same names as the variables they should accept in driveStep.
 // wallToUse - which wall to follow/measure
-// startAngle - what the angle is when starting the step (mathangle)
-// gyroOffset - which angle the gyro indicates when the step starts (mathangle)
 // dumbDistanceDriven - used to keep track of the distance travelled measured by the encoder
-bool driveStepDriveLoop(WallSide& wallToUse, double& startAngle, double& gyroOffset, double& dumbDistanceDriven, StoppingReason& stopReason);
+bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, StoppingReason& stopReason);
 
 
 //------------------------- Rescue kits -----------------------------------//

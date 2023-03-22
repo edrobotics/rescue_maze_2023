@@ -19,6 +19,10 @@ Check colour sensor (and others) in getUltrasonics.
 
 Instead of moving every measurement in the array, keep the current index and just change that value. Could also calculate the average more efficiently.
 
+Calculation of the current angle for use in the next angle should be separated out into its own function.
+
+How and when is g_gyroOffset updated?
+
 Bugs:
 
 Sometimes when the robot is close to a wall, it drives slowly forward and sometimes does not recognise the wall. (potentially fixed?)

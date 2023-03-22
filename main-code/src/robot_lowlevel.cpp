@@ -96,9 +96,13 @@ bool rightWallPresent = false;
 bool frontWallPresent = false;
 
 // For gyro turning and angles
-double currentGyroAngle = 0;
+double g_currentGyroAngle = 0;
 double targetGyroAngle = 0;
-double lastWallAngle = 0; // Used to determine the angle in relation to the wall when a move ends
+double g_lastWallAngle = 0; // Used to determine the angle in relation to the wall when a move ends
+double g_robotAngle = 0; // The angle of the robot in relation to the wall
+double g_wallDistance = 0;
+double g_startWallAngle = 0;
+double g_gyroOffset = 0;
 
 
 //------------------ Serial communication -------------------------------//
@@ -463,6 +467,41 @@ void centerAngle180(double& refAngle, double& calcAngle)
   while (calcAngle < 0) calcAngle += 360; // Bind calcAngle to valid mathangle interval.
 }
 
+
+// Sets the global variables for angles and distances.
+// Does not update the gyro itself
+void updateRobotPose(WallSide wallSide, double secondaryWallDistance)
+{
+  double tmpGyroOffset = g_gyroOffset;
+
+  // In case both walls are present
+  double secondaryRobotAngle = 0;
+
+  if (wallSide != wall_none)
+  {
+    calcRobotPose(wallSide, g_robotAngle, g_wallDistance, false);
+    if (wallSide == wall_both)
+    {
+      calcRobotPose(wall_right, secondaryRobotAngle, secondaryWallDistance, false);
+      g_robotAngle = (g_robotAngle + secondaryRobotAngle)/2.0;
+    }
+  }
+  else
+  {
+    centerAngle180(g_currentGyroAngle, tmpGyroOffset);
+    g_robotAngle = g_startWallAngle + g_currentGyroAngle - tmpGyroOffset; // Safe to do because we moved the angles to 180 degrees, meaning that there will not be a zero-cross
+    calcRobotPose(wallSide, g_robotAngle, g_wallDistance, true);
+
+  }
+
+}
+// Alternative way of calling (for when both sides are present)
+void updateRobotPose(WallSide wallSide)
+{
+  double secondaryWallDistance = 0;
+  updateRobotPose(wallSide, secondaryWallDistance);
+}
+
 // Returns the distance left to turn in degrees. When you get closer, it decreases. When you have overshot, it will be negative.
 // zeroCross - if the turn will cross over 0
 // turningdirection - which direction you will turn. 1 is counter-clockwise and -1 is clockwise (math angles)
@@ -526,8 +565,8 @@ void gyroTurn(double turnAngle, bool stopMoving, double baseSpeed = 0)
     if (turnAngle < -170) turnAngle = -90;
     
     gyro.update();
-    currentGyroAngle = gyroAngleToMathAngle(gyro.getAngleZ()); // Sets positive to be counter-clockwise and makes all valid values between 0 and 360
-    targetGyroAngle = (currentGyroAngle + turnAngle);
+    g_currentGyroAngle = gyroAngleToMathAngle(gyro.getAngleZ()); // Sets positive to be counter-clockwise and makes all valid values between 0 and 360
+    targetGyroAngle = (g_currentGyroAngle + turnAngle);
     if (targetGyroAngle<0) {
     targetGyroAngle +=360; // If the target angle is negative, add 360 to make it between 0 and 360 (no angle should be smaller than -360)
     crossingZero = true;
@@ -541,13 +580,13 @@ void gyroTurn(double turnAngle, bool stopMoving, double baseSpeed = 0)
     runWheelSide(wheels_left, -speedToRun);
     runWheelSide(wheels_right, speedToRun);
 
-    double varLeftToTurn = leftToTurn(crossingZero, multiplier, targetGyroAngle, currentGyroAngle);
+    double varLeftToTurn = leftToTurn(crossingZero, multiplier, targetGyroAngle, g_currentGyroAngle);
 
     while (varLeftToTurn > 15) {
       gyro.update();
-      currentGyroAngle = gyroAngleToMathAngle(gyro.getAngleZ());
+      g_currentGyroAngle = gyroAngleToMathAngle(gyro.getAngleZ());
       loopEncoders();
-      varLeftToTurn = leftToTurn(crossingZero, multiplier, targetGyroAngle, currentGyroAngle);
+      varLeftToTurn = leftToTurn(crossingZero, multiplier, targetGyroAngle, g_currentGyroAngle);
     }
 
     // Slowing down in the end of the turn.
@@ -559,19 +598,19 @@ void gyroTurn(double turnAngle, bool stopMoving, double baseSpeed = 0)
 
     while (varLeftToTurn > 2) {
       gyro.update();
-      currentGyroAngle = gyroAngleToMathAngle(gyro.getAngleZ());
+      g_currentGyroAngle = gyroAngleToMathAngle(gyro.getAngleZ());
       loopEncoders();
-      varLeftToTurn = leftToTurn(crossingZero, multiplier, targetGyroAngle, currentGyroAngle);
+      varLeftToTurn = leftToTurn(crossingZero, multiplier, targetGyroAngle, g_currentGyroAngle);
     }
     
     if (stopMoving==true) stopWheels();
 }
 
 // Turns the specified steps (90 degrees) in the direction specified above.
-// Automatic correction for the last angle to the wall can be specified by the last argument. Make sure that the lastWallAngle is up to date!
+// Automatic correction for the last angle to the wall can be specified by the last argument. Make sure that the g_lastWallAngle is up to date!
 // direction - cw (clockwise) or ccw (counter-clockwise) turn.
 // steps - the amount of 90-degree turns to do in the chosen direction. (NOT YET IMPLEMENTED!)
-// doCorrection - Whether or not you should correct for the lastWallAngle
+// doCorrection - Whether or not you should correct for the g_lastWallAngle
 void gyroTurnSteps(TurningDirection direction, int steps, bool doCorrection)
 {
   int multiplier=-1;
@@ -580,8 +619,8 @@ void gyroTurnSteps(TurningDirection direction, int steps, bool doCorrection)
 
   if (doCorrection == true)
   {
-    turnAngle = turnAngle - lastWallAngle;
-    lastWallAngle = 0; // You should have turned perfectly. Should be replaced by actually checking how far you have turned.
+    turnAngle = turnAngle - g_lastWallAngle;
+    g_lastWallAngle = 0; // You should have turned perfectly. Should be replaced by actually checking how far you have turned.
   }
 
 
@@ -632,11 +671,11 @@ void flushDistanceArrays()
   for (int i=0;i<DISTANCE_MEASUREMENT_SIZE;++i)
     {
       getUltrasonics();
-      // delay(20); // Should not be needed
+      delay(5); // Maybe not necessary, but I have it just in case
     }
 }
 
-// Get all ultrasonic sensors
+// Get all ultrasonic sensors and update the gyro and encoders
 // Perhaps return an array in the future (or take on as a mutable(?) argument?)
 void getUltrasonics()
 {
@@ -936,52 +975,34 @@ WallSide lastWallSide = wall_none; // Used to determine if the lastDistance is v
 // startAngle - The angle relative to the wall for the begin of the move (degrees, mathangle)
 // gyroOffset  - The angle that the gyro read for the begin of the move (degrees, mathangle)
 // The last two arguments are only used if the wallSide == wall_none
-void pidDrive(WallSide wallSide, double startAngle, double gyroOffset)
+void pidDrive(WallSide wallSide)
 {
   // gyro.update(); // May not be needed - already done a lot in getUltrasonics()
-  double wallDistance = 0;
-  double robotAngle = 0;
   double secondaryWallDistance = 0; // Only used if both walls are present. The secondary is for the right wall.
-  double secondaryRobotAngle = 0; // Only used if both walls are present. The secondary is for the right wall.
   double distanceError = 0; // positive means that we are to the right of where we want to be.
   double distanceDerivative = 0; // The rate of change for the derivative term. Initialized to 0, so that it is only used if actively changed
-  currentGyroAngle = gyroAngleToMathAngle(gyro.getAngleZ());
-  double tmpGyroOffset = gyroOffset;
-  // getUltrasonics(); // Do not use. Already checked in driveStepDriveLoop()
-  if (wallSide != wall_none)
-  {
-    calcRobotPose(wallSide, robotAngle, wallDistance, false); // Can be used regardless of which side is being used
-    if (wallSide == wall_both)
-    {
-      calcRobotPose(wall_right, secondaryRobotAngle, secondaryWallDistance, false);
-    }
-  }
-  else // If there are not walls, calculate the angles to be able to drive with them
-  {
-    centerAngle180(currentGyroAngle, tmpGyroOffset);
-    robotAngle = startAngle + currentGyroAngle - tmpGyroOffset; // Safe to do because we moved the angles to 180 degrees, meaning that there will not be a zero-cross
-    calcRobotPose(wallSide, robotAngle, wallDistance, true);
-  }
+  g_currentGyroAngle = gyroAngleToMathAngle(gyro.getAngleZ());
+  
+  updateRobotPose(wallSide, secondaryWallDistance);
   
   
   if (wallSide==wall_left)
   {
-    distanceError = wallDistance - ultrasonicDistanceToWall;
+    distanceError = g_wallDistance - ultrasonicDistanceToWall;
   }
   else if (wallSide==wall_right)
   { 
-    distanceError = ultrasonicDistanceToWall - wallDistance;
+    distanceError = ultrasonicDistanceToWall - g_wallDistance;
   }
   else if (wallSide==wall_both)
   {
-    robotAngle = (robotAngle + secondaryRobotAngle)/2.0; // Take the average angle of the two
-    distanceError = (wallDistance - secondaryWallDistance)/2.0; // (left - right)/2 . It should center the robot and also change the same amount as the other ones (hence the division by 2)
+    distanceError = (g_wallDistance - secondaryWallDistance)/2.0; // (left - right)/2 . It should center the robot and also change the same amount as the other ones (hence the division by 2)
   }
 
-  if (lastWallSide == wallSide && lastWallSide != wall_none) distanceDerivative = 1000.0*(wallDistance - lastDistance)/(millis()-lastExecutionTime); // Calculate the derivative. (The 1000 is to make the time in seconds)
+  if (lastWallSide == wallSide && lastWallSide != wall_none) distanceDerivative = 1000.0*(g_wallDistance - lastDistance)/(millis()-lastExecutionTime); // Calculate the derivative. (The 1000 is to make the time in seconds)
   // Update variables for the next execution loop
   lastExecutionTime = millis();
-  lastDistance = wallDistance;
+  lastDistance = g_wallDistance;
   lastWallSide = wallSide;
 
   double goalAngle = 0;
@@ -990,7 +1011,7 @@ void pidDrive(WallSide wallSide, double startAngle, double gyroOffset)
   } else {
     goalAngle = distanceError*distanceP + distanceDerivative*distanceD; // Calculate the angle you want depending on the distance to the wall (error) and the speed at which you approach (derivative)
   }
-  double angleError = goalAngle-robotAngle; // Calculate the correction needed in the wheels to get to the angle
+  double angleError = goalAngle-g_robotAngle; // Calculate the correction needed in the wheels to get to the angle
   double correction = angleP*angleError; // Calculate the correction in the wheels. Positive is counter-clockwise (math)
 
   // Filter out the extreme cases
@@ -1001,7 +1022,7 @@ void pidDrive(WallSide wallSide, double startAngle, double gyroOffset)
   runWheelSide(wheels_left, BASE_SPEED_CMPS - correction);
   runWheelSide(wheels_right, BASE_SPEED_CMPS + correction);
   loopEncoders(); // Could maybe remove - already done in getUltrasonics()
-  lastWallAngle = robotAngle; // Update the lastWallAngle - okay to do because this will not be read during the execution loop of pidTurn. It will only be used before.
+  g_lastWallAngle = g_robotAngle; // Update the g_lastWallAngle - okay to do because this will not be read during the execution loop of pidTurn. It will only be used before.
 
   //Serial.println(correction); // Debugging
 
@@ -1029,7 +1050,7 @@ double measurementAverage(double arrayToCalc[]) // Use a reference to the array 
 // gyroOffset - which angle the gyro indicates when the step starts (mathangle)
 // dumbDistanceDriven - used to keep track of the distance travelled measured by the encoder
 // stopReason - gives the reason for why the robot stopped moving
-bool driveStepDriveLoop(WallSide& wallToUse, double& startAngle, double& gyroOffset, double& dumbDistanceDriven, StoppingReason& stopReason)
+bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, StoppingReason& stopReason)
 {
   getUltrasonics();
   // printUltrasonics();
@@ -1043,12 +1064,12 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& startAngle, double& gyroOff
 
 
   //pidDrive(wallToUse, startAngle, gyroOffset);
-  pidDrive(wallToUse, startAngle, gyroOffset);
+  pidDrive(wallToUse);
 
   // Updating the distances
   // Increment the true distance driven.
   // Done by calculating the leg parallell to the wall in the right triangle formed by the distance travelled and the lines parallell to walls in both directions (see notes on paper)
-  trueDistanceDriven += (getDistanceDriven()-dumbDistanceDriven) * cos(abs(lastWallAngle*DEG_TO_RAD));
+  trueDistanceDriven += (getDistanceDriven()-dumbDistanceDriven) * cos(abs(g_lastWallAngle*DEG_TO_RAD)); // Because g_lastWallAngle is updated continuosly, it can be used here
   dumbDistanceDriven = getDistanceDriven();
 
 
@@ -1136,7 +1157,7 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& startAngle, double& gyroOff
 
 bool driveStep()
 {
-  WallSide wallToUse; // Declare a variable for which wall to follow
+  WallSide wallToUse = wall_none; // Initialize a variable for which wall to follow
   startDistanceMeasure(); // Starts the distance measuring (encoders)
   trueDistanceDriven = 0;
   double dumbDistanceDriven = 0;
@@ -1149,32 +1170,19 @@ bool driveStep()
   if (leftWallPresent && rightWallPresent) wallToUse = wall_both;
   else if (leftWallPresent) wallToUse = wall_left;
   else if (rightWallPresent) wallToUse = wall_right;
-  else wallToUse = wall_none; // If no wall was detected
+  // Else no wall was detected which is the default value of wallToUse.
 
   
   // Calculate the angles for use by pidDrive
-  double startAngle = 0;
-  double startWallDistance = 0; // Just to have something to feed into calcRobotPose()
-  // Calculate the current values precisely
-  // Maybe I need to add a delay in the loop because of ultrasonic measurements time limits? (it wont make multiple measurements if the polling speed is too fast)
-  // double angleMeasurements[10];
-  // double distanceMeasurements[10];
   if (wallToUse == wall_none) {
-    // for (int i=0; i<10; ++i) { // Fill the measurements with 0
-    //   angleMeasurements[i] = 0;
-    //   distanceMeasurements[i] = 0;
-    // }
-    startAngle = lastWallAngle;
+    
+    g_startWallAngle = g_lastWallAngle; // The new wallAngle is the same as the previously set one
   } else {
-    // for (int i=0; i<10; ++i) { // Get 10 measurements
-    //   getUltrasonics();
-    //   calcRobotPose(wallToUse, angleMeasurements[i], distanceMeasurements[i], false); // If both walls are present, this only uses the left wall. Could fix in the future.
-    // }
-    // startAngle =  measurementAverage(angleMeasurements); // Angle in relation to the wall at the beginning of the move. If no wall is present, the angle is set to 0 (meaning the current angle will be the goal)
-    calcRobotPose(wallToUse, startAngle, startWallDistance, false);
+    calcRobotPose(wallToUse, g_startWallAngle, g_wallDistance, false);
   }
+  
   gyro.update();
-  double gyroOffset = gyroAngleToMathAngle(gyro.getAngleZ());// The angle measured by the gyro (absolute angle) in the beginning.
+  g_gyroOffset = gyroAngleToMathAngle(gyro.getAngleZ());// The angle measured by the gyro (absolute angle) in the beginning.
   
 
   lastWallSide = wall_none; // Tells pidDrive that derivative term should not be used
@@ -1191,7 +1199,7 @@ bool driveStep()
   // Drive until the truDistanceDriven is 30 or greater. This is the original way I did it, but the alternative way below may be used if the later parts of this code are changed.
   while (shouldStop == false)
   {
-  shouldStop = driveStepDriveLoop(wallToUse, startAngle, gyroOffset, dumbDistanceDriven, stoppingReason); // There does not seem to be a time difference between calling the function like this and pasting in the code
+  shouldStop = driveStepDriveLoop(wallToUse, dumbDistanceDriven, stoppingReason); // There does not seem to be a time difference between calling the function like this and pasting in the code
   // Serial.print(dumbDistanceDriven);
   // Serial.print("      ");
   // Serial.println(trueDistanceDriven);
@@ -1199,13 +1207,6 @@ bool driveStep()
   }
   // Serial.print("Time: ");
   // Serial.println((millis()-timerFlag)/double(iterations));
-
-  /* Alternative way of doing it. Because it does some of the things from down below, those have to be removed if this code is used:
-  // If the driven distance exceeds 30 or the front distance gets too small, the loop will end if the robot is not in the specified interval to the right.
-  while ((trueDistanceDriven < 30 && (ultrasonicDistanceF > (15-ultrasonicFrontOffset))) || ((ultrasonicDistanceF < (15-ultrasonicFrontOffset + 5)) && (ultrasonicDistanceF > (15-ultrasonicFrontOffset)))) {
-    driveStepDriveLoop(wallToUse, startAngle, gyroOffset, dumbDistanceDriven);
-  }
-  */
 
   
   // Checking how far you have driven
@@ -1222,7 +1223,7 @@ bool driveStep()
     lights::setColour(3, colourOrange, true);
     while (ultrasonicDistanceF > (15-ultrasonicFrontOffset + 4.5) && (trueDistanceDriven-trueDistanceDrivenFlag) < 7) // The part about trueDistance is a failsafe in case the sensor fails
     {
-      driveStepDriveLoop(wallToUse, startAngle, gyroOffset, dumbDistanceDriven, stoppingReason);
+      driveStepDriveLoop(wallToUse, dumbDistanceDriven, stoppingReason);
     }
     // lights::setColour(3, colourBase, true);
      stoppingReason = stop_frontWallPresentFaraway;
@@ -1270,13 +1271,22 @@ bool driveStep()
   //   // Handle checkpoints.
   // }
 
-  delay(500);
+  // Give an accurate angle measurement for the next step
+  // This should probably be separated out into its own function
+  flushDistanceArrays();
+  checkWallPresence();
+  if (leftWallPresent && rightWallPresent) wallToUse = wall_both;
+  else if (leftWallPresent) wallToUse = wall_left;
+  else if (rightWallPresent) wallToUse = wall_right;
+  else wallToUse = wall_none; // If no wall was detected
+  updateRobotPose(wallToUse);
+  g_lastWallAngle = g_robotAngle;
 
   lights::turnOff();
 
   return true; // Change later to depend on whether the move was executed or not
 
-  // The current angle to the wall is already stored by pidDrive in lastWallAngle
+  // The current angle to the wall is already stored by pidDrive in g_lastWallAngle
 
 }
 
