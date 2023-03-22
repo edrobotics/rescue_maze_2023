@@ -2,7 +2,7 @@ Things to change/update/add in the redesign:
 
 /Move the back motors inwards and increase the spacing to an appropriate amount
 Move the ultrasonic sensors inwards a bit
-	The front bracket can be partly under the auriga
+	/The front bracket can be partly under the auriga
 /Maybe put ultrasonic sensors sideways to improve camera view?
 
 /Make the baseplate thicker
@@ -15,8 +15,9 @@ Move the ultrasonic sensors inwards a bit
 Colour sensor mounting:
 	Flap that can move up and down
 	
-Rescue-kit mechanism mounting:
-	Some removable plate in the back
+/Rescue-kit mechanism mounting:
+	XSome removable plate in the back
+	/Mounting holes for plate added.
 	
 Mirrors go on top of the auriga. The same assembly could hold the mirrors
 
