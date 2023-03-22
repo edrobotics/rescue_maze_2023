@@ -1,11 +1,11 @@
 #ifndef ROBOT_LOWLEVEL_H
 #define ROBOT_LOWLEVEL_H
 
-/*#include <Arduino.h>
-#include <MeAuriga.h>
-#include <MeEncoderOnBoard.h>
-#include <MeGyro.h>*/
-
+// #include <Arduino.h>
+// #include <MeAuriga.h>
+// #include <MeEncoderOnBoard.h>
+// #include <MeGyro.h>
+#include <colour_sensor.h>
 
 //////////////// Public functions /////////////////////////////
 
@@ -91,8 +91,11 @@ namespace lights
 
     // Shows the 3 leds facing in the requested direction
     void showDirection(LedDirection direction);
+    void showDirection(lights::LedDirection direction, RGBColour colour);
 
     void affirmativeBlink();
+    
+    void floorIndicator(ColourSensor::FloorColour floorColour);
     
     void disabled();
 
@@ -303,6 +306,7 @@ enum StoppingReason
   stop_backWallChangeApproaching,
   stop_backWallChangeLeaving,
   stop_deadReckoning,
+  stop_floorColour,
 };
 
 // What to run inside of the driveStep loop (the driving forward-portion)

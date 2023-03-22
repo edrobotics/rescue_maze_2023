@@ -6,13 +6,19 @@
 
 
 
-Adafruit_TCS34725 colSens = Adafruit_TCS34725(TCS34725_INTEGRATIONTIME_240MS, TCS34725_GAIN_1X);
+Adafruit_TCS34725 colSens = Adafruit_TCS34725(TCS34725_INTEGRATIONTIME_120MS, TCS34725_GAIN_1X);
+bool readState = false; // Keeps track of whether the sensor was read or not
 
 
 
 void ColourSensor::init()
 {
-    colSens.begin();
+    if (colSens.begin() == false)
+    {
+        // Serial.println("Could not find sensor");
+    }
+    // else Serial.println("Sensor initialized");
+    lastReadTime = millis();
 }
 
 void ColourSensor::printValues()
@@ -50,6 +56,10 @@ void ColourSensor::printColourName(ColourSensor::FloorColour colourToPrint)
         
         case floor_blue:
             Serial.print("blue");
+            break;
+
+        case floor_notUpdated:
+            Serial.print("Not updated");
             break;
         
         default:
@@ -93,13 +103,14 @@ void ColourSensor::calcColourRatios(double& rg, double& rb, double& gb)
 // Could return true if a value was read and false if it was not updated
 bool ColourSensor::readSensor()
 {
-    if (millis()-lastReadTime > INTEGRATION_TIME) // Check if enough time has passed
+    if ((millis()-lastReadTime) > INTEGRATION_TIME) // Check if enough time has passed
     {
         getRawData(&sensorRed, &sensorGreen, &sensorBlue, &sensorClear);
         lastReadTime = millis(); // Update the timeflag
         return true;
     }
     else return false;
+    
 }
 
 // Identify the colour read by readSensor()
@@ -108,7 +119,7 @@ ColourSensor::FloorColour ColourSensor::identifyColour()
 
     // Identification using ratios
 
-    if (readSensor() == false)
+    if (readState == false)
     {
         return floor_notUpdated;
     }
@@ -123,9 +134,9 @@ ColourSensor::FloorColour ColourSensor::identifyColour()
 
     if (lowerUpperEval(rbRatio, 0, 0.95) && lowerUpperEval(gbRatio, 0, 0.95)) return floor_blue; // Could be lower (0.85?) for both
 
-    else if (lowerUpperEval(rgRatio, 1.19, 1.5) && lowerUpperEval(rbRatio, 1.35, 1.8) && lowerUpperEval(gbRatio, 1.05, 1.3)) return floor_reflective;
+    else if (lowerUpperEval(rgRatio, 1.17, 1.5) && lowerUpperEval(rbRatio, 1.3, 1.45) && lowerUpperEval(gbRatio, 1.01, 1.2)) return floor_reflective;
 
-    else if (lowerUpperEval(rgRatio, 1.05, 1.2) && lowerUpperEval(rbRatio, 1.25, 1.5) && lowerUpperEval(gbRatio, 1.05, 1.3)) return floor_white; // reflective falls (partly) into the same span, but because reflective would have returned all that is left in this area should be white
+    else if (lowerUpperEval(rgRatio, 1.0, 1.2) && lowerUpperEval(rbRatio, 1.21, 1.4) && lowerUpperEval(gbRatio, 1.1, 1.3)) return floor_white; // reflective falls (partly) into the same span, but because reflective would have returned all that is left in this area should be white
     
     else if (lowerUpperEval(rgRatio, 1.7, 6) && lowerUpperEval(rbRatio, 2.3, 6) && lowerUpperEval(gbRatio, 1.2, 1.5)) return floor_black;
 
@@ -158,9 +169,14 @@ ColourSensor::FloorColour ColourSensor::identifyColour()
 
 ColourSensor::FloorColour ColourSensor::checkFloorColour()
 {
-    readSensor();
+    readState = readSensor();
     FloorColour identifiedColour = identifyColour();
-    if (identifiedColour != floor_notUpdated || floor_unknown) lastKnownFloorColour = identifiedColour; // Maybe the floor_unknown should be handled separately?
-    return identifiedColour;
+    if (identifiedColour != floor_notUpdated)
+    {
+        if (identifiedColour != floor_unknown) lastKnownFloorColour = identifiedColour; // Maybe the floor_unknown should be handled separately?
+        lastFloorColour = identifiedColour;
+        return identifiedColour;
+    }
+    else return lastFloorColour;
     
 }

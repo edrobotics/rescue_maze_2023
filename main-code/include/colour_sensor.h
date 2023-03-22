@@ -23,6 +23,7 @@ class ColourSensor
         void printColourName(FloorColour colourToPrint);
 
         FloorColour lastKnownFloorColour;
+        FloorColour lastFloorColour;
 
     private:
         void getRawData(uint16_t *sensorRed, uint16_t *sensorGreen, uint16_t *sensorBlue, uint16_t *sensorClear);
@@ -33,7 +34,7 @@ class ColourSensor
         FloorColour identifyColour();
 
         unsigned long lastReadTime = 0; // Keep track of the last time you read from the sensor
-        int INTEGRATION_TIME = 240; // The integration time in milliseconds
+        int INTEGRATION_TIME = 120; // The integration time in milliseconds
         uint16_t sensorRed, sensorGreen, sensorBlue, sensorClear; // For raw colour values
         double rgRatio, rbRatio, gbRatio; // For ratios between colours
 

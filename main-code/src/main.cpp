@@ -5,7 +5,7 @@
 #include <Wire.h>
 #include <SPI.h>
 
-// ColourSensor colourSensor;
+ColourSensor colourSensor;
 
 void setup()
 {
@@ -32,8 +32,8 @@ void setup()
 // double wallDistance = 0;
 
 // #define PICODE
-#define TESTING_NAV
-// #define TESTING
+// #define TESTING_NAV
+#define TESTING
 
 
 void loop()
@@ -74,12 +74,14 @@ void loop()
   // printUltrasonics();
 
   driveStep();
+  delay(500);
+  lights::turnOff();
   // driveBlind(30, true);
   // long timeFlag = millis();
   // getUltrasonics();
   // Serial.println(millis()-timeFlag);
   // printUltrasonics();
-  delay(2000);
+  delay(1500);
   
 
   #else

@@ -25,7 +25,7 @@ MeUltrasonicSensor ultrasonicF(PORT_7); // Front
 
 
 // Colour sensor:
-ColourSensor colourSensor;
+ColourSensor colSensor;
 
 // Gyro definition
 MeGyro gyro(0, 0x69);
@@ -58,9 +58,10 @@ const double WHEEL_CIRCUMFERENCE = PI*WHEEL_DIAMETER;
 
 // Driving
 const double CMPS_TO_RPM = 1.0/WHEEL_CIRCUMFERENCE*60.0; // Constant to convert from cm/s to rpm
-const double BASE_SPEED_CMPS = 30; // The base speed of driving (cm/s)
+const double BASE_SPEED_CMPS = 20; // The base speed of driving (cm/s)
 const double BASE_SPEED_RPM = CMPS_TO_RPM*BASE_SPEED_CMPS; // The base speed of driving (rpm)
-double trueDistanceDriven = 0; // The correct driven distance. Measured as travelling along the wall and also updated when landmarks are seen
+double g_trueDistanceDriven = 0; // The correct driven distance. Measured as travelling along the wall and also updated when landmarks are seen
+double g_targetDistance = 0; // The distance that you want to drive
 
 
 // Sensor constants
@@ -103,6 +104,10 @@ double g_robotAngle = 0; // The angle of the robot in relation to the wall
 double g_wallDistance = 0;
 double g_startWallAngle = 0;
 double g_gyroOffset = 0;
+
+// For driving decision (driving backwards)
+bool g_driveBack = false;
+ColourSensor::FloorColour g_floorColour = ColourSensor::floor_notUpdated;
 
 
 //------------------ Serial communication -------------------------------//
@@ -196,8 +201,11 @@ void lightsAndBuzzerInit()
 
 
 RGBColour colourBlack {0, 0, 0};
+RGBColour colourWhite {100, 100, 100};
 RGBColour colourBase {5, 42, 0};
 RGBColour colourOrange {42, 5, 0};
+RGBColour colourRed {150, 0, 0};
+RGBColour colourBlue {0, 0, 150};
 RGBColour colourError {200, 10, 0};
 RGBColour colourAffirmative { 20, 150, 0};
 
@@ -214,7 +222,7 @@ void lights::setColour(int index, RGBColour colour, bool showColour)
   if (showColour==true) ledRing.show();
 }
 
-void lights::showDirection(lights::LedDirection direction)
+void lights::showDirection(lights::LedDirection direction, RGBColour colour)
 {
   turnOff();
   int centerLEDIndex = 3*direction + 3;
@@ -225,10 +233,15 @@ void lights::showDirection(lights::LedDirection direction)
     {
       ledIndex -= 12;
     }
-    setColour(ledIndex, colourBase, false);
+    setColour(ledIndex, colour, false);
     // ledRing.setColor(ledIndex, colourBase.red, colourBase.green, colourBase.blue);
   }
   ledRing.show();
+}
+
+void lights::showDirection(lights::LedDirection direction)
+{
+  showDirection(direction, colourBase);
 }
 
 
@@ -270,6 +283,30 @@ void lights::activated()
   }
   delay(150);
   turnOff();
+}
+
+void lights::floorIndicator(ColourSensor::FloorColour floorColour)
+{
+  switch (floorColour)
+  {
+    case ColourSensor::floor_black:
+      showDirection(front, colourRed);
+      break;
+    case ColourSensor::floor_blue:
+      showDirection(front, colourBlue);
+      break;
+    default:
+      showDirection(front, colourWhite);
+      
+  }
+  
+  
+  if (floorColour == ColourSensor::floor_black)
+  {
+  }
+  else if (floorColour == ColourSensor::floor_blue)
+  {
+  }
 }
 
 
@@ -490,7 +527,7 @@ void updateRobotPose(WallSide wallSide, double secondaryWallDistance)
   {
     centerAngle180(g_currentGyroAngle, tmpGyroOffset);
     g_robotAngle = g_startWallAngle + g_currentGyroAngle - tmpGyroOffset; // Safe to do because we moved the angles to 180 degrees, meaning that there will not be a zero-cross
-    calcRobotPose(wallSide, g_robotAngle, g_wallDistance, true);
+    calcRobotPose(wallSide, g_robotAngle, g_wallDistance, true); // Is this really needed? The angle should already be up to date and the wall distance is not relevant in this case
 
   }
 
@@ -641,7 +678,7 @@ void turnSteps(TurningDirection direction, int steps)
 
 void initColourSensor()
 {
-  colourSensor.init();
+  colSensor.init();
 }
 
 // Pushes curDistanceData onto the specified array
@@ -996,6 +1033,7 @@ void pidDrive(WallSide wallSide)
   }
   else if (wallSide==wall_both)
   {
+    // distanceError = g_wallDistance - ultrasonicDistanceToWall; // Do as with left wall present
     distanceError = (g_wallDistance - secondaryWallDistance)/2.0; // (left - right)/2 . It should center the robot and also change the same amount as the other ones (hence the division by 2)
   }
 
@@ -1011,20 +1049,32 @@ void pidDrive(WallSide wallSide)
   } else {
     goalAngle = distanceError*distanceP + distanceDerivative*distanceD; // Calculate the angle you want depending on the distance to the wall (error) and the speed at which you approach (derivative)
   }
-  double angleError = goalAngle-g_robotAngle; // Calculate the correction needed in the wheels to get to the angle
+  double angleError = goalAngle - g_robotAngle; // Calculate the correction needed in the wheels to get to the angle
   double correction = angleP*angleError; // Calculate the correction in the wheels. Positive is counter-clockwise (math)
 
   // Filter out the extreme cases
   if (correction > 10) correction = 10;
   else if (correction < -10) correction = -10;
 
+  // For driving backwards
+  int multiplier = 1;
+  if (g_driveBack == true) multiplier = -1;
 
-  runWheelSide(wheels_left, BASE_SPEED_CMPS - correction);
-  runWheelSide(wheels_right, BASE_SPEED_CMPS + correction);
+  runWheelSide(wheels_left, multiplier*BASE_SPEED_CMPS - correction);
+  runWheelSide(wheels_right, multiplier*BASE_SPEED_CMPS + correction);
   loopEncoders(); // Could maybe remove - already done in getUltrasonics()
   g_lastWallAngle = g_robotAngle; // Update the g_lastWallAngle - okay to do because this will not be read during the execution loop of pidTurn. It will only be used before.
 
-  //Serial.println(correction); // Debugging
+  // Debugging
+  // Serial.print(correction);
+  // Serial.print("    ");
+  // Serial.print(distanceError);
+  // Serial.print("    ");
+  // Serial.print(distanceDerivative);
+  // Serial.print("    ");
+  // Serial.print(angleError);
+  // Serial.print("    ");
+  // Serial.println("");
 
 }
 
@@ -1066,10 +1116,14 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
   //pidDrive(wallToUse, startAngle, gyroOffset);
   pidDrive(wallToUse);
 
+  int multiplier = 1;
+  if (g_driveBack == true) multiplier = -1;
+  // Serial.println(g_driveBack);
+
   // Updating the distances
   // Increment the true distance driven.
   // Done by calculating the leg parallell to the wall in the right triangle formed by the distance travelled and the lines parallell to walls in both directions (see notes on paper)
-  trueDistanceDriven += (getDistanceDriven()-dumbDistanceDriven) * cos(abs(g_lastWallAngle*DEG_TO_RAD)); // Because g_lastWallAngle is updated continuosly, it can be used here
+  g_trueDistanceDriven += multiplier*(getDistanceDriven()-dumbDistanceDriven) * cos(abs(g_robotAngle*DEG_TO_RAD)); // Because g_lastWallAngle is updated continuosly, it can be used here. Or I can just use robotAngle instead.
   dumbDistanceDriven = getDistanceDriven();
 
 
@@ -1077,17 +1131,22 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
   if (ultrasonicDistanceF < (15 - ultrasonicFrontOffset + 4.5)) // If the robot is the correct distance away from the front wall. The goal is that ultrasonicDistanceF is 5.2 when the robot stops.
   {
     // lights::setColour(3, colourBase, true);
-    // trueDistanceDriven = 30; // The robot has arrived
+    // g_trueDistanceDriven = 30; // The robot has arrived
     stopReason = stop_frontWallPresent;
+    // stopReason = stop_floorColour; // For debugging driving backwards
+    // g_floorColour = ColourSensor::floor_black; // Same as line above
     return true;
   }
   //Serial.println(ultrasonicDistanceF); // Debugging
 
-  if (trueDistanceDriven >= 28)
+
+  if (g_trueDistanceDriven >= g_targetDistance-2 )
   {
     if (stopReason == stop_none) stopReason = stop_deadReckoning;
+    g_driveBack = false; // Reset the driveBack variable (do not drive back the next step)
     return true;
   }
+
 
   // Checking for wallchanges (needs some more robustness!)
   WallChangeType backWallCheck = checkWallChanges(ultrasonics_back);
@@ -1098,7 +1157,7 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
     // buzzer.tone(440, 30); // Debugging
     // buzzer.tone(220, 30); // Debugging
     // Serial.println("Leaving back");
-    trueDistanceDriven = 15 + ultrasonicSpacing/2.0 + 7; // The math should be correct, but the robot drives too far without the addition. The same amount of wrong as below.
+    g_trueDistanceDriven = 15 + ultrasonicSpacing/2.0 + 5; // The math should be correct, but the robot drives too far without the addition. The same amount of wrong as below.
     stopReason = stop_backWallChangeLeaving;
     // Serial.println("Leaving back");
   }
@@ -1107,7 +1166,7 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
     // buzzer.tone(220, 30); // Debugging
     // buzzer.tone(440, 30); // Debugging
     // Serial.println("Approaching back");
-    trueDistanceDriven = 15 + ultrasonicSpacing/2.0 + 3; // The math should be correct, but the robot drives too far without the addition. The same amount of wrong as below.
+    g_trueDistanceDriven = 15 + ultrasonicSpacing/2.0 + 3; // The math should be correct, but the robot drives too far without the addition. The same amount of wrong as below.
     stopReason = stop_backWallChangeApproaching;
     // Serial.println("Approaching back");
   }
@@ -1116,7 +1175,7 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
     // buzzer.tone(880, 30); // Debugging
     // buzzer.tone(440, 30); // Debugging
     // Serial.println("Leaving Front");
-    trueDistanceDriven = 15 - ultrasonicSpacing/2.0 + 6; // The math should be correct, but the robot drives too far without the addition. The same amount of wrong as above.
+    g_trueDistanceDriven = 15 - ultrasonicSpacing/2.0 + 6; // The math should be correct, but the robot drives too far without the addition. The same amount of wrong as above.
     stopReason = stop_frontWallChangeLeaving;
   }
   else if (frontWallCheck == wallchange_approaching)
@@ -1124,7 +1183,7 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
     // buzzer.tone(440, 30); // Debugging
     // buzzer.tone(880, 30); // Debugging
     // Serial.println("Approaching front");
-    trueDistanceDriven = 15 - ultrasonicSpacing/2 + 4.5; // The math should be correct, but the robot drives too far without the addition. The same amount of wrong as above.
+    g_trueDistanceDriven = 15 - ultrasonicSpacing/2 + 4.5; // The math should be correct, but the robot drives too far without the addition. The same amount of wrong as above.
     stopReason = stop_frontWallChangeApproaching;
   }
 
@@ -1132,26 +1191,34 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
 
   // lights::turnOff();
 
-  return false; // The default return - not finished
 
   // Checking for ground colour
-  // ColourSensor::FloorColour identifiedColour = colourSensor.checkFloorColour();
-
-  // switch (identifiedColour)
-  // {
-  //   case ColourSensor::floor_notUpdated:
-  //     break; // Do nothing
-  //   case ColourSensor::floor_black:
-  //     // Exit the loop somehow
-  //     break;
-  //   case ColourSensor::floor_blue:
-  //     // Exit the loop somehow
-  //     break;
-  //   default:
-  //     // Do nothing
-  //     break; // Potential problem with the last break statement?
-  // }
+  ColourSensor::FloorColour g_floorColour = colSensor.checkFloorColour();
+  if (g_driveBack == false)
+  {
+    switch (g_floorColour)
+    {
+      case ColourSensor::floor_notUpdated:
+        break; // Do nothing
+      case ColourSensor::floor_black:
+        // Exit the loop somehow
+        // Drive back to last point
+        stopReason = stop_floorColour;
+        return true;
+        break;
+      case ColourSensor::floor_blue:
+        // Exit the loop somehow
+        // Drive back to last point
+        stopReason = stop_floorColour;
+        return true;
+        break;
+      default:
+        // Do nothing (includes silver)
+        break; // Potential problem with the last break statement?
+    }
+  }
   
+  return false; // The default return - not finished
 }
 
 
@@ -1159,11 +1226,18 @@ bool driveStep()
 {
   WallSide wallToUse = wall_none; // Initialize a variable for which wall to follow
   startDistanceMeasure(); // Starts the distance measuring (encoders)
-  trueDistanceDriven = 0;
   double dumbDistanceDriven = 0;
+  g_targetDistance = 30; // The distance that you want to drive. Normally 30
+  if (g_driveBack == true)
+  {
+    g_targetDistance = g_trueDistanceDriven + 3;
+    // g_targetDistance = 15;
+  }
+  g_trueDistanceDriven = 0;
+  dumbDistanceDriven = 0;
 
   // Get sensor data for initial values
-  flushDistanceArrays();
+  if (g_driveBack == false) flushDistanceArrays();
   // getUltrasonics(); // Should not be needed
   checkWallPresence();
   setPreviousWallStates();
@@ -1202,7 +1276,9 @@ bool driveStep()
   shouldStop = driveStepDriveLoop(wallToUse, dumbDistanceDriven, stoppingReason); // There does not seem to be a time difference between calling the function like this and pasting in the code
   // Serial.print(dumbDistanceDriven);
   // Serial.print("      ");
-  // Serial.println(trueDistanceDriven);
+  // Serial.print(g_trueDistanceDriven);
+  // Serial.print("    ");
+  // Serial.println(g_targetDistance);
   // ++iterations;
   }
   // Serial.print("Time: ");
@@ -1216,12 +1292,12 @@ bool driveStep()
   // Reset drive variables
   startDistanceMeasure();
   dumbDistanceDriven = 0;
-  double trueDistanceDrivenFlag = trueDistanceDriven;
+  double trueDistanceDrivenFlag = g_trueDistanceDriven;
   // Continue driving forward if necessary (close enough to the wall in front)
-  if (stoppingReason != stop_frontWallPresent && ultrasonicDistanceF < (15-ultrasonicFrontOffset + 10))
+  if (stoppingReason != stop_frontWallPresent && stoppingReason != stop_floorColour && ultrasonicDistanceF < (15-ultrasonicFrontOffset + 10) && (g_floorColour != ColourSensor::floor_black && g_floorColour != ColourSensor::floor_blue))
   {
     lights::setColour(3, colourOrange, true);
-    while (ultrasonicDistanceF > (15-ultrasonicFrontOffset + 4.5) && (trueDistanceDriven-trueDistanceDrivenFlag) < 7) // The part about trueDistance is a failsafe in case the sensor fails
+    while (ultrasonicDistanceF > (15-ultrasonicFrontOffset + 4.5) && (g_trueDistanceDriven-trueDistanceDrivenFlag) < 7) // The part about trueDistance is a failsafe in case the sensor fails
     {
       driveStepDriveLoop(wallToUse, dumbDistanceDriven, stoppingReason);
     }
@@ -1230,6 +1306,8 @@ bool driveStep()
   }
 
   stopWheels();
+
+  g_driveBack = false;
 
   switch (stoppingReason)
   {
@@ -1259,15 +1337,19 @@ bool driveStep()
       lights::setColour(6, colourOrange, false);
       lights::setColour(12, colourOrange, true);
       break;
+    case stop_floorColour:
+      g_driveBack = true;
+      lights::floorIndicator(g_floorColour);
+      break;
     default:
       lights::setColour(0, colourOrange, true);
       break;
   }
 
-  // if (colourSensor.lastKnownFloorColour == ColourSensor::floor_reflective) // Double check that the floor is really reflective.
+  // if (colSensor.lastKnownFloorColour == ColourSensor::floor_reflective) // Double check that the floor is really reflective.
   // {
   //   delay(300);
-  //   colourSensor.checkFloorColour();
+  //   colSensor.checkFloorColour();
   //   // Handle checkpoints.
   // }
 
@@ -1282,11 +1364,10 @@ bool driveStep()
   updateRobotPose(wallToUse);
   g_lastWallAngle = g_robotAngle;
 
-  lights::turnOff();
 
   return true; // Change later to depend on whether the move was executed or not
 
-  // The current angle to the wall is already stored by pidDrive in g_lastWallAngle
+  // The current angle to the wall is already stored by pidDrive in g_lastWallAngle (or not since my changes?)
 
 }
 
@@ -1326,7 +1407,7 @@ void testWallChanges()
     // buzzer.tone(440, 30); // Debugging
     // buzzer.tone(220, 30); // Debugging
     // Serial.println("Leaving back");
-    trueDistanceDriven = 15 + ultrasonicSpacing/2.0 + 7; // The math should be correct, but the robot drives too far without the addition. The same amount of wrong as below.
+    g_trueDistanceDriven = 15 + ultrasonicSpacing/2.0 + 7; // The math should be correct, but the robot drives too far without the addition. The same amount of wrong as below.
     // stopReason = stop_backWallChangeLeaving;
     Serial.println("Leaving back");
     delay(500);
@@ -1336,7 +1417,7 @@ void testWallChanges()
     // buzzer.tone(220, 30); // Debugging
     // buzzer.tone(440, 30); // Debugging
     // Serial.println("Approaching back");
-    trueDistanceDriven = 15 + ultrasonicSpacing/2.0 - 1; // The math should be correct, but the robot drives too far without the addition. The same amount of wrong as below.
+    g_trueDistanceDriven = 15 + ultrasonicSpacing/2.0 - 1; // The math should be correct, but the robot drives too far without the addition. The same amount of wrong as below.
     // stopReason = stop_backWallChangeApproaching;
     Serial.println("Approaching back");
     delay(500);
@@ -1346,7 +1427,7 @@ void testWallChanges()
     // buzzer.tone(880, 30); // Debugging
     // buzzer.tone(440, 30); // Debugging
     // Serial.println("Leaving Front");
-    trueDistanceDriven = 15 - ultrasonicSpacing/2 + 7; // The math should be correct, but the robot drives too far without the addition. The same amount of wrong as above.
+    g_trueDistanceDriven = 15 - ultrasonicSpacing/2 + 7; // The math should be correct, but the robot drives too far without the addition. The same amount of wrong as above.
     // stopReason = stop_frontWallChangeLeaving;
   }
   else if (frontWallCheck == wallchange_approaching)
@@ -1354,7 +1435,7 @@ void testWallChanges()
     // buzzer.tone(440, 30); // Debugging
     // buzzer.tone(880, 30); // Debugging
     // Serial.println("Approaching front");
-    trueDistanceDriven = 15 - ultrasonicSpacing/2 - 1; // The math should be correct, but the robot drives too far without the addition. The same amount of wrong as above.
+    g_trueDistanceDriven = 15 - ultrasonicSpacing/2 - 1; // The math should be correct, but the robot drives too far without the addition. The same amount of wrong as above.
     // stopReason = stop_frontWallChangeApproaching;
   }
   printUltrasonics();

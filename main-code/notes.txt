@@ -23,10 +23,17 @@ Calculation of the current angle for use in the next angle should be separated o
 
 How and when is g_gyroOffset updated?
 
+Add a requirement that trueDistanceDriven is close enough to what it will be corrected to when a wallchange is detected
+
 Bugs:
 
 Sometimes when the robot is close to a wall, it drives slowly forward and sometimes does not recognise the wall. (potentially fixed?)
 
+Sometimes when the robot is driving without walls and you correct it, it drives in a circle and does not drive backwards when it is stopped.
+The trueDistanceDriven seems to be wrong (oscillates because the robot is driving in a circle)
+Why is the robot not correcting accordingly with the data?
+
+When the robot is going backwards, something seems to go wrong with the angles (it makes a "three point turn" but with an arbitrary amount of points and the oscillation gets larger every time)
 
 Other (not necessarily bugs, but things to fix):
 In driveStep(), when the first measurements are taken, the robot only uses one wall even if both are present.
