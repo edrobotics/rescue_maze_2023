@@ -8,7 +8,7 @@ namespace SerialConsole
 {
     internal class Program
     {
-        /*static byte[,] byteMap = new byte[50, 50];
+        /*static byte[,] byteMap = new byte[50, 50]; //W = 0, A = 1, S = 2, D = 3, explored = 4, mapSearched = 5, kit  = 6, ramp = 7, black tile = 8 -Need more?
         static int explored = 4;
         static int mapSearched = 5;
         static int toPosX;
@@ -21,12 +21,15 @@ namespace SerialConsole
         static bool shortenAvailable;
         static int shortenToX;
         static int shortenToZ;
-        static List<int> driveWay = new List<int>();*/
+        static List<int> driveWay = new();*/
+
         //ANOTHER LIST TO FIND SHORTEST PATH?
+        //LIST TO SEE THE TILES SINCE LAST CHECKPOINT
+        //LAST CHECKP COORDS
 
         static int direction = 0;
 
-        static bool dropKits = false;
+        static bool dropKits = false; //Add bool to not change at the same time?
         static int dropAmount;
 
         static bool frontPresent;
@@ -37,8 +40,8 @@ namespace SerialConsole
         static bool wallNZ;
         static bool wallPX;*/
 
-        static SerialPort serialPort1 = new SerialPort("COM3", 9600, Parity.None, 8, StopBits.One); //Edit stopbits? //"/dev/ttyUSB0" for pi, "COM3" or "COM5" for testing
-        static TcpListener listener = new TcpListener(System.Net.IPAddress.Any, 4242);
+        static readonly SerialPort serialPort1 = new("COM3", 9600, Parity.None, 8, StopBits.One); //Edit stopbits? //"/dev/ttyUSB0" for pi, "COM3" or "COM5" for testing
+        static readonly TcpListener listener = new(System.Net.IPAddress.Any, 4242);
         static TcpClient client;
 
         static void Main(string[] args)
@@ -50,14 +53,18 @@ namespace SerialConsole
             //Main loop
             while (true)
             {
-                Turnlogic();
-                //if (driveWay.Count == 0)
-                //{
-                //}
-                //else
-                //{
-                //    TurnTo(driveWay[0]);
-                //}
+                Turnlogic(); //Also check for binary switch reset, check for distancetravelled after dropping kits - remove interrupt aand resume?,
+                             //check for ground data and after drive, auriga sends messages when driving?
+                             //Update map with ground, ramp, kit data
+                             //What to do with back wall at the start?
+                             //Update kit data at drop? - as quickly as possible and at the right pos
+                             //if (driveWay.Count == 0)
+                             //{
+                             //}
+                             //else
+                             //{
+                             //    TurnTo(driveWay[0]);
+                             //}
                 Drive();
                 Thread.Sleep(10);
             }
@@ -65,21 +72,27 @@ namespace SerialConsole
 
         static void StartUp()
         {
-            OpenPort:
+            listener.Start();
+            Console.WriteLine("Waiting for connection...");
+            client = listener.AcceptTcpClient();
+            Console.WriteLine("Client accepted");
+
+        OpenPort:
             try
             {
                 serialPort1.Open();
             }
             catch
             {
-                Console.WriteLine("Cannot open port");
+                Console.WriteLine("Cannot open port, try these: ");
+                string[] _ports = SerialPort.GetPortNames();
+                foreach (string _port in _ports)
+                {
+                    Console.WriteLine(_port);
+                }
                 Thread.Sleep(500);
                 goto OpenPort;
             }
-            listener.Start();
-            Console.WriteLine("Waiting for connection...");
-            client = listener.AcceptTcpClient();
-            Console.WriteLine("Client accepted");
 
             Thread.Sleep(3000);
             serialPort1.DiscardInBuffer();
@@ -97,11 +110,11 @@ namespace SerialConsole
 
             //UpdateMap(true);
             Thread.Sleep(1000);
-            Thread t = new Thread(ServerLoop);
+            Thread t = new(ServerLoop);
             t.Start();
         }
 
-        static void ServerLoop()
+        static void ServerLoop() // I ONLY READ DATA THAT IS NOT 0
         {
             NetworkStream stream = client.GetStream();
             //StreamReader sr = new StreamReader(client.GetStream());
@@ -112,35 +125,35 @@ namespace SerialConsole
                 try
                 {
 
-                    byte[] buffer = new byte[1024];
-                    stream.Read(buffer, 0, buffer.Length);
+                    byte[] _buffer = new byte[1024];
+                    stream.Read(_buffer, 0, _buffer.Length);
                     int recv = 0;
 
-                    foreach (byte b in buffer)
+                    foreach (byte _b in _buffer)
                     {
-                        if (b != 0)
+                        if (_b != 0)
                         {
                             recv++;
                         }
                     }
 
-                    string recivedData = Encoding.UTF8.GetString(buffer, 0, recv);
+                    string _recivedData = Encoding.UTF8.GetString(_buffer, 0, recv);
 
-                    if (recivedData.Contains("11") && !dropKits) //&& map bit is false?
+                    if (_recivedData.Contains("11") && !dropKits) //&& map bit is false?
                     {
                         //If dropkits - check how many and if its the same as the already activated one do nothing
                         dropKits = true;
                         Console.WriteLine("found 1");
                         dropAmount = 1;
                     }
-                    if (recivedData.Contains("22") && !dropKits)
+                    if (_recivedData.Contains("22") && !dropKits)
                     {
                         //If dropkits - check how many and if its the same as the already activated one do nothing
                         dropKits = true;
                         Console.WriteLine("found 2");
                         dropAmount = 2;
                     }
-                    recivedData = "";
+                    _recivedData = "";
                     //sw.WriteLine("Done");
                     //sw.Flush();
                 }
@@ -170,11 +183,8 @@ namespace SerialConsole
             {
                 Console.WriteLine("Turn - WRONG DIRECTION");
             }
-
-            if (dropKits)
-            {
-                DropKits();
-            }
+            SensorCheck();
+            CheckAndDropKits();
         }
 
         static void TurnTo(int _toDirection)
@@ -195,48 +205,103 @@ namespace SerialConsole
                 UpdateDirection(-1);
             }
             SensorCheck();
+            CheckAndDropKits();
         }
 
-        static void DropKits()
+        static void CheckAndDropKits()
         {
             if (dropKits)
             {
                 Console.WriteLine($"Dropping {dropAmount} kits");
-                dropKits = false;
                 SerialComm($"!k,{dropAmount}");
+                Thread.Sleep(100);
+                dropKits = false;
             }
         }
 
-        static void Interrupt()
+        static string Interrupt()
         {
             Console.WriteLine("interrupting");
-            SerialComm("!i");
+            string _recived = SerialComm("!i");
+            Console.WriteLine(_recived);
             Thread.Sleep(100);
+            return _recived;
         }
-        
+
         static void Resume()
         {
             Console.WriteLine("resuming");
-            Thread.Sleep(100);
             SerialComm("!r");
+            Thread.Sleep(100);
         }
 
         static void Drive()
         {
+            CheckAndDropKits();
+
             Console.WriteLine("Driving");
-            SerialComm("!d"); //Drive 30 cm
+
+            serialPort1.WriteLine("!d");
             Thread.Sleep(100);
+
+            string _recived;
+            string _interruptRec = "";
+
+            //Change back, make sure interrupt doesn't recive !s for Drive, don't send until: message back from auriga?, wait set time?
+            while (serialPort1.BytesToRead == 0)
+            {
+                Thread.Sleep(20);
+            }
+
+            serialPort1.DiscardInBuffer();
+            Thread.Sleep(20);
+
+            while (serialPort1.BytesToRead == 0)
+            {
+                Thread.Sleep(20);
+                if (dropKits)
+                {
+                    _interruptRec = Interrupt();
+                    if (_interruptRec.Trim() == "!si")
+                    {
+                        //Recive data to see if we have went more than half
+                        CheckAndDropKits();
+                        Resume();
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+            }
+
+            Console.WriteLine("drove");
+
+            if (serialPort1.BytesToRead == 0)
+            {
+                _recived = _interruptRec;
+                Thread.Sleep(800); //DO NOT REMOVE
+            }
+            else
+            {
+                _recived = serialPort1.ReadLine();
+            }
+            Thread.Sleep(10);
+
+            serialPort1.DiscardInBuffer();
+            serialPort1.DiscardOutBuffer();
+
+            Thread.Sleep(50);
             //UpdateLocation();
             //UpdateMap(false);
             //Console.WriteLine(posX + " , " + posZ);
-            if (dropKits)
-            {
-                DropKits();
-            }
+            SensorCheck();
+            CheckAndDropKits();
         }
 
         static void SensorCheck()
         {
+            Console.WriteLine("checking sensors");
             string _sensorInfo = SerialComm("!w");
             try
             {
@@ -260,38 +325,25 @@ namespace SerialConsole
                 Console.WriteLine(_sensorInfo + " - Sensorcheck error - incorrect format recived, retrying");
                 SensorCheck();
             }
-
-            if (dropKits)
-            {
-                DropKits();
-            }
         }
 
         static string SerialComm(string _send)
         {
             serialPort1.WriteLine(_send);
-            Thread.Sleep(100);
 
             while (serialPort1.BytesToRead == 0)
             {
-                if (_send.Contains("!d") && dropKits)
-                {
-                    //Interrupt(); //Recive data to see if we have went more than half
-                    DropKits();
-                    //Resume();
-                }
-                Thread.Sleep(10);
+                Thread.Sleep(20);
             }
-            //int _bytes = serialPort1.BytesToRead;
-            //char[] _buffer = new char[_bytes];
-            Thread.Sleep(100);
-            string _buffer = serialPort1.ReadLine();
 
-            if (_buffer[0] != '!')
+            Thread.Sleep(50);
+            string _recived = serialPort1.ReadLine();
+
+            if (_recived[0] != '!')
             {
                 try
                 {
-                    _buffer = _buffer.Remove(0, _buffer.IndexOf('!'));
+                    _recived = _recived.Remove(0, _recived.IndexOf('!'));
                 }
                 catch
                 {
@@ -299,24 +351,23 @@ namespace SerialConsole
                 }
             }
 
-            //Console.WriteLine(_buffer);
-            while (_buffer.IndexOf(' ') != -1)
+            while (_recived.IndexOf(' ') != -1)
             {
-                _buffer = _buffer.Remove(_buffer.IndexOf(' '), 1);
+                _recived = _recived.Remove(_recived.IndexOf(' '), 1);
             }
 
             try
             {
-                if (_buffer[1] != 's' && _buffer[1] != 'a')
+                if (_recived[1] != 's' && _recived[1] != 'a')
                 {
                     Console.WriteLine("Something went wrong, retrying");
-                    Console.WriteLine(_buffer);
+                    Console.WriteLine(_recived);
                     SerialComm(_send);
                 }
             }
             catch
             {
-                Console.WriteLine(_buffer);
+                Console.WriteLine(_recived);
                 Console.WriteLine("Something went very wrong, retrying");
                 SerialComm(_send);
             }
@@ -324,12 +375,13 @@ namespace SerialConsole
             serialPort1.DiscardInBuffer();
             serialPort1.DiscardOutBuffer();
             Thread.Sleep(100);
-            return _buffer;
+            return _recived;
         }
 
         static void Turnlogic()
         {
             SensorCheck();
+            CheckAndDropKits();
             while (!leftPresent || frontPresent)
             {
                 if (!leftPresent)
@@ -343,7 +395,6 @@ namespace SerialConsole
                     Turn('r');
                     Thread.Sleep(100);
                 }
-                SensorCheck();
                 Thread.Sleep(10);
             }
         }
