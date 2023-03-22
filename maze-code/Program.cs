@@ -40,7 +40,7 @@ namespace SerialConsole
         static bool wallNZ;
         static bool wallPX;*/
 
-        static readonly SerialPort serialPort1 = new("COM3", 9600, Parity.None, 8, StopBits.One); //Edit stopbits? //"/dev/ttyUSB0" for pi, "COM3" or "COM5" for testing
+        static readonly SerialPort serialPort1 = new("/dev/ttyUSB0", 9600, Parity.None, 8, StopBits.One); //Edit stopbits? //"/dev/ttyUSB0" for pi, "COM3" or "COM5" for testing
         static readonly TcpListener listener = new(System.Net.IPAddress.Any, 4242);
         static TcpClient client;
 
