@@ -8,7 +8,9 @@ namespace SerialConsole
 {
     internal class Program
     {
-        static readonly UInt16[,] bitMap = new UInt16[50, 50]; //W = 0, A = 1, S = 2, D = 3, explored = 4, mapSearched = 5, kit  = 6, ramp = 7, black tile = 8 -Need more?
+        static readonly ushort[,] mainMap = new ushort[50, 50]; //W = 0, A = 1, S = 2, D = 3, explored = 4, mapSearched = 5, kit  = 6, ramp = 7, black tile = 8, checkp = 9, blue = 10 -more? obstacles?
+        //static readonly ushort[,] secoundMap = new ushort[50, 50]; //W = 0, A = 1, S = 2, D = 3, explored = 4, mapSearched = 5, kit  = 6, ramp = 7, black tile = 8, checkp = 9, blue = 10 -more? obstacles?
+        //static readonly ushort[,] thirdMap = new ushort[50, 50]; //W = 0, A = 1, S = 2, D = 3, explored = 4, mapSearched = 5, kit  = 6, ramp = 7, black tile = 8, checkp = 9, blue = 10 -more? obstacles?
         static readonly int explored = 4;
         static readonly int mapSearched = 5;
         static readonly int kit = 6;
@@ -24,6 +26,15 @@ namespace SerialConsole
         static int shortenToZ;
         static readonly List<int> driveWay = new();
         static readonly List<string> sinceCheckpoint = new();
+
+        enum Maps
+        {
+            main,
+            secound,
+            third
+        }
+
+        static Maps currentMap;
 
         //ANOTHER LIST TO FIND SHORTEST PATH?
         //LAST CHECKP COORDS
@@ -41,7 +52,7 @@ namespace SerialConsole
         static bool wallNZ;
         static bool wallPX;
 
-        static readonly SerialPort serialPort1 = new("COM3", 9600, Parity.None, 8, StopBits.One); //Edit stopbits? //"/dev/ttyUSB0" for pi, "COM3" or "COM5" for testing
+        static readonly SerialPort serialPort1 = new("/dev/ttyUSB0", 9600, Parity.None, 8, StopBits.One); //Edit stopbits? //"/dev/ttyUSB0" for pi, "COM3" or "COM5" for testing
         static readonly TcpListener listener = new(System.Net.IPAddress.Any, 4242);
         static TcpClient client;
 
@@ -54,13 +65,19 @@ namespace SerialConsole
             //Main loop
             while (true)
             {
-                Turnlogic(); //Also check for binary switch reset, check for distancetravelled after dropping kits - remove interrupt and resume?,
+                Turnlogic(); //check for binary switch reset - in serialcomm + drive?,
+                             //check for distancetravelled when dropping kits in drive
                              //check for ground data and ramp after drive, auriga sends messages when driving?
                              //Update map with ground, ramp data
                              //What to do with back wall at the start?
                              //Update kit data at the right pos
                              //Add blinking method?
                              //Finish sinceCheckpoint
+                             //Remove trimming and such in serialcomm?  (or add to drive?)
+                             //Send to auriga if there is likely an obstacle present?
+                             //Compare map to sensor and vision data?
+                             //If we are in a dead end - look for map openings?
+                             //List for maps?
                 Drive();
                 Thread.Sleep(10);
             }
@@ -96,11 +113,13 @@ namespace SerialConsole
 
             SerialComm("!w");
             //set all map bits to 0, update map
-            for (int i = 0; i < bitMap.GetLength(0); i++)
+
+            currentMap = Maps.main;
+            for (int i = 0; i < mainMap.GetLength(0); i++)
             {
-                for (int j = 0; j < bitMap.GetLength(1); j++)
+                for (int j = 0; j < mainMap.GetLength(1); j++)
                 {
-                    bitMap[i, j] = 0;
+                    mainMap[i, j] = 0;
                 }
             }
 
@@ -134,19 +153,12 @@ namespace SerialConsole
 
                     string _recivedData = Encoding.UTF8.GetString(_buffer, 0, recv);
 
-                    if (_recivedData.Contains("11") && !dropKits) //&& map bit is false?
+                    if (_recivedData.Contains('k') && !dropKits) //&& map bit is false?
                     {
                         //If dropkits - check how many and if its the same as the already activated one do nothing
                         dropKits = true;
-                        Console.WriteLine("found 1");
-                        dropAmount = 1;
-                    }
-                    if (_recivedData.Contains("22") && !dropKits)
-                    {
-                        //If dropkits - check how many and if its the same as the already activated one do nothing
-                        dropKits = true;
-                        Console.WriteLine("found 2");
-                        dropAmount = 2;
+                        dropAmount = int.Parse(_recivedData.Substring(_recivedData.IndexOf('k') + 1, 1));
+                        Console.WriteLine($"found {dropAmount}");
                     }
                     _recivedData = "";
                     //sw.WriteLine("Done");
@@ -205,6 +217,7 @@ namespace SerialConsole
 
         static void CheckAndDropKits()
         {
+            Console.WriteLine(dropKits + " , " + dropAmount + " , " + !ReadMapBit(posX, posZ, kit));
             if (dropKits && !ReadMapBit(posX, posZ, kit))
             {
                 Console.WriteLine($"Dropping {dropAmount} kits");
@@ -258,7 +271,7 @@ namespace SerialConsole
                 if (dropKits && !ReadMapBit(posX, posZ, kit))
                 {
                     _interruptRec = Interrupt();
-                    if (_interruptRec.Trim() == "!si")
+                    if (_interruptRec.Trim().Contains('i'))
                     {
                         //Recive data to see if we have went more than half
                         CheckAndDropKits();
@@ -420,7 +433,7 @@ namespace SerialConsole
             for (int i = 0; i < sinceCheckpoint.Count; i++)
             {
                 string[] _coords = sinceCheckpoint[0].Split(',');
-                bitMap[int.Parse(_coords[0]), int.Parse(_coords[1])] = 0;
+                mainMap[int.Parse(_coords[0]), int.Parse(_coords[1])] = 0;
                 sinceCheckpoint.RemoveAt(0);
             }
         }
@@ -444,9 +457,9 @@ namespace SerialConsole
                 posX++;
             }
 
-            if (posX > bitMap.GetLength(0))
+            if (posX > mainMap.GetLength(0))
             {
-                posX = bitMap.GetLength(0);
+                posX = mainMap.GetLength(0);
                 Console.WriteLine("Error PosX");
             }
             if (posX < 0)
@@ -454,9 +467,9 @@ namespace SerialConsole
                 posX = 0;
                 Console.WriteLine("Error posX");
             }
-            if (posZ > bitMap.GetLength(1))
+            if (posZ > mainMap.GetLength(1))
             {
-                posZ = bitMap.GetLength(1);
+                posZ = mainMap.GetLength(1);
                 Console.WriteLine("Error PosZ");
             }
             if (posZ < 0)
@@ -550,18 +563,23 @@ namespace SerialConsole
 
         static bool ReadMapBit(int _x, int _z, int read)
         {
-            return ((bitMap[_x, _z] >> read) & 0b1) == 1;
+            return ((mainMap[_x, _z] >> read) & 0b1) == 1;
+        }
+
+        static bool ReadMapBit(int _x, int _z, int read, ushort[,] map)
+        {
+            return ((map[_x, _z] >> read) & 0b1) == 1;
         }
 
         static void SetMapBit(int _x, int _z, byte _bit, bool _value)
         {
             if (_value)
             {
-                bitMap[_x, _z] = (UInt16)(bitMap[_x, _z] | _bit);
+                mainMap[_x, _z] = (ushort)(mainMap[_x, _z] | _bit);
             }
             else
             {
-                bitMap[_x, _z] = (UInt16)(bitMap[_x, _z] & ~_bit);
+                mainMap[_x, _z] = (ushort)(mainMap[_x, _z] & ~_bit);
             }
         }
 
@@ -577,9 +595,9 @@ namespace SerialConsole
             foundWay = false;
             driveWay.ForEach(num => Console.WriteLine(num + " , "));
 
-            for (int i = 0; i < bitMap.GetLength(0); i++)
+            for (int i = 0; i < mainMap.GetLength(0); i++)
             {
-                for (int j = 0; j < bitMap.GetLength(1); j++)
+                for (int j = 0; j < mainMap.GetLength(1); j++)
                 {
                     SetMapBit(i, j, 0b00100000, false);
                 }
@@ -614,7 +632,7 @@ namespace SerialConsole
                 }
                 else
                 {
-                    if (!foundWay && _onZ + 1 < bitMap.GetLength(1)) //If there is a position one step -Z
+                    if (!foundWay && _onZ + 1 < mainMap.GetLength(1)) //If there is a position one step -Z
                     {
                         if (ReadMapBit(_onX, _onZ + 1, explored) && !ReadMapBit(_onX, _onZ + 1, mapSearched) && !ReadMapBit(_onX, _onZ, 2))
                         {
@@ -628,7 +646,7 @@ namespace SerialConsole
 
                 if (_onX > toPosX)
                 {
-                    if (!foundWay && _onX + 1 < bitMap.GetLength(0)) //If there is a position one step +X
+                    if (!foundWay && _onX + 1 < mainMap.GetLength(0)) //If there is a position one step +X
                     {
                         if (ReadMapBit(_onX + 1, _onZ, explored) && !ReadMapBit(_onX + 1, _onZ, mapSearched) && !ReadMapBit(_onX, _onZ, 3))
                         {
@@ -668,7 +686,7 @@ namespace SerialConsole
                 }
                 else
                 {
-                    if (!foundWay && _onZ + 1 < bitMap.GetLength(1)) //If there is a position one step -Z
+                    if (!foundWay && _onZ + 1 < mainMap.GetLength(1)) //If there is a position one step -Z
                     {
                         if (ReadMapBit(_onX, _onZ + 1, explored) && !ReadMapBit(_onX, _onZ + 1, mapSearched) && !ReadMapBit(_onX, _onZ, 2))
                         {
@@ -682,7 +700,7 @@ namespace SerialConsole
 
                 if (_onX <= toPosX)
                 {
-                    if (!foundWay && _onX + 1 < bitMap.GetLength(0)) //If there is a position one step +X
+                    if (!foundWay && _onX + 1 < mainMap.GetLength(0)) //If there is a position one step +X
                     {
                         if (ReadMapBit(_onX + 1, _onZ, explored) && !ReadMapBit(_onX + 1, _onZ, mapSearched) && !ReadMapBit(_onX, _onZ, 3))
                         {
@@ -754,7 +772,7 @@ namespace SerialConsole
                     }
                 }
 
-                if (_onZ + 1 < bitMap.GetLength(1)) //If there is a position one step -Z
+                if (_onZ + 1 < mainMap.GetLength(1)) //If there is a position one step -Z
                 {
                     if (ReadMapBit(_onX, _onZ + 1, explored) && !ReadMapBit(_onX, _onZ, 2))
                     {
@@ -768,7 +786,7 @@ namespace SerialConsole
                     }
                 }
 
-                if (_onX + 1 < bitMap.GetLength(0)) //If there is a position one step +X
+                if (_onX + 1 < mainMap.GetLength(0)) //If there is a position one step +X
                 {
                     if (ReadMapBit(_onX + 1, _onZ, explored) && !ReadMapBit(_onX, _onZ, 3))
                     {
