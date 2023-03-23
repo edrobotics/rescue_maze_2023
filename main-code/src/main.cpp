@@ -32,8 +32,8 @@ void setup()
 // double wallDistance = 0;
 
 // #define PICODE
-// #define TESTING_NAV
-#define TESTING
+#define TESTING_NAV
+// #define TESTING
 
 
 void loop()
@@ -95,7 +95,8 @@ void loop()
     Command command = command_none;
     flushDistanceArrays();
     makeNavDecision(command);
-    delay(500);
+    delay(555);
+    lights::turnOff();
     #endif
     
 

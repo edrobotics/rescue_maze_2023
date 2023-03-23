@@ -199,7 +199,7 @@ enum WallSide {
 // Sets the global variables for angles and distances.
 // Does not update the gyro itself
 // secondaryWallDistance is supplied when both walls are present
-void updateRobotPose(WallSide wallSide, double secondaryWallDistance);
+void updateRobotPose(WallSide wallSide, double& secondaryWallDistance);
 // Alternate way of calling
 void updateRobotPose(WallSide wallSide);
 

@@ -58,14 +58,14 @@ const double WHEEL_CIRCUMFERENCE = PI*WHEEL_DIAMETER;
 
 // Driving
 const double CMPS_TO_RPM = 1.0/WHEEL_CIRCUMFERENCE*60.0; // Constant to convert from cm/s to rpm
-const double BASE_SPEED_CMPS = 20; // The base speed of driving (cm/s)
+const double BASE_SPEED_CMPS = 25; // The base speed of driving (cm/s)
 const double BASE_SPEED_RPM = CMPS_TO_RPM*BASE_SPEED_CMPS; // The base speed of driving (rpm)
 double g_trueDistanceDriven = 0; // The correct driven distance. Measured as travelling along the wall and also updated when landmarks are seen
 double g_targetDistance = 0; // The distance that you want to drive
 
 
 // Sensor constants
-const double ultrasonicSpacing = 14; // The distance between the centers two ultrasonic sensors.
+const double ULTRASONIC_SPACING = 14.6; // The distance between the centers two ultrasonic sensors.
 const double ultrasonicFrontOffset = 10; // The distance from the front sensor to the center of the robot
 const double ultrasonicDistanceToWall = 7.1; // The distance between the ultrasonic sensor (edge of the robot) and the wall when the robot is centered.
 const double wallPresenceTreshold = 15; // Not calibrated !!!!!!!!!!!!!!!!!!!!!!!! Just a guess!!!!!!!!!!!!!!!!!!!!!!!
@@ -507,7 +507,7 @@ void centerAngle180(double& refAngle, double& calcAngle)
 
 // Sets the global variables for angles and distances.
 // Does not update the gyro itself
-void updateRobotPose(WallSide wallSide, double secondaryWallDistance)
+void updateRobotPose(WallSide wallSide, double& secondaryWallDistance)
 {
   double tmpGyroAngle = g_currentGyroAngle;
   double tmpGyroOffset = g_gyroOffset;
@@ -847,7 +847,7 @@ void calcRobotPose(WallSide wallSide, double& angle, double& trueDistance, bool 
     d2 = ultrasonicDistanceRF;
   }
 
-  if (useGyroAngle==false) angle = atan((d2 - d1)/ultrasonicSpacing);
+  if (useGyroAngle==false) angle = atan((d2 - d1)/ULTRASONIC_SPACING);
   else angle *= DEG_TO_RAD; // Convert the angle to radians to execute the calculation
   trueDistance = cos(angle) * ((d1 + d2)/(double)2);
   angle *= RAD_TO_DEG; // Convert the angle to degrees
@@ -1036,6 +1036,12 @@ void pidDrive(WallSide wallSide)
   {
     // distanceError = g_wallDistance - ultrasonicDistanceToWall; // Do as with left wall present
     distanceError = (g_wallDistance - secondaryWallDistance)/2.0; // (left - right)/2 . It should center the robot and also change the same amount as the other ones (hence the division by 2)
+    // Debugging
+    // Serial.print(wallSide);
+    // Serial.print("    ");
+    // Serial.print(g_wallDistance);
+    // Serial.print("    ");
+    // Serial.println(secondaryWallDistance);
   }
 
   if (lastWallSide == wallSide && lastWallSide != wall_none) distanceDerivative = 1000.0*(g_wallDistance - lastDistance)/(millis()-lastExecutionTime); // Calculate the derivative. (The 1000 is to make the time in seconds)
@@ -1065,15 +1071,19 @@ void pidDrive(WallSide wallSide)
   runWheelSide(wheels_right, multiplier*BASE_SPEED_CMPS + correction);
   loopEncoders(); // Could maybe remove - already done in getUltrasonics()
   g_lastWallAngle = g_robotAngle; // Update the g_lastWallAngle - okay to do because this will not be read during the execution loop of pidTurn. It will only be used before.
-  Serial.println(g_robotAngle);
+  // Serial.println(g_robotAngle);
 
   // Debugging
+  // Serial.print("Correction:");
   // Serial.print(correction);
   // Serial.print("    ");
+  // Serial.print("distanceError:");
   // Serial.print(distanceError);
   // Serial.print("    ");
+  // Serial.print("distanceDerivative:");
   // Serial.print(distanceDerivative);
   // Serial.print("    ");
+  // Serial.print("angleError:");
   // Serial.print(angleError);
   // Serial.print("    ");
   // Serial.println("");
@@ -1159,7 +1169,7 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
     // buzzer.tone(440, 30); // Debugging
     // buzzer.tone(220, 30); // Debugging
     // Serial.println("Leaving back");
-    g_trueDistanceDriven = 15 + ultrasonicSpacing/2.0 + 5; // The math should be correct, but the robot drives too far without the addition. The same amount of wrong as below.
+    g_trueDistanceDriven = 15 + ULTRASONIC_SPACING/2.0 + 4.5; // The math should be correct, but the robot drives too far without the addition. The same amount of wrong as below.
     stopReason = stop_backWallChangeLeaving;
     // Serial.println("Leaving back");
   }
@@ -1168,7 +1178,7 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
     // buzzer.tone(220, 30); // Debugging
     // buzzer.tone(440, 30); // Debugging
     // Serial.println("Approaching back");
-    g_trueDistanceDriven = 15 + ultrasonicSpacing/2.0 + 3; // The math should be correct, but the robot drives too far without the addition. The same amount of wrong as below.
+    g_trueDistanceDriven = 15 + ULTRASONIC_SPACING/2.0 + 1; // The math should be correct, but the robot drives too far without the addition. The same amount of wrong as below.
     stopReason = stop_backWallChangeApproaching;
     // Serial.println("Approaching back");
   }
@@ -1177,7 +1187,7 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
     // buzzer.tone(880, 30); // Debugging
     // buzzer.tone(440, 30); // Debugging
     // Serial.println("Leaving Front");
-    g_trueDistanceDriven = 15 - ultrasonicSpacing/2.0 + 6; // The math should be correct, but the robot drives too far without the addition. The same amount of wrong as above.
+    g_trueDistanceDriven = 15 - ULTRASONIC_SPACING/2.0 + 6; // The math should be correct, but the robot drives too far without the addition. The same amount of wrong as above.
     stopReason = stop_frontWallChangeLeaving;
   }
   else if (frontWallCheck == wallchange_approaching)
@@ -1185,7 +1195,7 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
     // buzzer.tone(440, 30); // Debugging
     // buzzer.tone(880, 30); // Debugging
     // Serial.println("Approaching front");
-    g_trueDistanceDriven = 15 - ultrasonicSpacing/2 + 4.5; // The math should be correct, but the robot drives too far without the addition. The same amount of wrong as above.
+    g_trueDistanceDriven = 15 - ULTRASONIC_SPACING/2 + 2; // The math should be correct, but the robot drives too far without the addition. The same amount of wrong as above.
     stopReason = stop_frontWallChangeApproaching;
   }
 
@@ -1409,9 +1419,9 @@ void testWallChanges()
     // buzzer.tone(440, 30); // Debugging
     // buzzer.tone(220, 30); // Debugging
     // Serial.println("Leaving back");
-    g_trueDistanceDriven = 15 + ultrasonicSpacing/2.0 + 7; // The math should be correct, but the robot drives too far without the addition. The same amount of wrong as below.
+    g_trueDistanceDriven = 15 + ULTRASONIC_SPACING/2.0 + 7; // The math should be correct, but the robot drives too far without the addition. The same amount of wrong as below.
     // stopReason = stop_backWallChangeLeaving;
-    Serial.println("Leaving back");
+    // Serial.println("Leaving back");
     delay(500);
   }
   if (backWallCheck == wallchange_approaching)
@@ -1419,9 +1429,9 @@ void testWallChanges()
     // buzzer.tone(220, 30); // Debugging
     // buzzer.tone(440, 30); // Debugging
     // Serial.println("Approaching back");
-    g_trueDistanceDriven = 15 + ultrasonicSpacing/2.0 - 1; // The math should be correct, but the robot drives too far without the addition. The same amount of wrong as below.
+    g_trueDistanceDriven = 15 + ULTRASONIC_SPACING/2.0 - 1; // The math should be correct, but the robot drives too far without the addition. The same amount of wrong as below.
     // stopReason = stop_backWallChangeApproaching;
-    Serial.println("Approaching back");
+    // Serial.println("Approaching back");
     delay(500);
   }
   if (frontWallCheck == wallchange_leaving)
@@ -1429,7 +1439,7 @@ void testWallChanges()
     // buzzer.tone(880, 30); // Debugging
     // buzzer.tone(440, 30); // Debugging
     // Serial.println("Leaving Front");
-    g_trueDistanceDriven = 15 - ultrasonicSpacing/2 + 7; // The math should be correct, but the robot drives too far without the addition. The same amount of wrong as above.
+    g_trueDistanceDriven = 15 - ULTRASONIC_SPACING/2 + 7; // The math should be correct, but the robot drives too far without the addition. The same amount of wrong as above.
     // stopReason = stop_frontWallChangeLeaving;
   }
   else if (frontWallCheck == wallchange_approaching)
@@ -1437,7 +1447,7 @@ void testWallChanges()
     // buzzer.tone(440, 30); // Debugging
     // buzzer.tone(880, 30); // Debugging
     // Serial.println("Approaching front");
-    g_trueDistanceDriven = 15 - ultrasonicSpacing/2 - 1; // The math should be correct, but the robot drives too far without the addition. The same amount of wrong as above.
+    g_trueDistanceDriven = 15 - ULTRASONIC_SPACING/2 - 1; // The math should be correct, but the robot drives too far without the addition. The same amount of wrong as above.
     // stopReason = stop_frontWallChangeApproaching;
   }
   printUltrasonics();
