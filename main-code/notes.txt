@@ -39,6 +39,10 @@ Why is the robot not correcting accordingly with the data? The angles must be wr
 
 When the robot is going backwards, something seems to go wrong with the angles (it makes a "three point turn" but with an arbitrary amount of points and the oscillation gets larger every time)
 
+Sometimes the robot does not correct the right amount when turning.
+
+Sometimes (often?) when a backwallchange should be detected it is not and the frontwallchange is used instead.
+
 
 Other (not necessarily bugs, but things to fix):
 In driveStep(), when the first measurements are taken, the robot only uses one wall even if both are present.

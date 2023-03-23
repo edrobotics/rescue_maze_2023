@@ -11,6 +11,8 @@
 
 // Drives one step (30cm) forwards.
 // Could take a speed argument
+bool driveStep(ColourSensor::FloorColour& floorColourAhead);
+
 bool driveStep();
 
 enum TurningDirection {
@@ -35,6 +37,7 @@ enum Command
   command_turnLeft,
   command_turnRight,
   command_getWallStates,
+  command_dropKit,
   command_invalid,
   command_none,
 };
@@ -44,6 +47,8 @@ namespace serialcomm
     void returnSuccess();
 
     void returnFailure();
+
+    void returnFloorColour(ColourSensor::FloorColour floorColour);
 
     void returnAnswer(int answer);
 
@@ -93,7 +98,13 @@ namespace lights
     void showDirection(LedDirection direction);
     void showDirection(lights::LedDirection direction, RGBColour colour);
 
+    void fastBlink(RGBColour colour);
+
     void affirmativeBlink();
+
+    void errorBlink();
+
+    void negativeBlink();
     
     void floorIndicator(ColourSensor::FloorColour floorColour);
     
@@ -102,6 +113,8 @@ namespace lights
     void activated();
 
     void checkPointRestored();
+
+    void signalVictim();
 
 }
 
@@ -316,6 +329,9 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
 
 
 //------------------------- Rescue kits -----------------------------------//
+
+
+void signalVictim();
 
 // Deploy a rescue kit in the current position
 void deployRescueKit();

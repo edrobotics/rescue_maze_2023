@@ -73,15 +73,18 @@ void loop()
   // getUltrasonics();
   // printUltrasonics();
 
-  driveStep();
-  delay(500);
-  lights::turnOff();
+  // driveStep();
+  // delay(500);
+  // lights::turnOff();
   // driveBlind(30, true);
   // long timeFlag = millis();
   // getUltrasonics();
   // Serial.println(millis()-timeFlag);
   // printUltrasonics();
-  delay(1500);
+  // delay(1500);
+
+  // signalVictim();
+  // delay(2000);
   
 
   #else
@@ -89,6 +92,7 @@ void loop()
   #ifdef PICODE
   if (Serial.available() > 0)
   {
+    lights::turnOff();
   #endif
     #ifdef TESTING_NAV
     // For testing without the Pi:
@@ -112,17 +116,26 @@ void loop()
       // Driving
       case command_driveStep: // drive one step forward
       {
+        serialcomm::returnSuccess();
         // lights::showDirection(lights::front);
-        bool commandSuccess = driveStep();
+        ColourSensor::FloorColour floorColourAhead = ColourSensor::floor_notUpdated;
+        bool commandSuccess = driveStep(floorColourAhead);
         // bool commandSuccess = true;
         // lights::turnOff();
+        if (floorColourAhead == ColourSensor::floor_blue || floorColourAhead == ColourSensor::floor_black)
+        {
+          driveStep(); // For driving back
+          serialcomm::returnFloorColour(floorColourAhead);
+        }
         if (commandSuccess == true)
         {
           serialcomm::returnSuccess();
+          // lights::affirmativeBlink();
         }
         else
         {
           serialcomm::returnFailure();
+          // lights::negativeBlink();
         }
         break;
       }
@@ -157,6 +170,12 @@ void loop()
           serialcomm::returnAnswer(wallStates);
           break;
         }
+
+      case command_dropKit:
+        signalVictim();
+        // Also drop the appropriate number of kits
+        serialcomm::returnSuccess();
+        break;
 
       case command_invalid:
         sounds::errorBeep();

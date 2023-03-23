@@ -133,6 +133,22 @@ void serialcomm::returnAnswer(int answer)
   Serial.flush();
 }
 
+void serialcomm::returnFloorColour(ColourSensor::FloorColour floorColour)
+{
+  switch (floorColour)
+  {
+    case ColourSensor::floor_black:
+      returnAnswer(1);
+      break;
+    case ColourSensor::floor_blue:
+      returnAnswer(2);
+      break;
+    default:
+      returnAnswer(0); // If some error occured
+      break;
+  }
+}
+
 char serialcomm::readChar()
 {
   while (Serial.available() == 0) {}
@@ -171,6 +187,7 @@ Command serialcomm::readCommand()
       break;
     
     case 'k': // drop rescue kit
+      return command_dropKit;
       break;
     
     case 'w': // get wall states
@@ -244,19 +261,29 @@ void lights::showDirection(lights::LedDirection direction)
   showDirection(direction, colourBase);
 }
 
-
-void lights::affirmativeBlink()
+void lights::fastBlink(RGBColour colour)
 {
   turnOff();
   for (int i=0;i<3;++i)
   {
     delay(130);
-    setColour(0, colourBase, true);
+    setColour(0, colour, true);
     // ledRing.setColor(colourBase.red, colourBase.green, colourBase.blue);
     // ledRing.show();
     delay(60);
     turnOff();
   }
+
+}
+
+void lights::affirmativeBlink()
+{
+  fastBlink(colourAffirmative);
+}
+
+void lights::negativeBlink()
+{
+  fastBlink(colourError);
 }
 
 // Plays a light sequence and also plays the buzzer
@@ -306,6 +333,21 @@ void lights::floorIndicator(ColourSensor::FloorColour floorColour)
   }
   else if (floorColour == ColourSensor::floor_blue)
   {
+  }
+}
+
+void lights::signalVictim()
+{
+  for (int i=0;i<5;++i)
+  {
+    setColour(0, colourWhite, false);
+    setColour(3, colourRed, false);
+    setColour(6, colourRed, false);
+    setColour(9, colourRed, false);
+    setColour(12, colourRed, true);
+    delay(500);
+    turnOff();
+    delay(500);
   }
 }
 
@@ -1216,13 +1258,13 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
         // Exit the loop somehow
         // Drive back to last point
         stopReason = stop_floorColour;
-        return true;
+        return false;
         break;
       case ColourSensor::floor_blue:
         // Exit the loop somehow
         // Drive back to last point
         stopReason = stop_floorColour;
-        return true;
+        return false;
         break;
       default:
         // Do nothing (includes silver)
@@ -1234,7 +1276,7 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
 }
 
 
-bool driveStep()
+bool driveStep(ColourSensor::FloorColour& floorColourAhead)
 {
   WallSide wallToUse = wall_none; // Initialize a variable for which wall to follow
   startDistanceMeasure(); // Starts the distance measuring (encoders)
@@ -1376,11 +1418,19 @@ bool driveStep()
   updateRobotPose(wallToUse);
   g_lastWallAngle = g_robotAngle;
 
-
-  return true; // Change later to depend on whether the move was executed or not
+  
+  // Determine whether you have driven a step or not
+  if (g_trueDistanceDriven > 15) return true;
+  else return false;
 
   // The current angle to the wall is already stored by pidDrive in g_lastWallAngle (or not since my changes?)
 
+}
+
+bool driveStep()
+{
+  ColourSensor::FloorColour throwAwayColour;
+  return driveStep(throwAwayColour);
 }
 
 // Make a navigation decision.
@@ -1454,3 +1504,12 @@ void testWallChanges()
 
   lights::turnOff();
 }
+
+
+//------------------------------ Victims and rescue kits ------------------------------//
+
+void signalVictim()
+{
+  lights::signalVictim();
+}
+
