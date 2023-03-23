@@ -509,6 +509,7 @@ void centerAngle180(double& refAngle, double& calcAngle)
 // Does not update the gyro itself
 void updateRobotPose(WallSide wallSide, double secondaryWallDistance)
 {
+  double tmpGyroAngle = g_currentGyroAngle;
   double tmpGyroOffset = g_gyroOffset;
 
   // In case both walls are present
@@ -525,8 +526,8 @@ void updateRobotPose(WallSide wallSide, double secondaryWallDistance)
   }
   else
   {
-    centerAngle180(g_currentGyroAngle, tmpGyroOffset);
-    g_robotAngle = g_startWallAngle + g_currentGyroAngle - tmpGyroOffset; // Safe to do because we moved the angles to 180 degrees, meaning that there will not be a zero-cross
+    centerAngle180(tmpGyroAngle, tmpGyroOffset);
+    g_robotAngle = g_startWallAngle + tmpGyroAngle - tmpGyroOffset; // Safe to do because we moved the angles to 180 degrees, meaning that there will not be a zero-cross
     calcRobotPose(wallSide, g_robotAngle, g_wallDistance, true); // Is this really needed? The angle should already be up to date and the wall distance is not relevant in this case
 
   }
@@ -1064,6 +1065,7 @@ void pidDrive(WallSide wallSide)
   runWheelSide(wheels_right, multiplier*BASE_SPEED_CMPS + correction);
   loopEncoders(); // Could maybe remove - already done in getUltrasonics()
   g_lastWallAngle = g_robotAngle; // Update the g_lastWallAngle - okay to do because this will not be read during the execution loop of pidTurn. It will only be used before.
+  Serial.println(g_robotAngle);
 
   // Debugging
   // Serial.print(correction);

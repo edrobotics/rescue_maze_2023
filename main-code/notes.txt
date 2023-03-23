@@ -25,15 +25,20 @@ How and when is g_gyroOffset updated?
 
 Add a requirement that trueDistanceDriven is close enough to what it will be corrected to when a wallchange is detected
 
+When driving backwards, the detected wallchanges will be wrong. To do correctly, make an expression taking the target distance into account (or the starting distance, or maybe just special case for driving backwards)
+
+
+
 Bugs:
 
 Sometimes when the robot is close to a wall, it drives slowly forward and sometimes does not recognise the wall. (potentially fixed?)
 
-Sometimes when the robot is driving without walls and you correct it, it drives in a circle and does not drive backwards when it is stopped.
+Sometimes when the robot is driving without walls and you correct it (maybe something else is triggering it), it drives in a circle and does not drive backwards when it is stopped.
 The trueDistanceDriven seems to be wrong (oscillates because the robot is driving in a circle)
-Why is the robot not correcting accordingly with the data?
+Why is the robot not correcting accordingly with the data? The angles must be wrong (is this the same issue as the bug below?)
 
 When the robot is going backwards, something seems to go wrong with the angles (it makes a "three point turn" but with an arbitrary amount of points and the oscillation gets larger every time)
+
 
 Other (not necessarily bugs, but things to fix):
 In driveStep(), when the first measurements are taken, the robot only uses one wall even if both are present.
@@ -43,4 +48,4 @@ After you have stopped, flush the distance arrays and update the robotAngle some
 
 The driveStepDriveLoop takes too much time. How can I improve it?
     Make the getUltrasonics() function take less time
-    Perhaps not calculate the angle every time (how mush time does it take?)- just the difference? Then calculate the angle only when needed (say when you left the wall you calculate the angle based on the previous data. also in the end)
+    Perhaps not calculate the angle every time (how much time does it take?)- just the difference? Then calculate the angle only when needed (say when you left the wall you calculate the angle based on the previous data. also in the end)
