@@ -26,3 +26,4 @@ Mirrors go on top of the auriga. The same assembly could hold the mirrors
 
 Fixes:
 The slot for the ledring could be a bit larger and the supports in front could clamp down from above
+/The holes for the pi should be deeper
