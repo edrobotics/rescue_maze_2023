@@ -1,7 +1,7 @@
 Things to change/update/add in the redesign:
 
 /Move the back motors inwards and increase the spacing to an appropriate amount
-Move the ultrasonic sensors inwards a bit
+/Move the ultrasonic sensors inwards a bit
 	/The front bracket can be partly under the auriga
 /Maybe put ultrasonic sensors sideways to improve camera view?
 
@@ -25,5 +25,5 @@ Mirrors go on top of the auriga. The same assembly could hold the mirrors
 
 
 Fixes:
-The slot for the ledring could be a bit larger and the supports in front could clamp down from above
+/The slot for the ledring could be a bit larger and the supports in front could clamp down from above
 /The holes for the pi should be deeper
