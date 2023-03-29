@@ -31,8 +31,8 @@ void setup()
 // double robotAngle = 0;
 // double wallDistance = 0;
 
-// #define PICODE
-#define TESTING_NAV
+#define PICODE
+// #define TESTING_NAV
 // #define TESTING
 
 
@@ -108,29 +108,34 @@ void loop()
       // Driving
       case command_driveStep: // drive one step forward
       {
-        serialcomm::returnSuccess();
+        serialcomm::returnSuccess(); // For validation and robustness of the communication protocol
         // lights::showDirection(lights::front);
         ColourSensor::FloorColour floorColourAhead = ColourSensor::floor_notUpdated;
-        bool commandSuccess = driveStep(floorColourAhead);
+        bool rampDriven = false;
+        bool commandSuccess = driveStep(floorColourAhead, rampDriven);
         // bool commandSuccess = true;
         // lights::turnOff();
         if (floorColourAhead == ColourSensor::floor_blue || floorColourAhead == ColourSensor::floor_black)
         {
           driveStep(); // For driving back
-          serialcomm::returnFloorColour(floorColourAhead);
         }
-        if (commandSuccess == true)
+        // If we have moved, mazenav has to know the new colour. If we have not moved, the colour is already known.
+        if (commandSuccess == true || floorColourAhead == ColourSensor::floor_black || floorColourAhead == ColourSensor::floor_blue)
         {
-          serialcomm::returnSuccess();
-          // lights::affirmativeBlink();
+          Serial.print("!a,");
+          Serial.print(colourSensor.floorColourAsChar(floorColourAhead));
+          Serial.print(',');
+          Serial.print(rampDriven);
+          Serial.println("");
+          // serialcomm::returnFloorColour(floorColourAhead); // Interpreted as success by mazenav (except for black tile)
         }
         else
         {
           serialcomm::returnFailure();
-          // lights::negativeBlink();
         }
-        break;
+        
       }
+        break;
 
       case command_driveBack: // drive one step backwards. Only used for testing/debugging
         driveBlind(-30, false);
@@ -157,15 +162,13 @@ void loop()
       // Sensors
       case command_getWallStates: // Send the current state of the walls to the maze code (raspberry). The form is 0bXYZ, where X, Y, Z are 0 or 1, 1 meaning the wall is present. X front, Y left, Z right.
         {
-          // sounds::tone(440, 300);  
           uint8_t wallStates = getWallStates();
           serialcomm::returnAnswer(wallStates);
           break;
         }
 
       case command_dropKit:
-        signalVictim();
-        // Also drop the appropriate number of kits
+        handleVictim(false);
         serialcomm::returnSuccess();
         break;
 
@@ -174,8 +177,9 @@ void loop()
         serialcomm::returnFailure();
         break;
 
-      // default:
+      default:
         // Do nothing
+        break;
       
     }
     serialcomm::clearBuffer();

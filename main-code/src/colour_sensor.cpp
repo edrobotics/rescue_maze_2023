@@ -180,3 +180,23 @@ ColourSensor::FloorColour ColourSensor::checkFloorColour()
     else return lastFloorColour;
     
 }
+
+char ColourSensor::floorColourAsChar(ColourSensor::FloorColour floorColour)
+{
+  switch (floorColour)
+  {
+    case ColourSensor::floor_black:
+      return 's';
+      break;
+    case ColourSensor::floor_blue:
+      return 'b';
+      break;
+    case ColourSensor::floor_reflective:
+      return 'c';
+    case ColourSensor::floor_white:
+      return 'v';
+    default:
+      return 'u'; // If some error occured
+      break;
+  }
+}

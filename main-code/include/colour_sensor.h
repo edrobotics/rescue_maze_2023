@@ -18,6 +18,7 @@ class ColourSensor
         };
 
         FloorColour checkFloorColour();
+        char floorColourAsChar(FloorColour floorColour);
         void printValues();
         void printRatios();
         void printColourName(FloorColour colourToPrint);

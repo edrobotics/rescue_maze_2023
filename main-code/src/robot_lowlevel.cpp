@@ -109,6 +109,9 @@ double g_gyroOffset = 0;
 bool g_driveBack = false;
 ColourSensor::FloorColour g_floorColour = ColourSensor::floor_notUpdated;
 
+int g_kitsToDrop = 0;
+char g_dropDirection = ' ';
+
 
 //------------------ Serial communication -------------------------------//
 
@@ -138,11 +141,13 @@ void serialcomm::returnFloorColour(ColourSensor::FloorColour floorColour)
   switch (floorColour)
   {
     case ColourSensor::floor_black:
-      returnAnswer(1);
+      returnAnswer('s');
       break;
     case ColourSensor::floor_blue:
-      returnAnswer(2);
+      returnAnswer('b');
       break;
+    case ColourSensor::floor_reflective:
+      returnAnswer('c');
     default:
       returnAnswer(0); // If some error occured
       break;
@@ -164,14 +169,22 @@ void serialcomm::clearBuffer()
   }
 }
 
-Command serialcomm::readCommand()
+Command serialcomm::readCommand(bool waitForSerial)
 {
-  while (Serial.available() == 0) {} // Wait while no serial is available. When continuing serial will be available
+  if (waitForSerial == false && Serial.available() == 0) return command_none; // Return none if Serial was not available and you should not wait
+  if (waitForSerial == true)
+  {
+    while (Serial.available() == 0) {} // Wait while no serial is available. When continuing serial will be available
+  }
   char recievedChar = readChar();
   if (recievedChar != '!') return command_invalid;
   recievedChar = readChar(); // Read the next byte (the command)
   switch (recievedChar)
   {
+    case 'i': // interrupt the current action
+      return command_interrupt;
+      break;
+
     case 'd': // driveStep
       return command_driveStep;
       break;
@@ -187,6 +200,15 @@ Command serialcomm::readCommand()
       break;
     
     case 'k': // drop rescue kit
+      g_kitsToDrop = 0;
+      recievedChar = readChar();
+      if (recievedChar != ',' ) return command_invalid; // Invalid because the form was not followed
+
+      while(Serial.available() == 0) {}
+      g_kitsToDrop = Serial.read();
+      readChar();
+      if (recievedChar != ',' ) return command_invalid; // Invalid because the form was not followed
+      g_dropDirection = readChar();
       return command_dropKit;
       break;
     
@@ -194,16 +216,34 @@ Command serialcomm::readCommand()
       return command_getWallStates;
       break;
     
-    case 'i': // interrupt the current action
-      break;
     
     case 'r': // resume the action interrupted by interrupt
       break;
     
     default:
+      sounds::errorBeep();
       return command_invalid;
+      // break;
   }
-  
+}
+
+Command serialcomm::readCommand()
+{
+  return serialcomm::readCommand(true);
+}
+
+
+bool serialcomm::checkInterrupt()
+{
+  Command command = serialcomm::readCommand(false);
+  if (command == command_interrupt) return true;
+  else return false;
+}
+
+void serialcomm::answerInterrupt()
+{
+  Serial.print("!s,i");
+  Serial.println("");
 }
 
 //---------------------- Buzzer and lights (for debugging) ------------------//
@@ -1306,12 +1346,34 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
         break; // Potential problem with the last break statement?
     }
   }
+
+
+  // Checking for interrupts
+  if (serialcomm::checkInterrupt() == true)
+  {
+    stopWheels();
+    serialcomm::clearBuffer();
+    serialcomm::answerInterrupt();
+    bool stepDriven = false;
+    if (g_trueDistanceDriven > 15) stepDriven = true;
+    handleVictim(true);
+    serialcomm::returnAnswer(stepDriven);
+    delay(100); // To prevent too rapid serial communication
+    // serialcomm::returnSuccess();
+    serialcomm::clearBuffer();
+  }
+
+  // Checking for ramps
+  if (abs(gyro.getAngleX()) > 10)
+  {
+
+  }
   
   return false; // The default return - not finished
 }
 
 
-bool driveStep(ColourSensor::FloorColour& floorColourAhead)
+bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven)
 {
   WallSide wallToUse = wall_none; // Initialize a variable for which wall to follow
   startDistanceMeasure(); // Starts the distance measuring (encoders)
@@ -1466,7 +1528,8 @@ bool driveStep(ColourSensor::FloorColour& floorColourAhead)
 bool driveStep()
 {
   ColourSensor::FloorColour throwAwayColour;
-  return driveStep(throwAwayColour);
+  bool throwawayRampDriven = false;
+  return driveStep(throwAwayColour, throwawayRampDriven);
 }
 
 // Make a navigation decision.
@@ -1547,4 +1610,52 @@ void testWallChanges()
 void signalVictim()
 {
   lights::signalVictim();
+}
+
+void handleVictim(double fromInterrupt)
+{
+  if (fromInterrupt == true)
+  {
+  Command command = serialcomm::readCommand(true);
+  serialcomm::clearBuffer();
+  if (command != command_dropKit) return;
+  }
+  // Align the robot for deployment (the directions seem to be weird)
+  TurningDirection turnDirection = cw; // Default - if the kit is on the right
+  if (g_dropDirection == 'r') turnDirection = ccw; // If the kit is on the left
+  Serial.print(g_dropDirection);
+  turnSteps(turnDirection, 1);
+
+  g_kitsToDrop = 2;
+  signalVictim();
+  for (int i=0; i<g_kitsToDrop; ++i)
+  {
+    deployRescueKit();
+    lights::setColour(i+1, colourRed, true);
+    delay(100);
+  }
+
+  // Return the robot to original orientation
+  if (turnDirection == ccw) turnDirection = cw; // Reverse direction
+  else turnDirection = ccw; // Reverse direction
+  turnSteps(turnDirection, 1);
+  
+  // Reset variables
+  g_dropDirection = ' ';
+  g_kitsToDrop = 0;
+  lights::turnOff();
+}
+
+void deployRescueKit()
+{
+  
+  // To be done
+  // for (int i=0; i<3; ++i)
+  // {
+  // buzzer.tone(440, 200);
+  // delay(200);
+  // }
+  sounds::tone(440, 333);
+  sounds::tone(880, 333);
+  delay(100);
 }

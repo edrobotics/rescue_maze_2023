@@ -11,7 +11,7 @@
 
 // Drives one step (30cm) forwards.
 // Could take a speed argument
-bool driveStep(ColourSensor::FloorColour& floorColourAhead);
+bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven);
 
 bool driveStep();
 
@@ -37,10 +37,14 @@ enum Command
   command_turnLeft,
   command_turnRight,
   command_getWallStates,
+  command_interrupt,
+  command_resume,
   command_dropKit,
   command_invalid,
   command_none,
 };
+
+char floorColourAsChar(ColourSensor::FloorColour floorColour);
 
 namespace serialcomm
 {
@@ -57,7 +61,13 @@ namespace serialcomm
     // Returns data of type Command.
     Command readCommand();
 
+    Command readCommand(bool waitForSerial);
+
     void clearBuffer();
+
+    bool checkInterrupt();
+
+    void answerInterrupt();
 
     // Sends data that will be printed to the console / other debugging method
     // Should accept types in the same way that Serial.print() does.
@@ -334,6 +344,8 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
 
 
 void signalVictim();
+
+void handleVictim(double fromInterrupt);
 
 // Deploy a rescue kit in the current position
 void deployRescueKit();

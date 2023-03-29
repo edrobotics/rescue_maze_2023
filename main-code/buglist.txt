@@ -1,3 +1,12 @@
 When driving away from a wall, sometimes the back wall change is not detected and the front one is used instead
 
 When doing gyroturnsteps, it sometimes turns the wrong amount
+
+The first gyroturn without a preceeding drivestep could have some zero-variables
+
+
+
+Communication features to implement:
+Tell colours (sort of done)
+Tell if ramp driven up
+Direction for rescue kits
