@@ -391,6 +391,13 @@ void lights::signalVictim()
   }
 }
 
+void lights::indicateFrontSensor()
+{
+  turnOff();
+  setColour(2, colourRed, false);
+  setColour(4, colourRed, true);
+}
+
 
 void sounds::errorBeep()
 {
@@ -1330,14 +1337,12 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
       case ColourSensor::floor_notUpdated:
         break; // Do nothing
       case ColourSensor::floor_black:
-        // Exit the loop somehow
-        // Drive back to last point
+        // Drive back to last point and exit the loop
         stopReason = stop_floorColour;
         return true; // Exit the loop
         break;
       case ColourSensor::floor_blue:
-        // Exit the loop somehow
-        // Drive back to last point
+        // Drive back to last point and exit the loop
         stopReason = stop_floorColour;
         return true; // Exit the loop
         break;
@@ -1368,12 +1373,28 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
   {
 
   }
+
+
+  // Checking the front touch sensor
+  if (frontSensorActivated() == true && g_driveBack == false)
+  {
+    stopReason = stop_frontSensor;
+    return true; // Exit the loop
+  }
+
+
+  // Checking lack of progress switch
+  if (LOPSWActivated() == true)
+  {
+    // Go into reset state
+    LOPActive();
+  }
   
   return false; // The default return - not finished
 }
 
 
-bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven)
+bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, bool& frontSensorDetected)
 {
   WallSide wallToUse = wall_none; // Initialize a variable for which wall to follow
   startDistanceMeasure(); // Starts the distance measuring (encoders)
@@ -1492,6 +1513,11 @@ bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven)
       g_driveBack = true;
       lights::floorIndicator(g_floorColour);
       break;
+    case stop_frontSensor:
+      g_driveBack = true;
+      frontSensorDetected = true;
+      lights::indicateFrontSensor();
+      break;
     default:
       lights::setColour(0, colourOrange, true);
       break;
@@ -1529,7 +1555,8 @@ bool driveStep()
 {
   ColourSensor::FloorColour throwAwayColour;
   bool throwawayRampDriven = false;
-  return driveStep(throwAwayColour, throwawayRampDriven);
+  bool throwawayFrontSensorDetected = false;
+  return driveStep(throwAwayColour, throwawayRampDriven, throwawayFrontSensorDetected);
 }
 
 // Make a navigation decision.
@@ -1658,4 +1685,47 @@ void deployRescueKit()
   sounds::tone(440, 333);
   sounds::tone(880, 333);
   delay(100);
+}
+
+
+
+//----------------------------- Buttons and misc. sensors -------------------------//
+
+// Front touch sensor buttons
+const int pressPlateSW1 = 30;
+const int pressPlateSW2 = 31;
+
+// Lack of progress switch (two pins for one switch)
+const int LOPSW1 = 32;
+const int LOPSW2 = 33;
+
+void initSwitches()
+{
+  pinMode(pressPlateSW1, INPUT_PULLUP);
+  pinMode(pressPlateSW2, INPUT_PULLUP);
+  // pinMode(LOPSW1, INPUT_PULLUP);
+  // pinMode(LOPSW2, INPUT_PULLUP);
+}
+
+bool frontSensorActivated()
+{
+  if (digitalRead(pressPlateSW1) == LOW || digitalRead(pressPlateSW2) == LOW)
+  {
+    return true;
+  }
+  else return false;
+}
+
+bool LOPSWActivated()
+{
+  if (digitalRead(LOPSW1) == true) // Not sure about if this is the right state or not
+  {
+    return true;
+  }
+  else return false;
+}
+
+void LOPActive()
+{
+  // Ideally, this should wait for the switch to be switched off and then to to the beginning of the main control loop
 }

@@ -17,6 +17,7 @@ void setup()
   lightsAndBuzzerInit();
   encodersInit();
   initColourSensor();
+  initSwitches();
   flushDistanceArrays();
   // startDistanceMeasure(); // Why is this here?
   
@@ -112,10 +113,11 @@ void loop()
         // lights::showDirection(lights::front);
         ColourSensor::FloorColour floorColourAhead = ColourSensor::floor_notUpdated;
         bool rampDriven = false;
-        bool commandSuccess = driveStep(floorColourAhead, rampDriven);
+        bool frontSensorDetected = false;
+        bool commandSuccess = driveStep(floorColourAhead, rampDriven, frontSensorDetected);
         // bool commandSuccess = true;
         // lights::turnOff();
-        if (floorColourAhead == ColourSensor::floor_blue || floorColourAhead == ColourSensor::floor_black)
+        if (floorColourAhead == ColourSensor::floor_blue || floorColourAhead == ColourSensor::floor_black || frontSensorDetected == true)
         {
           driveStep(); // For driving back
         }

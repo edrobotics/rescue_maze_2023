@@ -11,7 +11,7 @@
 
 // Drives one step (30cm) forwards.
 // Could take a speed argument
-bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven);
+bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, bool& frontSensorDetected);
 
 bool driveStep();
 
@@ -43,8 +43,6 @@ enum Command
   command_invalid,
   command_none,
 };
-
-char floorColourAsChar(ColourSensor::FloorColour floorColour);
 
 namespace serialcomm
 {
@@ -125,6 +123,8 @@ namespace lights
     void checkPointRestored();
 
     void signalVictim();
+
+    void indicateFrontSensor();
 
 }
 
@@ -332,6 +332,7 @@ enum StoppingReason
   stop_backWallChangeLeaving,
   stop_deadReckoning,
   stop_floorColour,
+  stop_frontSensor,
 };
 
 // What to run inside of the driveStep loop (the driving forward-portion)
@@ -356,6 +357,19 @@ void deployRescueKit();
 
 
 void testWallChanges();
+
+
+//--------------------------- Switches and misc. sensors -----------------------------//
+
+void initSwitches();
+
+// Returns true if the front sensor is activated (pressed in)
+bool frontSensorActivated();
+
+bool LOPSWActivated();
+
+void LOPActive();
+
 
 
 
