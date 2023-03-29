@@ -1,0 +1,223 @@
+import cv2
+import numpy as np
+from picamera.array import PiRGBArray
+from picamera import PiCamera
+import socket
+import time
+import random
+
+ssh = True
+showcolor = False
+inRobot = False
+connected = False
+while connected: 
+    print("connecting...")
+    try: 
+        HEADER = 16
+        PORT = 4242
+        SERVER = socket.gethostbyname(socket.gethostname())
+        ADDR = (SERVER, PORT)
+        FORMAT = 'utf-8'
+        DISCONNECT_MESSAGE = "!DISCONNECT"
+        client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        client.connect(ADDR)
+    except: 
+        print("failed")
+    else: 
+        break
+
+def sendMessage(msg):
+    print(2)
+    if connected:
+        message = msg.encode(FORMAT)
+        msg_length = len(message).to_bytes(HEADER, "big")
+        client.send(msg_length)
+        client.send(message)
+    else: 
+        print("failed to send messsage")
+
+
+nU = cv2.imread('U1.png')
+rU = cv2.cvtColor(nU,cv2.COLOR_BGR2GRAY)
+lU = cv2.rotate(rU, cv2.ROTATE_180)
+
+nH = cv2.imread('H1.png')
+nH = cv2.cvtColor(nH,cv2.COLOR_BGR2GRAY)
+
+nS = cv2.imread('S1.png')
+rS = cv2.cvtColor(nS,cv2.COLOR_BGR2GRAY)
+lS = cv2.rotate(rS, cv2.ROTATE_180)
+
+SampleVictims = (rU, lU, nH, rS, lS)
+
+def identify_victim(victim): 
+    if not ssh: cv2.imshow("victim", victim)
+    contours, hierarchy = cv2.findContours(victim,cv2.RETR_LIST,cv2.CHAIN_APPROX_NONE)
+    i = 0
+    for sample in SampleVictims:
+        negativ  = cv2.bitwise_and(victim, sample)
+        if np.count_nonzero(negativ) < 100:
+            if i == 0: 
+                print("rU")
+            elif i == 1: 
+                print("lU")
+            elif i == 2: 
+                print("nH")
+            elif i == 3: 
+                print("rS")
+            elif i == 4: 
+                print("lS")
+            else:     
+                print("smt wrong")
+        i = i + 1
+#    for cnt in contours:
+#        area = cv2.contourArea(cnt)
+#        para = cv2.arcLength(cnt,True)
+#        if para == 0:
+#            break
+#        approx = cv2.approxPolyDP(cnt, 0.003 * cv2.arcLength(cnt, True), True)
+#        apr = area/para
+#        print("apr: ",str(apr))
+   #     print("area: ", str(area))
+  #      print("para: ", str(para))
+#        print("approx: ", len(approx))
+#        if apr > 11 and apr < 15 and len(approx) > 12 and len(approx) < 17:
+
+#            print("H detected")
+#            sendMessage("K3")
+#        if apr > 9 and apr < 13 and len(approx) > 32 and len(approx) < 40:
+#            print("S detected")
+#            sendMessage("K2")
+
+#        ns = cv2.bitwise_and(victim, rU)
+
+
+
+
+#        if apr > 9 and apr < 15 and len(approx) > 15 and len(approx) < 25:
+        
+#        if np.count_nonzero(ns) < 100:
+#            print("U detected")
+#            if np.count_nonzero(ns) > 10:
+#                print("wrong")
+#                cv2.imshow("negativ", ns)
+#            sendMessage("K0")
+
+def find_visual_victim():
+    img = image.copy
+    gray = cv2.cvtColor(image,cv2.COLOR_BGR2GRAY)
+    ret,binary = cv2.threshold(gray,70,255,0, cv2.THRESH_BINARY)
+
+    binary = np.invert(binary)
+#    cv2.imshow("binary", binary)
+    binary[:, 290:370] = (0)
+    contours, hierarchy = cv2.findContours(binary,cv2.RETR_LIST,cv2.CHAIN_APPROX_NONE)
+#    cv2.imshow("binary2", binary)
+    cv2.drawContours(image, contours, -1, (0, 255, 0), 3)
+#    print("looping")
+#    print(len(contours))
+    for cnt in contours:
+        area = cv2.contourArea(cnt)
+        image2 = image
+        rect = cv2.minAreaRect(cnt)
+        box = cv2.boxPoints(rect)
+        box = np.int0(box)
+        cv2.drawContours(image, [box], 0, (255, 0, 0), 3)
+        if area>50:
+            cv2.drawContours(image2, [box], 0, (0, 0, 255), 3)
+ #           cv2.imshow("image2", image2)
+#            cv2.waitKey(0)
+            para = cv2.arcLength(cnt,True)
+            approx = cv2.approxPolyDP(cnt, 0.009 * cv2.arcLength(cnt, True), True)
+            n = approx.ravel() 
+            i = 0
+            minx = 640
+            maxx = 0
+            miny = 480
+            maxy = 0
+            if len(approx) < 5:
+#                print("break len: ", str(len(approx)))
+                continue           
+            while i < len(n):     
+                if(i % 2 == 0):
+                    x = n[i]
+                    y = n[i + 1]
+#                    print(x, y)
+                    if x > maxx:
+                        maxx = x
+                    if x < minx:
+                        minx = x
+                    if y > maxy:
+                        maxy = y
+                    if y < miny: 
+                        miny = y
+                i = i+1
+            imgCnt = binary[miny:maxy, minx:maxx]
+            width = maxx - minx
+            height = maxy - miny 
+#            print(width, height)
+
+            if width < 10 or height < 10:
+#                print("to small area")
+                continue
+            h, v = imgCnt.shape
+            dsize = (200,200)
+            RImgCnt = cv2.resize(imgCnt, dsize)  
+            identify_victim(RImgCnt)
+            
+def find_colour_victim():
+    status = 0
+    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+
+    red_lower_range = np.array([150,200,40])
+    red_upper_range = np.array([220,255,255])
+    red_mask = cv2.inRange(hsv, red_lower_range, red_upper_range)
+    if showcolor: cv2.imshow("red", red_mask)
+    if np.count_nonzero(red_mask) > 1000:
+        print("has red") 
+        print(np.count_nonzero(red_mask))
+        sendMessage("K1")
+    green_lower_range = np.array([30,40,40])
+    green_upper_range = np.array([70,255,255])
+    green_mask = cv2.inRange(hsv, green_lower_range, green_upper_range)
+    if showcolor: cv2.imshow("green", green_mask)
+    if np.count_nonzero(green_mask) > 1000: 
+        print(np.count_nonzero(green_mask))
+        print("has green")
+        print(np.count_nonzero(green_mask))
+        sendMessage("K0")
+    yellow_lower_range = np.array([15,100,100])
+    yellow_upper_range = np.array([20,255,255])
+    yellow_mask = cv2.inRange(hsv, yellow_lower_range, yellow_upper_range)
+    if np.count_nonzero(yellow_mask) > 1000:
+        print("has yellow", )
+        print(np.count_nonzero(yellow_mask))
+        sendMessage("K1")
+    if showcolor: cv2.imshow("yellow", yellow_mask)
+    return status
+
+
+
+
+#camera starts here
+camera = PiCamera()
+camera.resolution = (640, 480)
+camera.framerate = 30
+
+rawCapture = PiRGBArray(camera, size=(640, 480))
+
+for frame in camera.capture_continuous(rawCapture, format="bgr", use_video_port=True):
+    image = frame.array
+    try: 
+        cv2.imshow("frame", image)
+    except: 
+        ssh = True
+        showcolor = False
+    rawCapture.truncate(0)
+    find_colour_victim()
+    find_visual_victim()
+    key = cv2.waitKey(1)
+    if key == 27: 
+        break
+
+
