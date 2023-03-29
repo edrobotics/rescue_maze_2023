@@ -215,6 +215,8 @@ enum WallSide {
 void updateRobotPose(WallSide wallSide, double& secondaryWallDistance);
 // Alternate way of calling
 void updateRobotPose(WallSide wallSide);
+// Updates the robot angles (including the lastwallangle)
+void updateRobotPose();
 
 // Returns the distance left to turn in degrees. When you get closer, it decreases. When you have overshot, it will be negative.
 // Can we omit zerocross, and just give the turn angle instead?

@@ -43,6 +43,9 @@ Sometimes the robot does not correct the right amount when turning.
 
 Sometimes (often?) when a backwallchange should be detected it is not and the frontwallchange is used instead.
 
+The robot does not seem to stop directly when detecting a new ground colour - instead it looks like it always drives the 30cm it should. Why is that?
+Should have been fixed. Was probably caused by an inverted return statement (but I have NOT tested if it works now!)
+
 
 Other (not necessarily bugs, but things to fix):
 In driveStep(), when the first measurements are taken, the robot only uses one wall even if both are present.

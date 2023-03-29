@@ -546,9 +546,29 @@ void centerAngle180(double& refAngle, double& calcAngle)
   while (calcAngle < 0) calcAngle += 360; // Bind calcAngle to valid mathangle interval.
 }
 
+// Updates the robot angles (including the lastwallangle)
+void updateRobotPose()
+{
+  WallSide wallToUse = wall_none;
+  flushDistanceArrays();
+  checkWallPresence();
+  if (leftWallPresent && rightWallPresent) wallToUse = wall_both;
+  else if (leftWallPresent) wallToUse = wall_left;
+  else if (rightWallPresent) wallToUse = wall_right;
+  else wallToUse = wall_none; // If no wall was detected
+  updateRobotPose(wallToUse);
+  g_lastWallAngle = g_robotAngle; // I do not know if this should be here
+
+  // Debugging
+  // Serial.print(g_lastWallAngle);
+  // Serial.print("  ");
+  // Serial.println(g_startWallAngle);
+}
+
 
 // Sets the global variables for angles and distances.
 // Does not update the gyro itself
+// Call the distance updating functions first!
 void updateRobotPose(WallSide wallSide, double& secondaryWallDistance)
 {
   double tmpGyroAngle = g_currentGyroAngle;
@@ -576,6 +596,7 @@ void updateRobotPose(WallSide wallSide, double& secondaryWallDistance)
 
 }
 // Alternative way of calling (for when both sides are present)
+// Call distance updates first
 void updateRobotPose(WallSide wallSide)
 {
   double secondaryWallDistance = 0;
@@ -671,7 +692,7 @@ void gyroTurn(double turnAngle, bool stopMoving, double baseSpeed = 0)
 
     // Slowing down in the end of the turn.
     // All of this code could be placed inside of the first while-loop, but then every iteration would take more time because of checks and the gyro would become less accurate due to that.
-    speedToRun = multiplier*30/CMPS_TO_RPM;
+    speedToRun = multiplier*20/CMPS_TO_RPM;
     if (baseSpeed != 0) speedToRun = baseSpeed + speedToRun*gyroDriveCorrectionCoeff; // If driving forward, make the correction smaller
     runWheelSide(wheels_left, -speedToRun);
     runWheelSide(wheels_right, speedToRun);
@@ -696,15 +717,29 @@ void gyroTurnSteps(TurningDirection direction, int steps, bool doCorrection)
   int multiplier=-1;
   if (direction==ccw) multiplier=1;
   double turnAngle = multiplier*90;
+  updateRobotPose();
+  g_startWallAngle = g_lastWallAngle;
 
   if (doCorrection == true)
   {
     turnAngle = turnAngle - g_lastWallAngle;
-    g_lastWallAngle = 0; // You should have turned perfectly. Should be replaced by actually checking how far you have turned.
+    // g_lastWallAngle = 0; // You should have turned perfectly. Should be replaced by actually checking how far you have turned.
   }
 
-
+  double startGyroAngle = gyroAngleToMathAngle(gyro.getAngleZ());
   gyroTurn(turnAngle, true);
+  gyro.update();
+  double endGyroAngle = gyroAngleToMathAngle(gyro.getAngleZ());
+  centerAngle180(endGyroAngle, startGyroAngle);
+  double angleDiff = endGyroAngle - startGyroAngle;
+  g_gyroOffset = gyroAngleToMathAngle(gyro.getAngleZ());// The angle measured by the gyro (absolute angle) in the beginning.
+
+  // Serial.print(g_startWallAngle);
+  // Serial.print("  ");
+  updateRobotPose();
+  g_startWallAngle = g_lastWallAngle + angleDiff -multiplier*90; // This does not read the actual angle, but the intended turning angle
+  updateRobotPose();
+  // Serial.println(g_lastWallAngle);
 
 }
 
@@ -1258,13 +1293,13 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
         // Exit the loop somehow
         // Drive back to last point
         stopReason = stop_floorColour;
-        return false;
+        return true; // Exit the loop
         break;
       case ColourSensor::floor_blue:
         // Exit the loop somehow
         // Drive back to last point
         stopReason = stop_floorColour;
-        return false;
+        return true; // Exit the loop
         break;
       default:
         // Do nothing (includes silver)
@@ -1409,18 +1444,19 @@ bool driveStep(ColourSensor::FloorColour& floorColourAhead)
 
   // Give an accurate angle measurement for the next step
   // This should probably be separated out into its own function
-  flushDistanceArrays();
-  checkWallPresence();
-  if (leftWallPresent && rightWallPresent) wallToUse = wall_both;
-  else if (leftWallPresent) wallToUse = wall_left;
-  else if (rightWallPresent) wallToUse = wall_right;
-  else wallToUse = wall_none; // If no wall was detected
-  updateRobotPose(wallToUse);
-  g_lastWallAngle = g_robotAngle;
+  // flushDistanceArrays();
+  // checkWallPresence();
+  // if (leftWallPresent && rightWallPresent) wallToUse = wall_both;
+  // else if (leftWallPresent) wallToUse = wall_left;
+  // else if (rightWallPresent) wallToUse = wall_right;
+  // else wallToUse = wall_none; // If no wall was detected
+  // updateRobotPose(wallToUse);
+  // g_lastWallAngle = g_robotAngle;
+  updateRobotPose();
 
   
   // Determine whether you have driven a step or not
-  if (g_trueDistanceDriven > 15) return true;
+  if (g_trueDistanceDriven > 15 && stoppingReason != stop_floorColour) return true;
   else return false;
 
   // The current angle to the wall is already stored by pidDrive in g_lastWallAngle (or not since my changes?)
@@ -1512,4 +1548,3 @@ void signalVictim()
 {
   lights::signalVictim();
 }
-

@@ -40,17 +40,6 @@ void loop()
 {
 
   #ifdef TESTING
-  // lights::showDirection(lights::front);
-  // delay(1000);
-  // lights::showDirection(lights::left);
-  // delay(1000);
-  // lights::showDirection(lights::back);
-  // delay(1000);
-  // lights::showDirection(lights::right);
-  // delay(1000);
-  // lights::turnOff();
-  // delay(1000);
-  // lights::affirmativeBlink();
  
   // Command command = serialcomm::readCommand();
   // if (command != command_invalid)
@@ -85,6 +74,9 @@ void loop()
 
   // signalVictim();
   // delay(2000);
+
+  updateRobotPose();
+  delay(100);
   
 
   #else
