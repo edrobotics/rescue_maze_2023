@@ -4,3 +4,7 @@
 *.gx
 # Ignores gcode print files for the same reason as for .gx files
 *.gcode
+# Ignores irrelevant directories
+new-main
+rescue-kit-mechanism
+CAD_main_*.zip
