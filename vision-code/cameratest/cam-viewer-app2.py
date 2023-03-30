@@ -10,7 +10,7 @@ from camControl import *
 ssh = False
 showcolor = False
 inRobot = True
-connected = True
+connected = False
 while connected:
     print("connecting...")
     try:
@@ -190,7 +190,6 @@ def find_colour_victim(image):
     return status
 
 def processImage(image):
-    width, height = image.shape
     print("x,y={},{}".format(width, height))
     start_etime = time.time()
     find_colour_victim(image)
