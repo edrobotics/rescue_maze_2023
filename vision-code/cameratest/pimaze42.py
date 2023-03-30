@@ -5,11 +5,12 @@ from picamera import PiCamera
 import socket
 import time
 import random
+import timeit
 
-ssh = True
+ssh = False
 showcolor = False
-inRobot = False
-connected = False
+inRobot = True
+connected = True
 while connected: 
     print("connecting...")
     try: 
@@ -27,7 +28,6 @@ while connected:
         break
 
 def sendMessage(msg):
-    print(2)
     if connected:
         message = msg.encode(FORMAT)
         msg_length = len(message).to_bytes(HEADER, "big")
@@ -50,58 +50,49 @@ lS = cv2.rotate(rS, cv2.ROTATE_180)
 
 SampleVictims = (rU, lU, nH, rS, lS)
 
-def identify_victim(victim): 
+def identify_victim(victim, side): 
     if not ssh: cv2.imshow("victim", victim)
     contours, hierarchy = cv2.findContours(victim,cv2.RETR_LIST,cv2.CHAIN_APPROX_NONE)
+    for cnt in contours:
+        area = cv2.contourArea(cnt)
+        para = cv2.arcLength(cnt,True)
+        if para == 0:
+            break
+        apr = area/para
+        approx = cv2.approxPolyDP(cnt, 0.003 * cv2.arcLength(cnt, True), True)
     i = 0
     for sample in SampleVictims:
         negativ  = cv2.bitwise_and(victim, sample)
         if np.count_nonzero(negativ) < 100:
             if i == 0: 
                 print("rU")
+                if apr > 9 and apr < 15 and len(approx) > 15 and len(approx) < 25:
+                    print("wrong")
+                sendMessage("k0"+side)
             elif i == 1: 
                 print("lU")
+                if apr > 9 and apr < 15 and len(approx) > 15 and len(approx) < 25:
+                    print("wrong")
+                sendMessage("k0"+side)
             elif i == 2: 
                 print("nH")
+                if apr > 11 and apr < 15 and len(approx) > 12 and len(approx) < 17:
+                    print("wrong")
+                sendMessage("k3"+side)
             elif i == 3: 
                 print("rS")
+                sendMessage("k2"+side)
+                if apr > 9 and apr < 13 and len(approx) > 32 and len(approx) < 40:
+                    print("wrong")
             elif i == 4: 
                 print("lS")
+                if apr > 9 and apr < 13 and len(approx) > 32 and len(approx) < 40:
+                    print("wrong")
+                sendMessage("k2"+side)
+#                cv2.waitKey(0)
             else:     
                 print("smt wrong")
         i = i + 1
-#    for cnt in contours:
-#        area = cv2.contourArea(cnt)
-#        para = cv2.arcLength(cnt,True)
-#        if para == 0:
-#            break
-#        approx = cv2.approxPolyDP(cnt, 0.003 * cv2.arcLength(cnt, True), True)
-#        apr = area/para
-#        print("apr: ",str(apr))
-   #     print("area: ", str(area))
-  #      print("para: ", str(para))
-#        print("approx: ", len(approx))
-#        if apr > 11 and apr < 15 and len(approx) > 12 and len(approx) < 17:
-
-#            print("H detected")
-#            sendMessage("K3")
-#        if apr > 9 and apr < 13 and len(approx) > 32 and len(approx) < 40:
-#            print("S detected")
-#            sendMessage("K2")
-
-#        ns = cv2.bitwise_and(victim, rU)
-
-
-
-
-#        if apr > 9 and apr < 15 and len(approx) > 15 and len(approx) < 25:
-        
-#        if np.count_nonzero(ns) < 100:
-#            print("U detected")
-#            if np.count_nonzero(ns) > 10:
-#                print("wrong")
-#                cv2.imshow("negativ", ns)
-#            sendMessage("K0")
 
 def find_visual_victim():
     img = image.copy
@@ -156,6 +147,9 @@ def find_visual_victim():
             width = maxx - minx
             height = maxy - miny 
 #            print(width, height)
+            if maxx < 300: side ="r"
+            else: side = "l"
+
 
             if width < 10 or height < 10:
 #                print("to small area")
@@ -163,7 +157,7 @@ def find_visual_victim():
             h, v = imgCnt.shape
             dsize = (200,200)
             RImgCnt = cv2.resize(imgCnt, dsize)  
-            identify_victim(RImgCnt)
+            identify_victim(RImgCnt,side)
             
 def find_colour_victim():
     status = 0
@@ -173,26 +167,25 @@ def find_colour_victim():
     red_upper_range = np.array([220,255,255])
     red_mask = cv2.inRange(hsv, red_lower_range, red_upper_range)
     if showcolor: cv2.imshow("red", red_mask)
-    if np.count_nonzero(red_mask) > 1000:
+    if np.count_nonzero(red_mask) > 2000:
         print("has red") 
         print(np.count_nonzero(red_mask))
-        sendMessage("K1")
+        sendMessage("k1")
     green_lower_range = np.array([30,40,40])
     green_upper_range = np.array([70,255,255])
     green_mask = cv2.inRange(hsv, green_lower_range, green_upper_range)
     if showcolor: cv2.imshow("green", green_mask)
     if np.count_nonzero(green_mask) > 1000: 
-        print(np.count_nonzero(green_mask))
         print("has green")
         print(np.count_nonzero(green_mask))
-        sendMessage("K0")
+        sendMessage("k0")
     yellow_lower_range = np.array([15,100,100])
     yellow_upper_range = np.array([20,255,255])
     yellow_mask = cv2.inRange(hsv, yellow_lower_range, yellow_upper_range)
     if np.count_nonzero(yellow_mask) > 1000:
         print("has yellow", )
         print(np.count_nonzero(yellow_mask))
-        sendMessage("K1")
+        sendMessage("k1")
     if showcolor: cv2.imshow("yellow", yellow_mask)
     return status
 
@@ -202,22 +195,31 @@ def find_colour_victim():
 #camera starts here
 camera = PiCamera()
 camera.resolution = (640, 480)
-camera.framerate = 30
-
+camera.framerate = 10  
+start_etime = time.time()
+frame_time = time.time() 
 rawCapture = PiRGBArray(camera, size=(640, 480))
-
 for frame in camera.capture_continuous(rawCapture, format="bgr", use_video_port=True):
+    print("frame time", time.time() - frame_time)
+    print("entire time", time.time() - start_etime)
+    start_etime = time.time()
     image = frame.array
+    rawCapture.truncate(0)
+    start_time = time.time()
+    find_colour_victim()
+    print("Color_victim time", time.time() - start_time)
+    start_time = time.time()
+    find_visual_victim()
+    print("visual_victim time", time.time() - start_time)
+    test_time = time.time() 
     try: 
-        cv2.imshow("frame", image)
+        if not ssh: cv2.imshow("frame", image)
+        pass
     except: 
         ssh = True
         showcolor = False
-    rawCapture.truncate(0)
-    find_colour_victim()
-    find_visual_victim()
     key = cv2.waitKey(1)
     if key == 27: 
         break
-
-
+    print("test", time.time() - test_time)
+    frame_time = time.time() 
