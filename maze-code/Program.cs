@@ -8,12 +8,14 @@ namespace SerialConsole
 {
     internal class Program
     {
-        static readonly ushort[,] mainMap = new ushort[50, 50]; //W = 0, A = 1, S = 2, D = 3, explored = 4, mapSearched = 5, kit  = 6, ramp = 7, black tile = 8, checkp = 9, blue = 10 -more? obstacles?
-        //static readonly ushort[,] secoundMap = new ushort[50, 50]; //W = 0, A = 1, S = 2, D = 3, explored = 4, mapSearched = 5, kit  = 6, ramp = 7, black tile = 8, checkp = 9, blue = 10 -more? obstacles?
-        //static readonly ushort[,] thirdMap = new ushort[50, 50]; //W = 0, A = 1, S = 2, D = 3, explored = 4, mapSearched = 5, kit  = 6, ramp = 7, black tile = 8, checkp = 9, blue = 10 -more? obstacles?
-        static readonly int explored = 4;
-        static readonly int mapSearched = 5;
-        static readonly int kit = 6;
+        //static readonly ushort[,] mainMap = new ushort[50, 50]; //W = 0, A = 1, S = 2, D = 3, explored = 4, mapSearched = 5, victim  = 6, ramp = 7, black tile = 8, checkp = 9, blue = 10 -more? obstacles?
+        static readonly ushort explored = 4;
+        static readonly ushort mapSearched = 5;
+        static readonly ushort victim = 6;
+        static readonly ushort ramp = 7;
+        static readonly ushort blackTile = 8;
+        static readonly ushort checkPointTile = 8;
+        static readonly ushort blueTile = 10;
         static int toPosX;
         static int toPosZ;
         static readonly int startPosX = 25;
@@ -26,23 +28,19 @@ namespace SerialConsole
         static int shortenToZ;
         static readonly List<int> driveWay = new();
         static readonly List<string> sinceCheckpoint = new();
-
-        enum Maps
-        {
-            main,
-            secound,
-            third
-        }
-
-        static Maps currentMap;
+        static readonly List<ushort[,]> maps = new();
+        static readonly List<string> mapInfo = new();
+        static int currentMap;
 
         //ANOTHER LIST TO FIND SHORTEST PATH?
-        //LAST CHECKP COORDS
 
         static int direction = 0;
 
         static bool dropKits = false; //Add bool to not change at the same time?
         static int dropAmount;
+        static char dropSide;
+        static int kitsLeft = 12;
+        static bool locationUpdated;
 
         static bool frontPresent;
         static bool leftPresent;
@@ -52,11 +50,11 @@ namespace SerialConsole
         static bool wallNZ;
         static bool wallPX;
 
-        static readonly SerialPort serialPort1 = new("/dev/ttyUSB0", 9600, Parity.None, 8, StopBits.One); //Edit stopbits? //"/dev/ttyUSB0" for pi, "COM3" or "COM5" for testing
+        static readonly SerialPort serialPort1 = new("COM3", 9600, Parity.None, 8, StopBits.One); //Edit stopbits? //"/dev/ttyUSB0" for pi, "COM3" or "COM5" for testing
         static readonly TcpListener listener = new(System.Net.IPAddress.Any, 4242);
         static TcpClient client;
 
-        static void Main(string[] args)
+        static void Main()
         {
             Thread.Sleep(100);
 
@@ -66,18 +64,21 @@ namespace SerialConsole
             while (true)
             {
                 Turnlogic(); //check for binary switch reset - in serialcomm + drive?,
-                             //check for distancetravelled when dropping kits in drive
-                             //check for ground data and ramp after drive, auriga sends messages when driving?
                              //Update map with ground, ramp data
                              //What to do with back wall at the start?
                              //Update kit data at the right pos
-                             //Add blinking method?
-                             //Finish sinceCheckpoint
-                             //Remove trimming and such in serialcomm?  (or add to drive?)
+                             //Test (+finish?) sinceCheckpoint
+                             //Remove trimming and such in serialcomm?  (or add to drive?) - use {contains} instead?
                              //Send to auriga if there is likely an obstacle present?
                              //Compare map to sensor and vision data?
-                             //If we are in a dead end - look for map openings?
-                             //List for maps?
+                             //If we are in a dead end OR at every turn - look for map openings? Store divergefrompath coords?
+                             //List for maps
+                             //See how many (driveway = 0 && map[explored}) tiles - if many we are likely going around a floating wall
+                             //Add kitsLeft int - don't drop if less than
+                             //Add dropside
+                             //(_recived[1] != 's' && _recived[1] != 'a') - fix in drive
+                             //Multiple map fixsa
+                             //Don't reset kits?
                 Drive();
                 Thread.Sleep(10);
             }
@@ -113,17 +114,24 @@ namespace SerialConsole
 
             SerialComm("!w");
             //set all map bits to 0, update map
+            currentMap = 0;
+            direction = 0;
+            maps.Add(new ushort[50, 50]);
+            AddMapInfo(-1, -1, direction, currentMap);
 
-            currentMap = Maps.main;
-            for (int i = 0; i < mainMap.GetLength(0); i++)
+            for (int i = 0; i < maps[0].GetLength(0); i++)
             {
-                for (int j = 0; j < mainMap.GetLength(1); j++)
+                for (int j = 0; j < maps[0].GetLength(1); j++)
                 {
-                    mainMap[i, j] = 0;
+                    maps[0][i, j] = 0;
                 }
             }
 
-            UpdateMap(true);
+            UpdateMap();
+            Turn('l');
+            WriteMapBit(posX, posZ, 2, leftPresent);
+            Turn('r');
+
             Thread.Sleep(1000);
             Thread t = new(ServerLoop);
             t.Start();
@@ -158,6 +166,7 @@ namespace SerialConsole
                         //If dropkits - check how many and if its the same as the already activated one do nothing
                         dropKits = true;
                         dropAmount = int.Parse(_recivedData.Substring(_recivedData.IndexOf('k') + 1, 1));
+                        dropSide = _recivedData[_recivedData.IndexOf('k') + 2];
                         Console.WriteLine($"found {dropAmount}");
                     }
                     _recivedData = "";
@@ -217,13 +226,47 @@ namespace SerialConsole
 
         static void CheckAndDropKits()
         {
-            Console.WriteLine(dropKits + " , " + dropAmount + " , " + !ReadMapBit(posX, posZ, kit));
-            if (dropKits && !ReadMapBit(posX, posZ, kit))
+            if (dropKits && !ReadMapBit(posX, posZ, victim))
             {
+                if (kitsLeft < dropAmount)
+                    dropAmount = 0;
                 Console.WriteLine($"Dropping {dropAmount} kits");
-                SerialComm($"!k,{dropAmount}");
-                SetMapBit(posX, posZ, 0b1000000, true);
+                string recived = SerialComm($"!k,{dropAmount},{dropSide}");
+                kitsLeft -= dropAmount;
+                try
+                {
+                    if (recived[1] == 's')
+                    {
+
+                    }
+                    else if (recived.Split(',')[1].Contains('1'))
+                    {
+                        if (!locationUpdated)
+                        {
+                            UpdateLocation();
+                            locationUpdated = true;
+                        }
+                        WriteMapBit(posX, posZ, victim, true);
+                    }
+                    else if (recived.Split(',')[1].Contains('0'))
+                    {
+                        WriteMapBit(posX, posZ, victim, true);
+                    }
+                    else
+                    {
+                        Console.WriteLine(recived + " -problem with kit step");
+                    }
+                }
+                catch
+                {
+                    Console.Write(recived);
+                    Console.WriteLine(" WRONG");
+                }
                 Thread.Sleep(100);
+                dropKits = false;
+            }
+            else if (dropKits)
+            {
                 dropKits = false;
             }
         }
@@ -237,15 +280,9 @@ namespace SerialConsole
             return _recived;
         }
 
-        static void Resume()
-        {
-            Console.WriteLine("resuming");
-            SerialComm("!r");
-            Thread.Sleep(100);
-        }
-
         static void Drive()
         {
+            locationUpdated = false;
             CheckAndDropKits();
 
             Console.WriteLine("Driving");
@@ -256,7 +293,6 @@ namespace SerialConsole
             string _recived;
             string _interruptRec = "";
 
-            //Change back, make sure interrupt doesn't recive !s for Drive, don't send until: message back from auriga?, wait set time?
             while (serialPort1.BytesToRead == 0)
             {
                 Thread.Sleep(20);
@@ -268,14 +304,12 @@ namespace SerialConsole
             while (serialPort1.BytesToRead == 0)
             {
                 Thread.Sleep(20);
-                if (dropKits && !ReadMapBit(posX, posZ, kit))
+                if (dropKits && !ReadMapBit(posX, posZ, victim))
                 {
                     _interruptRec = Interrupt();
-                    if (_interruptRec.Trim().Contains('i'))
+                    if (_interruptRec.Contains('i'))
                     {
-                        //Recive data to see if we have went more than half
                         CheckAndDropKits();
-                        Resume();
                     }
                     else
                     {
@@ -293,14 +327,218 @@ namespace SerialConsole
             {
                 _recived = serialPort1.ReadLine();
             }
+
+            try
+            {
+                if (_recived[0] != '!')
+                {
+                    _recived = _recived.Remove(0, _recived.IndexOf('!'));
+                }
+
+                if (_recived[1] != 'a')
+                {
+                    Console.WriteLine(_recived);
+                    Console.WriteLine("Something went wrong, retrying");
+                    SensorCheck();
+                    if (!frontPresent)
+                    {
+                        Drive();
+                    }
+                    else
+                    {
+                        return;
+                    }
+                }
+            }
+            catch
+            {
+                Console.WriteLine(_recived);
+                Console.WriteLine("Something went very wrong, retrying");
+                SensorCheck();
+                if (!frontPresent)
+                {
+                    Drive();
+                }
+                else
+                {
+                    return;
+                }
+            }
+
+            try
+            {
+                if (_recived.Split(',')[2] == "1")
+                {
+                    if ((!ReadMapBit(posX, posZ, ramp) && currentMap == 0) || (ReadMapBit(posX, posZ, ramp) && currentMap != 0))
+                    {
+                        WriteMapBit(posX, posZ, ramp, true);
+                        if (currentMap == 0)
+                        {
+                            UpRamp(direction);
+                        }
+                        else
+                        {
+                            DownRamp();
+                        }
+
+                        if (_recived.Split(',')[1] == "c")
+                        {
+                            WriteMapBit(posX, posZ, checkPointTile, true);
+
+                            if (ReadMapBit(posX, posZ, checkPointTile))
+                            {
+                                Console.WriteLine("New Checkp");
+                                ResetSinceCheckpoint();
+                            }
+                            AddSinceCheckPoint();
+                        }
+                        else if (_recived.Split(',')[1] == "b")
+                        {
+                            WriteMapBit(posX, posZ, blueTile, true);
+                        }
+
+                        WriteMapBit(posX, posZ, ramp, true);
+                    }
+                    else
+                    {
+                        TurnTo(direction - 2);
+                        DriveBlind();
+                    }
+                }
+                else
+                {
+                    if (_recived.Split(',')[1] == "s") //Did not move a tile
+                    {
+                        try
+                        {
+                            WriteInFront(posX, posZ, blackTile, true);
+                        }
+                        catch
+                        {
+                            Console.WriteLine("Error - no black tile in front!!!");
+                            Thread.Sleep(5000);
+                        }
+                    }
+                    else //Moved a tile
+                    {
+                        if (!locationUpdated)
+                        {
+                            UpdateLocation();
+                            locationUpdated = true;
+                        }
+                        UpdateMap();
+
+                        if (_recived.Split(',')[1] == "c")
+                        {
+                            WriteMapBit(posX, posZ, checkPointTile, true);
+
+                            if (ReadMapBit(posX, posZ, checkPointTile))
+                            {
+                                Console.WriteLine("New Checkp");
+                                ResetSinceCheckpoint();
+                            }
+                            AddSinceCheckPoint();
+                        }
+                        else if (_recived.Split(',')[1] == "b")
+                        {
+                            WriteMapBit(posX, posZ, blueTile, true);
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                Console.WriteLine(_recived + " -problem color");
+            }
+
             Thread.Sleep(10);
 
             serialPort1.DiscardInBuffer();
             serialPort1.DiscardOutBuffer();
 
             Thread.Sleep(50);
-            UpdateLocation();
-            UpdateMap(false);
+
+            SensorCheck();
+            CheckAndDropKits();
+        }
+
+        static void DriveBlind()
+        {
+            locationUpdated = false;
+            CheckAndDropKits();
+
+            serialPort1.WriteLine("!d");
+            Thread.Sleep(100);
+
+            string _recived;
+            string _interruptRec = "";
+
+            while (serialPort1.BytesToRead == 0)
+            {
+                Thread.Sleep(20);
+            }
+
+            serialPort1.DiscardInBuffer();
+            Thread.Sleep(200);
+
+            while (serialPort1.BytesToRead == 0)
+            {
+                Thread.Sleep(20);
+            }
+
+            if (serialPort1.BytesToRead == 0)
+            {
+                _recived = _interruptRec;
+                Thread.Sleep(800); //DO NOT REMOVE
+            }
+            else
+            {
+                _recived = serialPort1.ReadLine();
+            }
+
+            try
+            {
+                if (_recived[0] != '!')
+                {
+                    _recived = _recived.Remove(0, _recived.IndexOf('!'));
+                }
+
+                if (_recived[1] != 'a')
+                {
+                    Console.WriteLine(_recived);
+                    Console.WriteLine("Something went wrong, retrying");
+                    SensorCheck();
+                    if (!frontPresent)
+                    {
+                        DriveBlind();
+                    }
+                    else
+                    {
+                        return;
+                    }
+                }
+            }
+            catch
+            {
+                Console.WriteLine(_recived);
+                Console.WriteLine("Something went very wrong, retrying");
+                SensorCheck();
+                if (!frontPresent)
+                {
+                    DriveBlind();
+                }
+                else
+                {
+                    return;
+                }
+            }
+
+            Thread.Sleep(10);
+
+            serialPort1.DiscardInBuffer();
+            serialPort1.DiscardOutBuffer();
+
+            Thread.Sleep(50);
 
             SensorCheck();
             CheckAndDropKits();
@@ -346,37 +584,25 @@ namespace SerialConsole
             Thread.Sleep(50);
             string _recived = serialPort1.ReadLine();
 
-            if (_recived[0] != '!')
+            try
             {
-                try
+                if (_recived[0] != '!')
                 {
                     _recived = _recived.Remove(0, _recived.IndexOf('!'));
                 }
-                catch
-                {
-                    Console.WriteLine("SerialComm error - incorrect format recived - no '!'");
-                }
-            }
 
-            while (_recived.IndexOf(' ') != -1)
-            {
-                _recived = _recived.Remove(_recived.IndexOf(' '), 1);
-            }
-
-            try
-            {
                 if (_recived[1] != 's' && _recived[1] != 'a')
                 {
                     Console.WriteLine("Something went wrong, retrying");
                     Console.WriteLine(_recived);
-                    SerialComm(_send);
+                    _recived = SerialComm(_send);
                 }
             }
             catch
             {
                 Console.WriteLine(_recived);
                 Console.WriteLine("Something went very wrong, retrying");
-                SerialComm(_send);
+                _recived = SerialComm(_send);
             }
 
             serialPort1.DiscardInBuffer();
@@ -428,13 +654,75 @@ namespace SerialConsole
             }
         }
 
+        static void ResetSinceCheckpoint()
+        {
+            sinceCheckpoint.Clear();
+        }
+
+        static void UpRamp(int _rampDirection)
+        {
+            maps.Add(new ushort[50, 50]);
+            currentMap = maps.Count - 1;
+            AddMapInfo(posX, posZ, _rampDirection, currentMap);
+            posX = 25;
+            posZ = 25;
+        }
+
+        static void DownRamp()
+        {
+            if (currentMap != 0)
+            {
+                string[] _info = mapInfo[currentMap].Split(',');
+                posX = int.Parse(_info[0]);
+                posZ = int.Parse(_info[1]);
+                direction = int.Parse(_info[2]);
+                currentMap = 0;
+                UpdateDirection(0);
+            }
+            else
+            {
+                Console.WriteLine("ERROR TRIED TO GO DOWN RAMP VIOAFUIEB");
+            }
+        }
+
         static void Reset()
         {
-            for (int i = 0; i < sinceCheckpoint.Count; i++)
+            try
             {
-                string[] _coords = sinceCheckpoint[0].Split(',');
-                mainMap[int.Parse(_coords[0]), int.Parse(_coords[1])] = 0;
+                string[] _checkpointXZ = sinceCheckpoint[0].Split(',');
+                posX = int.Parse(_checkpointXZ[0]);
+                posZ = int.Parse(_checkpointXZ[1]);
+                currentMap = int.Parse(_checkpointXZ[2]);
+                direction = int.Parse(_checkpointXZ[3]);
                 sinceCheckpoint.RemoveAt(0);
+
+                for (int i = 0; i < sinceCheckpoint.Count; i++)
+                {
+                    string[] _coords = sinceCheckpoint[0].Split(',');
+                    maps[int.Parse(_coords[2])][int.Parse(_coords[0]), int.Parse(_coords[1])] = 0;
+                    sinceCheckpoint.RemoveAt(0);
+                }
+            }
+            catch
+            {
+                Console.WriteLine("Reset error");
+            }
+        }
+
+        static void AddMapInfo(int _fromX, int _fromZ, int _rampDirection, int _map)
+        {
+            mapInfo[_map] = $"{_fromX},{_fromZ},{_rampDirection}";
+        }
+
+        static void AddSinceCheckPoint()
+        {
+            if (sinceCheckpoint.Count == 0)
+            {
+                sinceCheckpoint.Add($"{posX},{posZ},{currentMap},{direction}");
+            }
+            else
+            {
+                sinceCheckpoint.Add($"{posX},{posZ},{currentMap}");
             }
         }
 
@@ -457,9 +745,9 @@ namespace SerialConsole
                 posX++;
             }
 
-            if (posX > mainMap.GetLength(0))
+            if (posX > maps[currentMap].GetLength(0))
             {
-                posX = mainMap.GetLength(0);
+                posX = maps[currentMap].GetLength(0);
                 Console.WriteLine("Error PosX");
             }
             if (posX < 0)
@@ -467,9 +755,9 @@ namespace SerialConsole
                 posX = 0;
                 Console.WriteLine("Error posX");
             }
-            if (posZ > mainMap.GetLength(1))
+            if (posZ > maps[currentMap].GetLength(1))
             {
-                posZ = mainMap.GetLength(1);
+                posZ = maps[currentMap].GetLength(1);
                 Console.WriteLine("Error PosZ");
             }
             if (posZ < 0)
@@ -479,7 +767,7 @@ namespace SerialConsole
             }
         }
 
-        static void UpdateMap(bool _backPresent)//Behind - Always false when driving normally, always(?) true at start, CHANGE IF DIMENSION 3 ON MAP IS CHANGED?
+        static void UpdateMap()//Behind - Always false when driving normally, always(?) true at start, CHANGE IF DIMENSION 3 ON MAP IS CHANGED?
         {
             SensorCheck();
 
@@ -490,7 +778,7 @@ namespace SerialConsole
                     SensorCheck();
                     wallPZ = frontPresent; //front is front
                     wallNX = leftPresent;
-                    wallNZ = _backPresent;
+                    wallNZ = false;
                     wallPX = rightPresent;
                 }
                 if (direction == 1)
@@ -499,12 +787,12 @@ namespace SerialConsole
                     wallPZ = rightPresent; //right is front = Z
                     wallNX = frontPresent;
                     wallNZ = leftPresent;
-                    wallPX = _backPresent;
+                    wallPX = false;
                 }
                 if (direction == 2)
                 {
                     SensorCheck();
-                    wallPZ = _backPresent; //back is front
+                    wallPZ = false; //back is front
                     wallNX = rightPresent;
                     wallNZ = frontPresent;
                     wallPX = leftPresent;
@@ -513,16 +801,17 @@ namespace SerialConsole
                 {
                     SensorCheck();
                     wallPZ = leftPresent; //left is front
-                    wallNX = _backPresent;
+                    wallNX = false;
                     wallNZ = rightPresent;
                     wallPX = frontPresent;
                 }
+                Console.WriteLine(wallPZ + " , " + wallNX + " , " + wallNZ + " , " + wallPX);
 
-                SetMapBit(posX, posZ, 0b1, wallPZ);
-                SetMapBit(posX, posZ, 0b10, wallNX);
-                SetMapBit(posX, posZ, 0b100, wallNZ);
-                SetMapBit(posX, posZ, 0b1000, wallPX);
-                SetMapBit(posX, posZ, 0b10000, true);
+                WriteMapBit(posX, posZ, 0, wallPZ);
+                WriteMapBit(posX, posZ, 1, wallNX);
+                WriteMapBit(posX, posZ, 2, wallNZ);
+                WriteMapBit(posX, posZ, 3, wallPX);
+                WriteMapBit(posX, posZ, explored, true);
 
                 /*if (posZ - 1 >= 0 && !ReadMapBit(posX, posZ - 1, explored)) //If there is an unexplored position one +Z
                 {
@@ -541,51 +830,136 @@ namespace SerialConsole
                     SetMapBit(posX + 1, posZ, 0b00000010, wallPX);
                 }*/
             }
-            sinceCheckpoint.Add($"{posX},{posZ}");
-            //if (checkpoint)
-            //{
-            //    ResetSinceCheckpoint();
-            //}
 
-            if (posX == 28 && posZ == 23)
-            {
-                FindPathTo(startPosX, startPosZ);
-            }
+            //if (posX == 28 && posZ == 23)
+            //{
+            //    FindPathTo(startPosX, startPosZ);
+            //}
 
             Console.Write(posX + " , " + posZ + ": ");
 
-            for (int i = 0; i < 16; i++)
+            for (ushort i = 15; i >= 3; i--)
             {
                 Console.Write(ReadMapBit(posX, posZ, i) ? "1" : "0");
             }
+            Console.Write(ReadMapBit(posX, posZ, 2) ? "1" : "0");
+            Console.Write(ReadMapBit(posX, posZ, 1) ? "1" : "0");
+            Console.Write(ReadMapBit(posX, posZ, 0) ? "1" : "0");
             Console.WriteLine();
         }
 
-        static bool ReadMapBit(int _x, int _z, int read)
+        static bool ReadMapBit(int _x, int _z, ushort read)
         {
-            return ((mainMap[_x, _z] >> read) & 0b1) == 1;
+            return ((maps[currentMap][_x, _z] >> read) & 0b1) == 1;
         }
 
-        static bool ReadMapBit(int _x, int _z, int read, ushort[,] map)
+        static void WriteMapBit(int _x, int _z, ushort write, bool _value)
         {
-            return ((map[_x, _z] >> read) & 0b1) == 1;
-        }
-
-        static void SetMapBit(int _x, int _z, byte _bit, bool _value)
-        {
+            write = (ushort)(0b1 << write);
             if (_value)
             {
-                mainMap[_x, _z] = (ushort)(mainMap[_x, _z] | _bit);
+                maps[currentMap][_x, _z] = (ushort)(maps[currentMap][_x, _z] | write);
             }
             else
             {
-                mainMap[_x, _z] = (ushort)(mainMap[_x, _z] & ~_bit);
+                maps[currentMap][_x, _z] = (ushort)(maps[currentMap][_x, _z] & ~write);
             }
         }
 
-        static void FindPathTo(int _toX, int _toZ)
+        static void WriteInFront(int _x, int _z, ushort bit, bool value)
+        {
+            if (direction == 0)
+            {
+                WriteMapBit(_x, _z - 1, bit, value);
+            }
+            else if (direction == 1)
+            {
+                WriteMapBit(_x - 1, _z, bit, value);
+            }
+            else if (direction == 2)
+            {
+                WriteMapBit(_x, _z + 1, bit, value);
+            }
+            else if (direction == 3)
+            {
+                WriteMapBit(_x + 1, _z, bit, value);
+            }
+            else
+            {
+                Console.WriteLine("Direction error ");
+            }
+        }
+
+        static bool ReadInFront(int _x, int _z, ushort bit)
+        {
+            if (direction == 0)
+            {
+                return ReadMapBit(_x, _z - 1, bit);
+            }
+            else if (direction == 1)
+            {
+                return ReadMapBit(_x - 1, _z, bit);
+            }
+            else if (direction == 2)
+            {
+                return ReadMapBit(_x, _z + 1, bit);
+            }
+            else if (direction == 3)
+            {
+                return ReadMapBit(_x + 1, _z, bit);
+            }
+            else
+            {
+                Console.WriteLine("Direction error ");
+            }
+            return false;
+        }
+
+        static void GoBackLevel(int _map)
+        {
+            if (_map != currentMap)
+            {
+                toPosX = 25;
+                toPosZ = 25;
+
+                foundWay = false;
+                FindExploredCells(posX, posZ);
+                foundWay = false;
+                driveWay.ForEach(num => Console.WriteLine(num + " , "));
+
+                for (int i = 0; i < maps[currentMap].GetLength(0); i++)
+                {
+                    for (int j = 0; j < maps[currentMap].GetLength(1); j++)
+                    {
+                        WriteMapBit(i, j, mapSearched, false);
+                    }
+                }
+            }
+
+            while (driveWay.Count > 0)
+            {
+                TurnTo(driveWay[0]);
+                driveWay.RemoveAt(0);
+                Drive();
+            }
+
+            TurnTo(3);
+            Drive();
+            DownRamp();
+
+            if (_map != currentMap)
+            {
+                Console.WriteLine("Cannot find map");
+            }
+        }
+
+        static void FindPathTo(int _toX, int _toZ, int _map)
         {
             // Test each cell for options
+            if (_map != currentMap)
+            {
+                GoBackLevel(_map);
+            }
 
             toPosX = _toX;
             toPosZ = _toZ;
@@ -595,11 +969,11 @@ namespace SerialConsole
             foundWay = false;
             driveWay.ForEach(num => Console.WriteLine(num + " , "));
 
-            for (int i = 0; i < mainMap.GetLength(0); i++)
+            for (int i = 0; i < maps[currentMap].GetLength(0); i++)
             {
-                for (int j = 0; j < mainMap.GetLength(1); j++)
+                for (int j = 0; j < maps[currentMap].GetLength(1); j++)
                 {
-                    SetMapBit(i, j, 0b00100000, false);
+                    WriteMapBit(i, j, mapSearched, false);
                 }
             }
         }
@@ -615,7 +989,7 @@ namespace SerialConsole
             Console.WriteLine("mapbit " + !ReadMapBit(_onX, _onZ, 5));
             if (!foundWay && !ReadMapBit(_onX, _onZ, 5) && !ShortenPath(_onX, _onZ))
             {
-                SetMapBit(_onX, _onZ, 0b00100000, true);
+                WriteMapBit(_onX, _onZ, mapSearched, true);
 
                 if (_onZ > toPosZ)
                 {
@@ -632,7 +1006,7 @@ namespace SerialConsole
                 }
                 else
                 {
-                    if (!foundWay && _onZ + 1 < mainMap.GetLength(1)) //If there is a position one step -Z
+                    if (!foundWay && _onZ + 1 < maps[currentMap].GetLength(1)) //If there is a position one step -Z
                     {
                         if (ReadMapBit(_onX, _onZ + 1, explored) && !ReadMapBit(_onX, _onZ + 1, mapSearched) && !ReadMapBit(_onX, _onZ, 2))
                         {
@@ -646,7 +1020,7 @@ namespace SerialConsole
 
                 if (_onX > toPosX)
                 {
-                    if (!foundWay && _onX + 1 < mainMap.GetLength(0)) //If there is a position one step +X
+                    if (!foundWay && _onX + 1 < maps[currentMap].GetLength(0)) //If there is a position one step +X
                     {
                         if (ReadMapBit(_onX + 1, _onZ, explored) && !ReadMapBit(_onX + 1, _onZ, mapSearched) && !ReadMapBit(_onX, _onZ, 3))
                         {
@@ -656,6 +1030,7 @@ namespace SerialConsole
                                 driveWay.RemoveAt(driveWay.Count - 1);
                         }
                     }
+
                 }
                 else
                 {
@@ -686,7 +1061,7 @@ namespace SerialConsole
                 }
                 else
                 {
-                    if (!foundWay && _onZ + 1 < mainMap.GetLength(1)) //If there is a position one step -Z
+                    if (!foundWay && _onZ + 1 < maps[currentMap].GetLength(1)) //If there is a position one step -Z
                     {
                         if (ReadMapBit(_onX, _onZ + 1, explored) && !ReadMapBit(_onX, _onZ + 1, mapSearched) && !ReadMapBit(_onX, _onZ, 2))
                         {
@@ -700,7 +1075,7 @@ namespace SerialConsole
 
                 if (_onX <= toPosX)
                 {
-                    if (!foundWay && _onX + 1 < mainMap.GetLength(0)) //If there is a position one step +X
+                    if (!foundWay && _onX + 1 < maps[currentMap].GetLength(0)) //If there is a position one step +X
                     {
                         if (ReadMapBit(_onX + 1, _onZ, explored) && !ReadMapBit(_onX + 1, _onZ, mapSearched) && !ReadMapBit(_onX, _onZ, 3))
                         {
@@ -737,7 +1112,7 @@ namespace SerialConsole
                 }
                 else
                 {
-                    SetMapBit(_onX, _onZ, 0b00100000, false);
+                    WriteMapBit(_onX, _onZ, mapSearched, false);
                     return true;
                 }
             }
@@ -772,7 +1147,7 @@ namespace SerialConsole
                     }
                 }
 
-                if (_onZ + 1 < mainMap.GetLength(1)) //If there is a position one step -Z
+                if (_onZ + 1 < maps[currentMap].GetLength(1)) //If there is a position one step -Z
                 {
                     if (ReadMapBit(_onX, _onZ + 1, explored) && !ReadMapBit(_onX, _onZ, 2))
                     {
@@ -786,7 +1161,7 @@ namespace SerialConsole
                     }
                 }
 
-                if (_onX + 1 < mainMap.GetLength(0)) //If there is a position one step +X
+                if (_onX + 1 < maps[currentMap].GetLength(0)) //If there is a position one step +X
                 {
                     if (ReadMapBit(_onX + 1, _onZ, explored) && !ReadMapBit(_onX, _onZ, 3))
                     {
