@@ -87,7 +87,7 @@ class camControl(threading.Thread):
             camera.resolution = (width, height)
             # Set the framerate appropriately; too fast and the image processors
             # will stall the image pipeline and crash the script
-            camera.framerate = 10
+            camera.framerate = 5
             camera.raw_format = 'bgr'
             camera.resolution = (width, height)
             camera.vflip = self.vflip
