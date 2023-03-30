@@ -31,7 +31,6 @@ namespace SerialConsole
         static readonly List<ushort[,]> maps = new();
         static readonly List<string> mapInfo = new();
         static int currentMap;
-
         //ANOTHER LIST TO FIND SHORTEST PATH?
 
         static int direction = 0;
