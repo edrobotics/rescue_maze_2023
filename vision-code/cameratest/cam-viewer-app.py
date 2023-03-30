@@ -13,7 +13,7 @@ def processImage(image):
     print("x,y={},{}".format(width, height))
 
 cam = camControl(showSource=True)
-cam.registerCallback(processImage);
+cam.registerCallback(processImage)
 
 while True:
 
