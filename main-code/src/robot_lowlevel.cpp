@@ -67,7 +67,7 @@ double g_startDistance = 0; // The distance that you start from
 
 // Sensor constants
 const double ULTRASONIC_SPACING = 14.6; // The distance between the centers two ultrasonic sensors.
-const double ultrasonicFrontOffset = 10; // The distance from the front sensor to the center of the robot
+const double ULTRASONIC_FRONT_OFFSET = 9.5; // The distance from the front sensor to the center of the robot
 const double ultrasonicDistanceToWall = 7.1; // The distance between the ultrasonic sensor (edge of the robot) and the wall when the robot is centered.
 const double wallPresenceTreshold = 15; // Not calibrated !!!!!!!!!!!!!!!!!!!!!!!! Just a guess!!!!!!!!!!!!!!!!!!!!!!!
 
@@ -1446,11 +1446,11 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
     if (rampChange == true)
     {
       g_trueDistanceDriven = 15;
+      lights::turnOff(); // Could cause problems?
     }
     useNormPID();
-    lights::turnOff(); // Could cause problems?
     // Checking if you are done
-    if (ultrasonicDistanceF < (15 - ultrasonicFrontOffset + 4.5) && g_driveBack == false) // If the robot is the correct distance away from the front wall. The goal is that ultrasonicDistanceF is 5.2 when the robot stops. Should not do when driving backwards.
+    if (ultrasonicDistanceF < (15 - ULTRASONIC_FRONT_OFFSET + 2.5) && g_driveBack == false) // If the robot is the correct distance away from the front wall. The goal is that ultrasonicDistanceF is 5.2 when the robot stops. Should not do when driving backwards.
     {
       // lights::setColour(3, colourBase, true);
       // g_trueDistanceDriven = 30; // The robot has arrived
@@ -1489,7 +1489,7 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
     // buzzer.tone(440, 30); // Debugging
     // buzzer.tone(220, 30); // Debugging
     // Serial.println("Leaving back");
-    g_trueDistanceDriven = 15 + ULTRASONIC_SPACING/2.0 + 4.5; // The math should be correct, but the robot drives too far without the addition. The same amount of wrong as below.
+    g_trueDistanceDriven = 15 + ULTRASONIC_SPACING/2.0 + 3; // The math should be correct, but the robot drives too far without the addition. The same amount of wrong as below.
     stopReason = stop_backWallChangeLeaving;
     // Serial.println("Leaving back");
   }
@@ -1498,7 +1498,7 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
     // buzzer.tone(220, 30); // Debugging
     // buzzer.tone(440, 30); // Debugging
     // Serial.println("Approaching back");
-    g_trueDistanceDriven = 15 + ULTRASONIC_SPACING/2.0 + 1; // The math should be correct, but the robot drives too far without the addition. The same amount of wrong as below.
+    g_trueDistanceDriven = 15 + ULTRASONIC_SPACING/2.0; // The math should be correct, but the robot drives too far without the addition. The same amount of wrong as below.
     stopReason = stop_backWallChangeApproaching;
     // Serial.println("Approaching back");
   }
@@ -1507,7 +1507,7 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
     // buzzer.tone(880, 30); // Debugging
     // buzzer.tone(440, 30); // Debugging
     // Serial.println("Leaving Front");
-    g_trueDistanceDriven = 15 - ULTRASONIC_SPACING/2.0 + 6; // The math should be correct, but the robot drives too far without the addition. The same amount of wrong as above.
+    g_trueDistanceDriven = 15 - ULTRASONIC_SPACING/2.0 + 3.5; // The math should be correct, but the robot drives too far without the addition. The same amount of wrong as above.
     stopReason = stop_frontWallChangeLeaving;
   }
   else if (frontWallCheck == wallchange_approaching)
@@ -1515,7 +1515,7 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
     // buzzer.tone(440, 30); // Debugging
     // buzzer.tone(880, 30); // Debugging
     // Serial.println("Approaching front");
-    g_trueDistanceDriven = 15 - ULTRASONIC_SPACING/2 + 2; // The math should be correct, but the robot drives too far without the addition. The same amount of wrong as above.
+    g_trueDistanceDriven = 15 - ULTRASONIC_SPACING/2 - 0.5; // The math should be correct, but the robot drives too far without the addition. The same amount of wrong as above.
     stopReason = stop_frontWallChangeApproaching;
   }
 
@@ -1654,13 +1654,14 @@ bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, bo
   dumbDistanceDriven = 0;
   double trueDistanceDrivenFlag = g_trueDistanceDriven;
   // Continue driving forward if necessary (close enough to the wall in front)
-  if (stoppingReason != stop_frontWallPresent && stoppingReason != stop_floorColour && ultrasonicDistanceF < (15-ultrasonicFrontOffset + 10) && (g_floorColour != ColourSensor::floor_black) && g_driveBack == false) // && g_floorColour != ColourSensor::floor_blue // Removed due to strategy change
+  if (stoppingReason != stop_frontWallPresent && stoppingReason != stop_floorColour && ultrasonicDistanceF < (15-ULTRASONIC_FRONT_OFFSET + 10) && (g_floorColour != ColourSensor::floor_black) && g_driveBack == false) // && g_floorColour != ColourSensor::floor_blue // Removed due to strategy change
   {
     bool throwaWayRampDriven = false; // Just to give driveStepDriveLoop someting. Is not used for anything.
     lights::setColour(3, colourOrange, true);
-    while (ultrasonicDistanceF > (15-ultrasonicFrontOffset + 4.5) && (g_trueDistanceDriven-trueDistanceDrivenFlag) < 7) // The part about trueDistance is a failsafe in case the sensor fails
+    shouldStop = false;
+    while (shouldStop == false && (g_trueDistanceDriven-trueDistanceDrivenFlag) < 7) // The part about trueDistance is a failsafe in case the sensor fails
     {
-      driveStepDriveLoop(wallToUse, dumbDistanceDriven, stoppingReason, throwaWayRampDriven);
+      shouldStop = driveStepDriveLoop(wallToUse, dumbDistanceDriven, stoppingReason, throwaWayRampDriven);
     }
     // lights::setColour(3, colourBase, true);
      stoppingReason = stop_frontWallPresentFaraway;
