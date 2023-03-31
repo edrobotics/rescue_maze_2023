@@ -358,6 +358,7 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
 
 //------------------------- Rescue kits -----------------------------------//
 
+void initServo();
 
 void signalVictim();
 

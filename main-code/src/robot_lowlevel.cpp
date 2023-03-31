@@ -987,7 +987,16 @@ void checkWallPresence()
   if (ultrasonicDistanceF < wallPresenceTreshold) wallPresentF = true; // The offset here will probably have to be adjusted
   else wallPresentF = false;
 
-  //Serial.print(wallPresentLF); Serial.print(" "); Serial.print(wallPresentLB); Serial.print(" "); Serial.print(wallPresentRF); Serial.print(" "); Serial.println(wallPresentRB); // Debugging
+  // Debugging
+  // Serial.print("LF:");
+  // Serial.print(wallPresentLF);
+  // Serial.print("  LB:");
+  // Serial.print(wallPresentLB);
+  // Serial.print("  RF:");
+  // Serial.print(wallPresentRF);
+  // Serial.print("  RB:");
+  // Serial.print(wallPresentRB);
+  // Serial.println("");
 
   // Wall presence
   if (wallPresentLF && wallPresentLB) leftWallPresent = true;
@@ -1063,7 +1072,7 @@ int getWallStates()
 // Needs to be more robust
 WallChangeType checkWallChanges(UltrasonicGroup ultrasonicGroup)
 {
-
+  // sounds::tone(440, 42);
   if (ultrasonicGroup == ultrasonics_front)
   {
     if (wallPresentLF != previousLFState)
@@ -1182,15 +1191,39 @@ double getDistanceDriven()
 
 }
 
+const double normAngleP = 1; //    1  , 1, 1  ,
+const double normDistanceP = 3; // 2.2, 3, 3  ,
+const double normDistanceD = 1; // 0, 1, 0.5,
+
+const double rampAngleP = 0.2;
+const double rampDistanceP = 2;
+const double rampDistanceD = 0.5;
+
 // PID coefficients for wall following (in the process of tuning)
 // The comments after the coefficients are a history of coefficients that worked allright
-double angleP = 1; //    1  , 1, 1  ,
-double distanceP = 3; // 2.2, 3, 3  ,
-double distanceD = 1; // 0, 1, 0.5,
+double angleP = normAngleP; 
+double distanceP = normDistanceP;
+double distanceD = normDistanceD;
 // Variables for derivative calculation
 double lastDistance = 0; // Used to calculate derivative term
 unsigned long lastExecutionTime = 0; // Used to calculate derivative term
 WallSide lastWallSide = wall_none; // Used to determine if the lastDistance is valid
+
+void useNormPID()
+{
+  angleP = normAngleP; 
+  distanceP = normDistanceP;
+  distanceD = normDistanceD;
+  // sounds::tone(220, 50);
+}
+
+void useRampPID()
+{
+  angleP = rampAngleP; 
+  distanceP = rampDistanceP;
+  distanceD = rampDistanceD;
+  // sounds::tone(880, 50);
+}
 
 // Drive with wall following. Will do one iteration, so to actually follow the wall, call it multiple times in short succession.
 // wallSide - which wall to follow. Can be wall_left, wall_right or wall_both. Directions relative to the robot.
@@ -1225,7 +1258,10 @@ void pidDrive(WallSide wallSide)
     // Serial.print("    ");
     // Serial.print(g_wallDistance);
     // Serial.print("    ");
-    // Serial.println(secondaryWallDistance);
+    // Serial.print(secondaryWallDistance);
+    // Serial.print("    ");
+    // Serial.print(g_robotAngle);
+    // Serial.println("");
   }
 
   if (lastWallSide == wallSide && lastWallSide != wall_none) distanceDerivative = 1000.0*(g_wallDistance - lastDistance)/(millis()-lastExecutionTime); // Calculate the derivative. (The 1000 is to make the time in seconds)
@@ -1291,7 +1327,7 @@ double measurementAverage(double arrayToCalc[]) // Use a reference to the array 
 
 bool g_onRampIterations[ON_RAMP_ARR_SIZE];
 int g_onRampPointer = 0;
-// bool g_previousOnRampState = false;
+bool g_previousOnRampState = false;
 double g_trueDistanceDrivenOnRamp = 0;
 
 
@@ -1394,10 +1430,11 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
 
   bool onRamp = getIsOnRamp();
   bool rampChange = false;
-  // if (onRamp != g_previousOnRampState) rampChange = true;
+  if (onRamp != g_previousOnRampState) rampChange = true;
 
   if (onRamp == true)
   {
+    useRampPID();
     g_trueDistanceDrivenOnRamp += trueDistanceIncrement;
     if (g_trueDistanceDrivenOnRamp > 10) rampDriven = true;
     // RampDrive. Do nothing special?
@@ -1406,6 +1443,12 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
   }
   else // What to do ONLY when NOT on a ramp ------------------------------------------------------
   {
+    if (rampChange == true)
+    {
+      g_trueDistanceDriven = 15;
+    }
+    useNormPID();
+    lights::turnOff(); // Could cause problems?
     // Checking if you are done
     if (ultrasonicDistanceF < (15 - ultrasonicFrontOffset + 4.5) && g_driveBack == false) // If the robot is the correct distance away from the front wall. The goal is that ultrasonicDistanceF is 5.2 when the robot stops. Should not do when driving backwards.
     {
@@ -1419,13 +1462,13 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
     //Serial.println(ultrasonicDistanceF); // Debugging
 
 
-    if (g_trueDistanceDriven >= g_targetDistance-2 && rampDriven == false) // Should not drive based on encoders if you have driven up the ramp
+    if (g_trueDistanceDriven >= g_targetDistance-2) // Should not drive based on encoders if you have driven up the ramp // && rampDriven == false
     {
       if (stopReason == stop_none) stopReason = stop_deadReckoning;
       g_driveBack = false; // Reset the driveBack variable (do not drive back the next step)
       return true;
     }
-  }
+  } // Only do when not on ramp ends here
 
   // Checking for wallchanges (needs some more robustness!)
   WallChangeType backWallCheck = wallchange_none;
@@ -1475,6 +1518,8 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
     g_trueDistanceDriven = 15 - ULTRASONIC_SPACING/2 + 2; // The math should be correct, but the robot drives too far without the addition. The same amount of wrong as above.
     stopReason = stop_frontWallChangeApproaching;
   }
+
+  // Serial.println(g_trueDistanceDriven);
 
   // printUltrasonics();
 
@@ -1530,8 +1575,7 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
   }
 
 
-
-  // g_previousOnRampState = onRamp; // Update for the next loop
+  g_previousOnRampState = onRamp; // Update for the next loop
   return false; // The default return - not finished
 }
 
@@ -1782,6 +1826,11 @@ void testWallChanges()
 
 
 //------------------------------ Victims and rescue kits ------------------------------//
+
+void initServo()
+{
+}
+
 
 void signalVictim()
 {

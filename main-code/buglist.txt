@@ -1,8 +1,10 @@
 When driving away from a wall, sometimes the back wall change is not detected and the front one is used instead
 
-When doing gyroturnsteps, it sometimes turns the wrong amount
+When doing gyroturnsteps, it sometimes turns the wrong amount. WHY?
 
 The first gyroturn without a preceeding drivestep could have some zero-variables
+
+When driving onto a colour, the robot stops too late
 
 
 
