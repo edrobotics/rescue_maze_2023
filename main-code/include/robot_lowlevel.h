@@ -70,6 +70,8 @@ namespace serialcomm
     // Sends data that will be printed to the console / other debugging method
     // Should accept types in the same way that Serial.print() does.
     bool sendDebug();
+
+    void sendLOP();
 }
 
 // Makes a navigation decision
@@ -125,6 +127,8 @@ namespace lights
     void signalVictim();
 
     void indicateFrontSensor();
+
+    void reversing();
 
 }
 
@@ -369,6 +373,8 @@ bool frontSensorActivated();
 bool LOPSWActivated();
 
 void LOPActive();
+
+void checkAndHandleLOP();
 
 
 

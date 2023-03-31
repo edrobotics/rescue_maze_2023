@@ -6,7 +6,7 @@
 
 
 
-Adafruit_TCS34725 colSens = Adafruit_TCS34725(TCS34725_INTEGRATIONTIME_120MS, TCS34725_GAIN_1X);
+Adafruit_TCS34725 colSens = Adafruit_TCS34725(TCS34725_INTEGRATIONTIME_60MS, TCS34725_GAIN_1X);
 bool readState = false; // Keeps track of whether the sensor was read or not
 
 
@@ -136,7 +136,7 @@ ColourSensor::FloorColour ColourSensor::identifyColour()
 
     else if (lowerUpperEval(rgRatio, 1.17, 1.5) && lowerUpperEval(rbRatio, 1.3, 1.45) && lowerUpperEval(gbRatio, 1.01, 1.2)) return floor_reflective;
 
-    else if (lowerUpperEval(rgRatio, 1.0, 1.2) && lowerUpperEval(rbRatio, 1.21, 1.4) && lowerUpperEval(gbRatio, 1.1, 1.3)) return floor_white; // reflective falls (partly) into the same span, but because reflective would have returned all that is left in this area should be white
+    else if (lowerUpperEval(rgRatio, 1.0, 1.2) && lowerUpperEval(rbRatio, 1.15, 1.4) && lowerUpperEval(gbRatio, 1.1, 1.3)) return floor_white; // reflective falls (partly) into the same span, but because reflective would have returned all that is left in this area should be white
     
     else if (lowerUpperEval(rgRatio, 1.7, 6) && lowerUpperEval(rbRatio, 2.3, 6) && lowerUpperEval(gbRatio, 1.2, 1.5)) return floor_black;
 
@@ -166,7 +166,7 @@ ColourSensor::FloorColour ColourSensor::identifyColour()
     // return unknown; // If no sample matched
 }
 
-
+// Returns the last floor colour (eg. the one from the latest update).
 ColourSensor::FloorColour ColourSensor::checkFloorColour()
 {
     readState = readSensor();

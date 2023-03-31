@@ -35,7 +35,7 @@ class ColourSensor
         FloorColour identifyColour();
 
         unsigned long lastReadTime = 0; // Keep track of the last time you read from the sensor
-        int INTEGRATION_TIME = 120; // The integration time in milliseconds
+        int INTEGRATION_TIME = 60; // The integration time in milliseconds
         uint16_t sensorRed, sensorGreen, sensorBlue, sensorClear; // For raw colour values
         double rgRatio, rbRatio, gbRatio; // For ratios between colours
 

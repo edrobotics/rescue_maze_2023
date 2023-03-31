@@ -19,9 +19,9 @@ MeEncoderOnBoard encoderRB(SLOT4); // Right back encoder motor
 // Ultrasonic sensor definitions
 MeUltrasonicSensor ultrasonicLF(PORT_8); // Left front
 MeUltrasonicSensor ultrasonicLB(PORT_9); // Left back
-MeUltrasonicSensor ultrasonicRF(PORT_6); // Right front
+MeUltrasonicSensor ultrasonicRF(PORT_7); // Right front
 MeUltrasonicSensor ultrasonicRB(PORT_10); // Right back
-MeUltrasonicSensor ultrasonicF(PORT_7); // Front
+MeUltrasonicSensor ultrasonicF(PORT_6); // Front
 
 
 // Colour sensor:
@@ -58,10 +58,11 @@ const double WHEEL_CIRCUMFERENCE = PI*WHEEL_DIAMETER;
 
 // Driving
 const double CMPS_TO_RPM = 1.0/WHEEL_CIRCUMFERENCE*60.0; // Constant to convert from cm/s to rpm
-const double BASE_SPEED_CMPS = 25; // The base speed of driving (cm/s)
+const double BASE_SPEED_CMPS = 15; // The base speed of driving (cm/s)
 const double BASE_SPEED_RPM = CMPS_TO_RPM*BASE_SPEED_CMPS; // The base speed of driving (rpm)
 double g_trueDistanceDriven = 0; // The correct driven distance. Measured as travelling along the wall and also updated when landmarks are seen
 double g_targetDistance = 0; // The distance that you want to drive
+double g_startDistance = 0; // The distance that you start from
 
 
 // Sensor constants
@@ -188,38 +189,42 @@ Command serialcomm::readCommand(bool waitForSerial)
     case 'd': // driveStep
       return command_driveStep;
       break;
-    
+
     case 't': // turn
       recievedChar = readChar();
       if (recievedChar != ',' ) return command_invalid; // Invalid because the form was not followed
-      
+
       recievedChar = readChar();
       if (recievedChar == 'l') return command_turnLeft;
       else if (recievedChar == 'r') return command_turnRight;
       else return command_invalid;
       break;
-    
+
     case 'k': // drop rescue kit
       g_kitsToDrop = 0;
+      // sounds::tone(220, 300);
       recievedChar = readChar();
       if (recievedChar != ',' ) return command_invalid; // Invalid because the form was not followed
 
       while(Serial.available() == 0) {}
-      g_kitsToDrop = Serial.read();
-      readChar();
+      g_kitsToDrop = Serial.read() - '0';
+      // sounds::tone(440, 300);
+      recievedChar = readChar();
       if (recievedChar != ',' ) return command_invalid; // Invalid because the form was not followed
+      // sounds::tone(695, 300);
       g_dropDirection = readChar();
+      // sounds::tone(880, 700);
       return command_dropKit;
       break;
-    
+
     case 'w': // get wall states
       return command_getWallStates;
       break;
-    
-    
+
+
     case 'r': // resume the action interrupted by interrupt
       break;
-    
+
     default:
       sounds::errorBeep();
       return command_invalid;
@@ -250,7 +255,7 @@ void serialcomm::answerInterrupt()
 
 void lightsAndBuzzerInit()
 {
-  buzzer.setpin(45);
+  // buzzer.setpin(45);
   ledRing.setpin(44);
   ledRing.fillPixelsBak(0, 2, 1);
   lights::turnOff();
@@ -364,10 +369,10 @@ void lights::floorIndicator(ColourSensor::FloorColour floorColour)
       break;
     default:
       showDirection(front, colourWhite);
-      
+
   }
-  
-  
+
+
   if (floorColour == ColourSensor::floor_black)
   {
   }
@@ -396,6 +401,12 @@ void lights::indicateFrontSensor()
   turnOff();
   setColour(2, colourRed, false);
   setColour(4, colourRed, true);
+}
+
+void lights::reversing()
+{
+  setColour(8, colourWhite, false);
+  setColour(10, colourWhite, true);
 }
 
 
@@ -453,13 +464,13 @@ void loopEncoders()
 // Should be run inside of setup()
 void encodersInit()
 {
-  
+
   attachInterrupt(encoderLF.getIntNum(), isr_encoderLF, RISING);
   attachInterrupt(encoderLB.getIntNum(), isr_encoderLB, RISING);
   attachInterrupt(encoderRF.getIntNum(), isr_encoderRF, RISING);
   attachInterrupt(encoderRB.getIntNum(), isr_encoderRB, RISING);
-  
-  
+
+
   //Set PWM 8KHz
   TCCR1A = _BV(WGM10);
   TCCR1B = _BV(CS11) | _BV(WGM12);
@@ -528,7 +539,7 @@ void runWheelSide(WheelSide wheelSide, double speed)
     encoderLF.runSpeed(speed);
     encoderLB.runSpeed(speed);
   } else if (wheelSide == wheels_right) {
-    // Inverted speed because 
+    // Inverted speed because
     encoderRF.runSpeed(-speed);
     encoderRB.runSpeed(-speed);
   } else {} // An error: no valid WheelSide specified
@@ -673,8 +684,8 @@ double leftToTurn(bool zeroCross, int turningDirection, double tarAng, double cu
 
   return -100; // If something went wrong. Normally you should never get -100 (overshoot of 100 degrees)
 
-  
-  
+
+
   /* The old code:
   if (zeroCross==false) { // Normal turn
     if (turningDirection == 1) {
@@ -711,7 +722,7 @@ void gyroTurn(double turnAngle, bool stopMoving, double baseSpeed = 0)
     // Checking for unreasonable values:
     if (turnAngle > 170) turnAngle = 90;
     if (turnAngle < -170) turnAngle = -90;
-    
+
     gyro.update();
     g_currentGyroAngle = gyroAngleToMathAngle(gyro.getAngleZ()); // Sets positive to be counter-clockwise and makes all valid values between 0 and 360
     targetGyroAngle = (g_currentGyroAngle + turnAngle);
@@ -735,6 +746,7 @@ void gyroTurn(double turnAngle, bool stopMoving, double baseSpeed = 0)
       g_currentGyroAngle = gyroAngleToMathAngle(gyro.getAngleZ());
       loopEncoders();
       varLeftToTurn = leftToTurn(crossingZero, multiplier, targetGyroAngle, g_currentGyroAngle);
+      checkAndHandleLOP();
     }
 
     // Slowing down in the end of the turn.
@@ -749,8 +761,9 @@ void gyroTurn(double turnAngle, bool stopMoving, double baseSpeed = 0)
       g_currentGyroAngle = gyroAngleToMathAngle(gyro.getAngleZ());
       loopEncoders();
       varLeftToTurn = leftToTurn(crossingZero, multiplier, targetGyroAngle, g_currentGyroAngle);
+      checkAndHandleLOP();
     }
-    
+
     if (stopMoving==true) stopWheels();
 }
 
@@ -837,6 +850,44 @@ void flushDistanceArrays()
     }
 }
 
+void getUltrasonics1()
+{
+  pushBackArray(ultrasonicLF.distanceCm(35), ultrasonicDistancesLF);
+  ultrasonicDistanceLF = calcDistanceAverage(ultrasonicDistancesLF);
+  loopEncoders();
+  gyro.update();
+  delay(2);
+
+
+  pushBackArray(ultrasonicRB.distanceCm(35), ultrasonicDistancesRB);
+  ultrasonicDistanceRB = calcDistanceAverage(ultrasonicDistancesRB);
+  loopEncoders();
+  gyro.update();
+  delay(2);
+
+
+}
+
+void getUltrasonics2()
+{
+  pushBackArray(ultrasonicRF.distanceCm(35), ultrasonicDistancesRF);
+  ultrasonicDistanceRF = calcDistanceAverage(ultrasonicDistancesRF);
+  loopEncoders();
+  gyro.update();
+  delay(2);
+
+  pushBackArray(ultrasonicLB.distanceCm(35), ultrasonicDistancesLB);
+  ultrasonicDistanceLB = calcDistanceAverage(ultrasonicDistancesLB);
+  loopEncoders();
+  gyro.update();
+  delay(2);
+
+
+  pushBackArray(ultrasonicF.distanceCm(120), ultrasonicDistancesF);
+  ultrasonicDistanceF = calcDistanceAverage(ultrasonicDistancesF);
+
+}
+
 // Get all ultrasonic sensors and update the gyro and encoders
 // Perhaps return an array in the future (or take on as a mutable(?) argument?)
 void getUltrasonics()
@@ -855,14 +906,14 @@ void getUltrasonics()
   loopEncoders();
   gyro.update();
   delay(2);
-  
-  
+
+
   pushBackArray(ultrasonicRB.distanceCm(35), ultrasonicDistancesRB);
   ultrasonicDistanceRB = calcDistanceAverage(ultrasonicDistancesRB);
   loopEncoders();
   gyro.update();
   delay(2);
-  
+
   pushBackArray(ultrasonicRF.distanceCm(35), ultrasonicDistancesRF);
   ultrasonicDistanceRF = calcDistanceAverage(ultrasonicDistancesRF);
   loopEncoders();
@@ -900,7 +951,7 @@ bool wallPresentF = false;
 
 void printUltrasonics()
 {
-  
+
   Serial.print("F:");Serial.print(ultrasonicDistanceF);
   Serial.print(" LF:");Serial.print(ultrasonicDistanceLF);
   Serial.print(" LB:");Serial.print(ultrasonicDistanceLB);
@@ -975,7 +1026,7 @@ void calcRobotPose(WallSide wallSide, double& angle, double& trueDistance, bool 
   else angle *= DEG_TO_RAD; // Convert the angle to radians to execute the calculation
   trueDistance = cos(angle) * ((d1 + d2)/(double)2);
   angle *= RAD_TO_DEG; // Convert the angle to degrees
-  
+
   // Debugging
   //Serial.print(angle); Serial.print("    "); Serial.println(trueDistance);
 }
@@ -1018,7 +1069,7 @@ WallChangeType checkWallChanges(UltrasonicGroup ultrasonicGroup)
       {
         // lights::setColour(1, colourOrange, true);
         return wallchange_leaving;
-      } 
+      }
     }
     if (wallPresentRF != previousRFState)
     {
@@ -1032,7 +1083,7 @@ WallChangeType checkWallChanges(UltrasonicGroup ultrasonicGroup)
       {
         // lights::setColour(5, colourOrange, true);
         return wallchange_leaving;
-      } 
+      }
     }
   }
   else if (ultrasonicGroup == ultrasonics_back)
@@ -1049,12 +1100,12 @@ WallChangeType checkWallChanges(UltrasonicGroup ultrasonicGroup)
       {
         // lights::setColour(11, colourBase, true);
         return wallchange_leaving;
-      } 
+      }
     }
     if (wallPresentRB != previousRBState)
     {
       previousRBState = wallPresentRB;
-      if (wallPresentRB == true) 
+      if (wallPresentRB == true)
       {
         // lights::setColour(7, colourBase, true);
         return wallchange_approaching;
@@ -1063,7 +1114,7 @@ WallChangeType checkWallChanges(UltrasonicGroup ultrasonicGroup)
       {
         // lights::setColour(7, colourOrange, true);
         return wallchange_leaving;
-      } 
+      }
     }
   }
   return wallchange_none; // If the program made it here, no wall change was detected or an incorrect parameter was given.
@@ -1144,16 +1195,16 @@ void pidDrive(WallSide wallSide)
   double distanceError = 0; // positive means that we are to the right of where we want to be.
   double distanceDerivative = 0; // The rate of change for the derivative term. Initialized to 0, so that it is only used if actively changed
   g_currentGyroAngle = gyroAngleToMathAngle(gyro.getAngleZ());
-  
+
   updateRobotPose(wallSide, secondaryWallDistance);
-  
-  
+
+
   if (wallSide==wall_left)
   {
     distanceError = g_wallDistance - ultrasonicDistanceToWall;
   }
   else if (wallSide==wall_right)
-  { 
+  {
     distanceError = ultrasonicDistanceToWall - g_wallDistance;
   }
   else if (wallSide==wall_both)
@@ -1238,7 +1289,30 @@ double measurementAverage(double arrayToCalc[]) // Use a reference to the array 
 // stopReason - gives the reason for why the robot stopped moving
 bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, StoppingReason& stopReason)
 {
-  getUltrasonics();
+  getUltrasonics1();
+  ColourSensor::FloorColour g_floorColour = colSensor.checkFloorColour();
+  // if (g_driveBack == false)
+  // {
+  //   switch (g_floorColour)
+  //   {
+  //     case ColourSensor::floor_notUpdated:
+  //       break; // Do nothing
+  //     case ColourSensor::floor_black:
+  //       // Drive back to last point and exit the loop
+  //       stopReason = stop_floorColour;
+  //       return true; // Exit the loop
+  //       break;
+  //     case ColourSensor::floor_blue:
+  //       // Go on driving and tell Marcus that there is a blue tile
+  //       // stopReason = stop_floorColour;
+  //       // return true; // Exit the loop
+  //       break;
+  //     default:
+  //       // Do nothing (includes silver)
+  //       break; // Potential problem with the last break statement?
+  //   }
+  // }
+  getUltrasonics2();
   // printUltrasonics();
   checkWallPresence();
   // Separate this out into its own function? (deciding what wall to follow)
@@ -1262,31 +1336,22 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
   g_trueDistanceDriven += multiplier*(getDistanceDriven()-dumbDistanceDriven) * cos(abs(g_robotAngle*DEG_TO_RAD)); // Because g_lastWallAngle is updated continuosly, it can be used here. Or I can just use robotAngle instead.
   dumbDistanceDriven = getDistanceDriven();
 
-
-  // Checking if you are done
-  if (ultrasonicDistanceF < (15 - ultrasonicFrontOffset + 4.5)) // If the robot is the correct distance away from the front wall. The goal is that ultrasonicDistanceF is 5.2 when the robot stops.
-  {
-    // lights::setColour(3, colourBase, true);
-    // g_trueDistanceDriven = 30; // The robot has arrived
-    stopReason = stop_frontWallPresent;
-    // stopReason = stop_floorColour; // For debugging driving backwards
-    // g_floorColour = ColourSensor::floor_black; // Same as line above
-    return true;
-  }
-  //Serial.println(ultrasonicDistanceF); // Debugging
-
-
-  if (g_trueDistanceDriven >= g_targetDistance-2 )
-  {
-    if (stopReason == stop_none) stopReason = stop_deadReckoning;
-    g_driveBack = false; // Reset the driveBack variable (do not drive back the next step)
-    return true;
-  }
-
+  // Checking lack of progress switch
+  checkAndHandleLOP();
 
   // Checking for wallchanges (needs some more robustness!)
-  WallChangeType backWallCheck = checkWallChanges(ultrasonics_back);
-  WallChangeType frontWallCheck = checkWallChanges(ultrasonics_front);
+  WallChangeType backWallCheck = wallchange_none;
+  WallChangeType frontWallCheck = wallchange_none;
+  if (g_driveBack == false) // Normal
+  {
+  backWallCheck = checkWallChanges(ultrasonics_back);
+  frontWallCheck = checkWallChanges(ultrasonics_front);
+  }
+  else // When driving backwards front becomes back
+  {
+  frontWallCheck = checkWallChanges(ultrasonics_back);
+  backWallCheck = checkWallChanges(ultrasonics_front);
+  }
   // Do as switch statement!
   if (backWallCheck == wallchange_leaving)
   {
@@ -1328,32 +1393,8 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
   // lights::turnOff();
 
 
-  // Checking for ground colour
-  ColourSensor::FloorColour g_floorColour = colSensor.checkFloorColour();
-  if (g_driveBack == false)
-  {
-    switch (g_floorColour)
-    {
-      case ColourSensor::floor_notUpdated:
-        break; // Do nothing
-      case ColourSensor::floor_black:
-        // Drive back to last point and exit the loop
-        stopReason = stop_floorColour;
-        return true; // Exit the loop
-        break;
-      case ColourSensor::floor_blue:
-        // Drive back to last point and exit the loop
-        stopReason = stop_floorColour;
-        return true; // Exit the loop
-        break;
-      default:
-        // Do nothing (includes silver)
-        break; // Potential problem with the last break statement?
-    }
-  }
 
-
-  // Checking for interrupts
+    // Checking for interrupts
   if (serialcomm::checkInterrupt() == true)
   {
     stopWheels();
@@ -1368,12 +1409,6 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
     serialcomm::clearBuffer();
   }
 
-  // Checking for ramps
-  if (abs(gyro.getAngleX()) > 10)
-  {
-
-  }
-
 
   // Checking the front touch sensor
   if (frontSensorActivated() == true && g_driveBack == false)
@@ -1382,14 +1417,71 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
     return true; // Exit the loop
   }
 
-
-  // Checking lack of progress switch
-  if (LOPSWActivated() == true)
+  // Checking for ground colour (should perhaps only be done when not on ramp?)
+  g_floorColour = colSensor.checkFloorColour();
+  if (g_driveBack == false)
   {
-    // Go into reset state
-    LOPActive();
+    switch (g_floorColour)
+    {
+      case ColourSensor::floor_notUpdated:
+        break; // Do nothing
+      case ColourSensor::floor_black:
+        // Drive back to last point and exit the loop
+        stopReason = stop_floorColour;
+        return true; // Exit the loop
+        break;
+      case ColourSensor::floor_blue:
+        // Go on driving and tell Marcus that there is a blue tile
+        // stopReason = stop_floorColour;
+        // return true; // Exit the loop
+        break;
+      default:
+        // Do nothing (includes silver)
+        break; // Potential problem with the last break statement?
+    }
   }
-  
+
+  bool onRamp = false;
+  // Determine onRamp
+
+// Checking for ramps (perhaps do running average?)
+// Need to handle when you get off the ramp, so that you don't stop immediately
+  if (abs(gyro.getAngleX()) > 10)
+  {
+    onRamp = true;
+  }
+  else onRamp = false;
+
+  if (onRamp == true)
+  {
+    // RampDrive. Do nothing special?
+  }
+
+  else // What to do ONLY when NOT on a ramp ------------------------------------------------------
+  {
+    // Checking if you are done
+    if (ultrasonicDistanceF < (15 - ultrasonicFrontOffset + 4.5) && g_driveBack == false) // If the robot is the correct distance away from the front wall. The goal is that ultrasonicDistanceF is 5.2 when the robot stops. Should not do when driving backwards.
+    {
+      // lights::setColour(3, colourBase, true);
+      // g_trueDistanceDriven = 30; // The robot has arrived
+      stopReason = stop_frontWallPresent;
+      // stopReason = stop_floorColour; // For debugging driving backwards
+      // g_floorColour = ColourSensor::floor_black; // Same as line above
+      return true;
+    }
+    //Serial.println(ultrasonicDistanceF); // Debugging
+
+
+    if (g_trueDistanceDriven >= g_targetDistance-2 )
+    {
+      if (stopReason == stop_none) stopReason = stop_deadReckoning;
+      g_driveBack = false; // Reset the driveBack variable (do not drive back the next step)
+      return true;
+    }
+  }
+
+
+
   return false; // The default return - not finished
 }
 
@@ -1400,10 +1492,12 @@ bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, bo
   startDistanceMeasure(); // Starts the distance measuring (encoders)
   double dumbDistanceDriven = 0;
   g_targetDistance = 30; // The distance that you want to drive. Normally 30
+  g_startDistance = 0; // Where you start. Normally 0, but different when going backwards.
   if (g_driveBack == true)
   {
-    g_targetDistance = g_trueDistanceDriven + 3;
+    // g_targetDistance = g_trueDistanceDriven + 2;
     // g_targetDistance = 15;
+    g_startDistance = g_trueDistanceDriven;
   }
   g_trueDistanceDriven = 0;
   dumbDistanceDriven = 0;
@@ -1418,25 +1512,25 @@ bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, bo
   else if (rightWallPresent) wallToUse = wall_right;
   // Else no wall was detected which is the default value of wallToUse.
 
-  
+
   // Calculate the angles for use by pidDrive
   if (wallToUse == wall_none) {
-    
+
     g_startWallAngle = g_lastWallAngle; // The new wallAngle is the same as the previously set one
   } else {
     calcRobotPose(wallToUse, g_startWallAngle, g_wallDistance, false);
   }
-  
+
   gyro.update();
   g_gyroOffset = gyroAngleToMathAngle(gyro.getAngleZ());// The angle measured by the gyro (absolute angle) in the beginning.
-  
+
 
   lastWallSide = wall_none; // Tells pidDrive that derivative term should not be used
-  
+
 
 
   StoppingReason stoppingReason = stop_none;
-  
+
   // Timer stuff
   // unsigned long timerFlag = millis();
   // int iterations = 0;
@@ -1456,7 +1550,7 @@ bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, bo
   // Serial.print("Time: ");
   // Serial.println((millis()-timerFlag)/double(iterations));
 
-  
+
   // Checking how far you have driven
   // Get new sensor data
   getUltrasonics();
@@ -1466,7 +1560,7 @@ bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, bo
   dumbDistanceDriven = 0;
   double trueDistanceDrivenFlag = g_trueDistanceDriven;
   // Continue driving forward if necessary (close enough to the wall in front)
-  if (stoppingReason != stop_frontWallPresent && stoppingReason != stop_floorColour && ultrasonicDistanceF < (15-ultrasonicFrontOffset + 10) && (g_floorColour != ColourSensor::floor_black && g_floorColour != ColourSensor::floor_blue))
+  if (stoppingReason != stop_frontWallPresent && stoppingReason != stop_floorColour && ultrasonicDistanceF < (15-ultrasonicFrontOffset + 10) && (g_floorColour != ColourSensor::floor_black) && g_driveBack == false) // && g_floorColour != ColourSensor::floor_blue // Removed due to strategy change
   {
     lights::setColour(3, colourOrange, true);
     while (ultrasonicDistanceF > (15-ultrasonicFrontOffset + 4.5) && (g_trueDistanceDriven-trueDistanceDrivenFlag) < 7) // The part about trueDistance is a failsafe in case the sensor fails
@@ -1530,6 +1624,10 @@ bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, bo
   //   // Handle checkpoints.
   // }
 
+  // Give back the floor colour
+  // Should update/double-check this before sending (but not always?)
+  floorColourAhead = g_floorColour; // Or use last known floor colour?
+
   // Give an accurate angle measurement for the next step
   // This should probably be separated out into its own function
   // flushDistanceArrays();
@@ -1540,9 +1638,9 @@ bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, bo
   // else wallToUse = wall_none; // If no wall was detected
   // updateRobotPose(wallToUse);
   // g_lastWallAngle = g_robotAngle;
-  updateRobotPose();
+  updateRobotPose(); // Replaces the previous code
 
-  
+
   // Determine whether you have driven a step or not
   if (g_trueDistanceDriven > 15 && stoppingReason != stop_floorColour) return true;
   else return false;
@@ -1568,7 +1666,7 @@ void makeNavDecision(Command& action)
     getUltrasonics();
     checkWallPresence();
     if (leftWallPresent && frontWallPresent) action = command_turnRight;
-    else if (leftWallPresent) action = command_driveStep; // If the left wall is there and not the front wall 
+    else if (leftWallPresent) action = command_driveStep; // If the left wall is there and not the front wall
     else { // If the left wall disappears for any reason, including when the front wall is present
       action = command_turnLeft;
       nextAction = command_driveStep;
@@ -1647,26 +1745,25 @@ void handleVictim(double fromInterrupt)
   serialcomm::clearBuffer();
   if (command != command_dropKit) return;
   }
-  // Align the robot for deployment (the directions seem to be weird)
+  // Align the robot for deployment
   TurningDirection turnDirection = cw; // Default - if the kit is on the right
   if (g_dropDirection == 'r') turnDirection = ccw; // If the kit is on the left
-  Serial.print(g_dropDirection);
-  turnSteps(turnDirection, 1);
+  // Serial.print(g_dropDirection);
+  if (g_kitsToDrop != 0) turnSteps(turnDirection, 1); // Only turn if you have to drop
 
-  g_kitsToDrop = 2;
   signalVictim();
   for (int i=0; i<g_kitsToDrop; ++i)
   {
+    lights::setColour(i+2, colourRed, true);
     deployRescueKit();
-    lights::setColour(i+1, colourRed, true);
     delay(100);
   }
 
   // Return the robot to original orientation
   if (turnDirection == ccw) turnDirection = cw; // Reverse direction
   else turnDirection = ccw; // Reverse direction
-  turnSteps(turnDirection, 1);
-  
+  if (g_kitsToDrop != 0) turnSteps(turnDirection, 1); // Only turn if you have to drop
+
   // Reset variables
   g_dropDirection = ' ';
   g_kitsToDrop = 0;
@@ -1675,7 +1772,7 @@ void handleVictim(double fromInterrupt)
 
 void deployRescueKit()
 {
-  
+
   // To be done
   // for (int i=0; i<3; ++i)
   // {
@@ -1692,19 +1789,19 @@ void deployRescueKit()
 //----------------------------- Buttons and misc. sensors -------------------------//
 
 // Front touch sensor buttons
-const int pressPlateSW1 = 30;
-const int pressPlateSW2 = 31;
+const int pressPlateSW1 = 34;
+const int pressPlateSW2 = 36;
 
 // Lack of progress switch (two pins for one switch)
-const int LOPSW1 = 32;
-const int LOPSW2 = 33;
+const int LOPSWONPin = 32;
+const int LOPSWOFFPin = 30;
 
 void initSwitches()
 {
   pinMode(pressPlateSW1, INPUT_PULLUP);
   pinMode(pressPlateSW2, INPUT_PULLUP);
-  // pinMode(LOPSW1, INPUT_PULLUP);
-  // pinMode(LOPSW2, INPUT_PULLUP);
+  pinMode(LOPSWONPin, INPUT_PULLUP);
+  pinMode(LOPSWOFFPin, INPUT_PULLUP);
 }
 
 bool frontSensorActivated()
@@ -1718,14 +1815,34 @@ bool frontSensorActivated()
 
 bool LOPSWActivated()
 {
-  if (digitalRead(LOPSW1) == true) // Not sure about if this is the right state or not
+  if (digitalRead(LOPSWONPin) == LOW)
   {
     return true;
   }
   else return false;
 }
 
+void(* resetFunc) (void) = 0; // Reset function
+
 void LOPActive()
 {
+  stopWheels();
   // Ideally, this should wait for the switch to be switched off and then to to the beginning of the main control loop
+  serialcomm::sendLOP();
+  while (digitalRead(LOPSWOFFPin) == HIGH) {} // Wait until the switch is flipped
+  // Send something serial
+  // Trigger reset
+  resetFunc();
+
+}
+
+void checkAndHandleLOP()
+{
+  if (LOPSWActivated() == false) return;
+  LOPActive();
+}
+
+void serialcomm::sendLOP()
+{
+  Serial.println("!l");
 }
