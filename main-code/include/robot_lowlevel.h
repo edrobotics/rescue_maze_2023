@@ -356,14 +356,14 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
 
 //------------------------- Rescue kits -----------------------------------//
 
-void initServo();
-
 void signalVictim();
 
 void handleVictim(double fromInterrupt);
 
 // Deploy a rescue kit in the current position
 void deployRescueKit();
+
+void servoSetup();
 
 
 

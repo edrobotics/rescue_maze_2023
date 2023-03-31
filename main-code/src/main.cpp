@@ -18,6 +18,7 @@ void setup()
   encodersInit();
   initColourSensor();
   initSwitches();
+  servoSetup();
   flushDistanceArrays();
   fillRampArrayFalse();
   // startDistanceMeasure(); // Why is this here?
@@ -34,9 +35,9 @@ void setup()
 // double robotAngle = 0;
 // double wallDistance = 0;
 
-#define PICODE
+// #define PICODE
 // #define TESTING_NAV
-// #define TESTING
+#define TESTING
 
 
 void loop()
@@ -63,18 +64,20 @@ void loop()
   // // Serial.println("");
   // delay(200);
 
-  driveStep();
-  delay(500);
-  lights::turnOff();
-  delay(500);
-  driveStep();
-  delay(500);
-  lights::turnOff();
-  delay(1500);
+  // driveStep();
+  // delay(500);
+  // lights::turnOff();
+  // delay(500);
+  // driveStep();
+  // delay(500);
+  // lights::turnOff();
+  // delay(1500);
   // turnSteps(cw, 1);
   // delay(500);
   // turnSteps(ccw, 1);
   // delay(500);
+  deployRescueKit();
+  delay(2000);
   
 
   #else

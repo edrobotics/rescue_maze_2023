@@ -3,6 +3,7 @@
 // #include <ultrasonic_sensor.h>
 #include <Arduino.h>
 #include <MeAuriga.h>
+#include <Servo.h>
 // #include <MeEncoderOnBoard.h>
 #include <MeGyro.h>
 #include <Wire.h>
@@ -15,6 +16,9 @@ MeEncoderOnBoard encoderLB(SLOT3); // Left back encoder motor
 MeEncoderOnBoard encoderRF(SLOT1); // Right front encoder motor
 MeEncoderOnBoard encoderRB(SLOT4); // Right back encoder motor
 
+
+// Servo
+Servo servo;
 
 // Ultrasonic sensor definitions
 MeUltrasonicSensor ultrasonicLF(PORT_8); // Left front
@@ -1823,10 +1827,6 @@ void testWallChanges()
 
 //------------------------------ Victims and rescue kits ------------------------------//
 
-void initServo()
-{
-}
-
 
 void signalVictim()
 {
@@ -1852,7 +1852,7 @@ void handleVictim(double fromInterrupt)
   {
     lights::setColour(i+2, colourRed, true);
     deployRescueKit();
-    delay(100);
+    delay(500);
   }
 
   // Return the robot to original orientation
@@ -1866,18 +1866,30 @@ void handleVictim(double fromInterrupt)
   lights::turnOff();
 }
 
+int servoPos = 10; // Servo position. Here set to starting position
+const int servoLower = 10;
+const int servoUpper = 170;
+
+void servoSetup()
+{
+  servo.attach(4);
+  servo.write(servoPos);
+}
+
 void deployRescueKit()
 {
 
-  // To be done
-  // for (int i=0; i<3; ++i)
-  // {
-  // buzzer.tone(440, 200);
-  // delay(200);
-  // }
-  sounds::tone(440, 333);
-  sounds::tone(880, 333);
-  delay(100);
+  for (servoPos = servoLower; servoPos<=servoUpper; servoPos += 2)
+  {
+    servo.write(servoPos);
+    delay(15);
+  }
+  delay(500);
+  for (servoPos = servoUpper; servoPos >= servoLower; servoPos -= 2)
+  {
+    servo.write(servoPos);
+    delay(15);
+  }
 }
 
 
