@@ -10,7 +10,8 @@ import timeit
 ssh = False
 showcolor = False
 inRobot = True
-connected = True
+connected = False
+ttime = False
 while connected: 
     print("connecting...")
     try: 
@@ -50,47 +51,82 @@ lS = cv2.rotate(rS, cv2.ROTATE_180)
 
 SampleVictims = (rU, lU, nH, rS, lS)
 
-def identify_victim(victim, side): 
-    if not ssh: cv2.imshow("victim", victim)
-    contours, hierarchy = cv2.findContours(victim,cv2.RETR_LIST,cv2.CHAIN_APPROX_NONE)
+
+def identify_victim2(ivictim,victim):
+#    victim = np.invert(victim)
+    if ssh == False:
+        cv2.imshow("victim", ivictim)
+    found = False 
+    contours, hierarchy = cv2.findContours(ivictim,cv2.RETR_LIST,cv2.CHAIN_APPROX_NONE)
     for cnt in contours:
         area = cv2.contourArea(cnt)
         para = cv2.arcLength(cnt,True)
         if para == 0:
             break
-        apr = area/para
         approx = cv2.approxPolyDP(cnt, 0.003 * cv2.arcLength(cnt, True), True)
+        apr = area/para
+        print("apr: ",str(apr))
+        print("area: ", str(area))
+        print("para: ", str(para))
+        print("approx: ", len(approx))
+        if victim == "H":
+            if apr > 11 and apr < 15 and len(approx) > 12 and len(approx) < 25:
+                print("H detected")
+                found = True
+        if victim == "S":
+            if apr > 9 and apr < 13 and len(approx) > 32 and len(approx) < 40:
+                print("S detected")
+                found = True
+        if victim == "U":
+            if apr > 10 and apr < 15 and len(approx) > 17 and len(approx) < 23:
+                print("U detected")
+                found = True
+        return found
+
+
+def identify_victim(victim, side): 
+#    if not ssh: cv2.imshow("victim", victim)
     i = 0
     for sample in SampleVictims:
         negativ  = cv2.bitwise_and(victim, sample)
         if np.count_nonzero(negativ) < 100:
             if i == 0: 
                 print("rU")
-                sendMessage("k0"+side)
+                if identify_victim2(victim, "U"):
+                    sendMessage("k0"+side)
             elif i == 1: 
                 print("lU")
-                sendMessage("k0"+side)
+                if identify_victim2(victim, "U"):
+                    sendMessage("k0"+side)
             elif i == 2: 
                 print("nH")
-                sendMessage("k3"+side)
+                if identify_victim2(victim, "H"):
+                    sendMessage("k3"+side)
             elif i == 3: 
                 print("rS")
-                sendMessage("k2"+side)
+                if identify_victim2(victim, "S"):
+                    sendMessage("k2"+side)
             elif i == 4: 
                 print("lS")
-                sendMessage("k2"+side)
+                if identify_victim2(victim, "S"):
+                    sendMessage("k2"+side)
 #                cv2.waitKey(0)
             else:     
                 print("smt wrong")
         i = i + 1
 
 def find_visual_victim():
+    img = image.copy
     gray = cv2.cvtColor(image,cv2.COLOR_BGR2GRAY)
-    ret,binary = cv2.threshold(gray,70,255,0, cv2.THRESH_BINARY)
+    ret,binary = cv2.threshold(gray,125,255,0, cv2.THRESH_BINARY)
 
     binary = np.invert(binary)
-#    cv2.imshow("binary", binary)
-    binary[:, 290:370] = (0)
+    cv2.imshow("binary", binary)
+    binary[:, 280:350] = (0)
+    binary[:10, :] = (0)
+    binary[:40, :320] = (0)
+    binary[470:, :] = (0)
+    binary[420:, :320] = (0)
     contours, hierarchy = cv2.findContours(binary,cv2.RETR_LIST,cv2.CHAIN_APPROX_NONE)
 #    cv2.imshow("binary2", binary)
     cv2.drawContours(image, contours, -1, (0, 255, 0), 3)
@@ -98,11 +134,14 @@ def find_visual_victim():
 #    print(len(contours))
     for cnt in contours:
         area = cv2.contourArea(cnt)
+        image2 = image
         rect = cv2.minAreaRect(cnt)
         box = cv2.boxPoints(rect)
         box = np.int0(box)
         cv2.drawContours(image, [box], 0, (255, 0, 0), 3)
         if area>50:
+            cv2.drawContours(image2, [box], 0, (0, 0, 255), 3)
+ #           cv2.imshow("image2", image2)
 #            cv2.waitKey(0)
             para = cv2.arcLength(cnt,True)
             approx = cv2.approxPolyDP(cnt, 0.009 * cv2.arcLength(cnt, True), True)
@@ -157,18 +196,19 @@ def find_colour_victim():
         print("has red") 
         print(np.count_nonzero(red_mask))
         sendMessage("k1l")
-    green_lower_range = np.array([30,40,40])
-    green_upper_range = np.array([70,255,255])
+    green_lower_range = np.array([50,40,40])
+    green_upper_range = np.array([65,255,255])
     green_mask = cv2.inRange(hsv, green_lower_range, green_upper_range)
+    green_mask[:, 290:370] = (0)
     if showcolor: cv2.imshow("green", green_mask)
-    if np.count_nonzero(green_mask) > 1000: 
+    if np.count_nonzero(green_mask) > 2000: 
         print("has green")
         print(np.count_nonzero(green_mask))
         sendMessage("k0l")
     yellow_lower_range = np.array([15,100,100])
     yellow_upper_range = np.array([20,255,255])
     yellow_mask = cv2.inRange(hsv, yellow_lower_range, yellow_upper_range)
-    if np.count_nonzero(yellow_mask) > 1000:
+    if np.count_nonzero(yellow_mask) > 4000:
         print("has yellow", )
         print(np.count_nonzero(yellow_mask))
         sendMessage("k1l")
@@ -182,23 +222,24 @@ def find_colour_victim():
 camera = PiCamera()
 camera.resolution = (640, 480)
 camera.framerate = 10  
-
-#start_etime = time.time()
-#frame_time = time.time() 
+camera.shutter_speed = 3000
+camera.iso = 800
+if ttime: start_etime = time.time()
+if ttime: frame_time = time.time() 
 rawCapture = PiRGBArray(camera, size=(640, 480))
 for frame in camera.capture_continuous(rawCapture, format="bgr", use_video_port=True):
-#    print("frame time", time.time() - frame_time)
-#    print("entire time", time.time() - start_etime)
-#    start_etime = time.time()
+    if ttime: print("frame time", time.time() - frame_time)
+    if ttime: print("entire time", time.time() - start_etime)
+    if ttime: start_etime = time.time()
     image = frame.array
     rawCapture.truncate(0)
-    start_time = time.time()
+    if ttime: start_time = time.time()
     find_colour_victim()
-#    print("Color_victim time", time.time() - start_time)
- #   start_time = time.time()
+    if ttime: print("Color_victim time", time.time() - start_time)
+    if ttime: start_time = time.time()
     find_visual_victim()
-    #print("visual_victim time", time.time() - start_time)
-   # test_time = time.time() 
+    if ttime: print("visual_victim time", time.time() - start_time)
+    if ttime: test_time = time.time() 
     try: 
         if not ssh: cv2.imshow("frame", image)
         pass
@@ -208,5 +249,5 @@ for frame in camera.capture_continuous(rawCapture, format="bgr", use_video_port=
     key = cv2.waitKey(1)
     if key == 27: 
         break
- #   print("test", time.time() - test_time)
-  #  frame_time = time.time() 
+    if ttime: print("test", time.time() - test_time)
+    if ttime: frame_time = time.time() 
