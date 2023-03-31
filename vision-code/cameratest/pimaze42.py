@@ -66,28 +66,18 @@ def identify_victim(victim, side):
         if np.count_nonzero(negativ) < 100:
             if i == 0: 
                 print("rU")
-                if apr > 9 and apr < 15 and len(approx) > 15 and len(approx) < 25:
-                    print("wrong")
                 sendMessage("k0"+side)
             elif i == 1: 
                 print("lU")
-                if apr > 9 and apr < 15 and len(approx) > 15 and len(approx) < 25:
-                    print("wrong")
                 sendMessage("k0"+side)
             elif i == 2: 
                 print("nH")
-                if apr > 11 and apr < 15 and len(approx) > 12 and len(approx) < 17:
-                    print("wrong")
                 sendMessage("k3"+side)
             elif i == 3: 
                 print("rS")
                 sendMessage("k2"+side)
-                if apr > 9 and apr < 13 and len(approx) > 32 and len(approx) < 40:
-                    print("wrong")
             elif i == 4: 
                 print("lS")
-                if apr > 9 and apr < 13 and len(approx) > 32 and len(approx) < 40:
-                    print("wrong")
                 sendMessage("k2"+side)
 #                cv2.waitKey(0)
             else:     
@@ -95,7 +85,6 @@ def identify_victim(victim, side):
         i = i + 1
 
 def find_visual_victim():
-    img = image.copy
     gray = cv2.cvtColor(image,cv2.COLOR_BGR2GRAY)
     ret,binary = cv2.threshold(gray,70,255,0, cv2.THRESH_BINARY)
 
@@ -109,14 +98,11 @@ def find_visual_victim():
 #    print(len(contours))
     for cnt in contours:
         area = cv2.contourArea(cnt)
-        image2 = image
         rect = cv2.minAreaRect(cnt)
         box = cv2.boxPoints(rect)
         box = np.int0(box)
         cv2.drawContours(image, [box], 0, (255, 0, 0), 3)
         if area>50:
-            cv2.drawContours(image2, [box], 0, (0, 0, 255), 3)
- #           cv2.imshow("image2", image2)
 #            cv2.waitKey(0)
             para = cv2.arcLength(cnt,True)
             approx = cv2.approxPolyDP(cnt, 0.009 * cv2.arcLength(cnt, True), True)
@@ -196,6 +182,7 @@ def find_colour_victim():
 camera = PiCamera()
 camera.resolution = (640, 480)
 camera.framerate = 10  
+
 #start_etime = time.time()
 #frame_time = time.time() 
 rawCapture = PiRGBArray(camera, size=(640, 480))
@@ -209,7 +196,7 @@ for frame in camera.capture_continuous(rawCapture, format="bgr", use_video_port=
     find_colour_victim()
 #    print("Color_victim time", time.time() - start_time)
  #   start_time = time.time()
- #   find_visual_victim()
+    find_visual_victim()
     #print("visual_victim time", time.time() - start_time)
    # test_time = time.time() 
     try: 
