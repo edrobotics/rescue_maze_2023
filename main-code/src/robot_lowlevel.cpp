@@ -255,7 +255,7 @@ void serialcomm::answerInterrupt()
 
 void lightsAndBuzzerInit()
 {
-  // buzzer.setpin(45);
+  buzzer.setpin(45);
   ledRing.setpin(44);
   ledRing.fillPixelsBak(0, 2, 1);
   lights::turnOff();
@@ -407,6 +407,15 @@ void lights::reversing()
 {
   setColour(8, colourWhite, false);
   setColour(10, colourWhite, true);
+}
+
+
+void lights::onRamp()
+{
+  setColour(2, colourBlue, false);
+  setColour(4, colourBlue, false);
+  setColour(8, colourBlue, false);
+  setColour(10, colourBlue, true);
 }
 
 
@@ -1280,6 +1289,41 @@ double measurementAverage(double arrayToCalc[]) // Use a reference to the array 
 
 
 
+bool g_onRampIterations[ON_RAMP_ARR_SIZE];
+int g_onRampPointer = 0;
+// bool g_previousOnRampState = false;
+double g_trueDistanceDrivenOnRamp = 0;
+
+
+void fillRampArrayFalse()
+{
+  for (int i=0; i<ON_RAMP_ARR_SIZE; ++i)
+  {
+    g_onRampIterations[i] = false;
+  }
+}
+
+void addOnRampValue(bool state)
+{
+  g_onRampPointer = g_onRampPointer % ON_RAMP_ARR_SIZE; // Could cause errors if g_onRampPointer goes negative, which it never should
+  g_onRampIterations[g_onRampPointer] = state;
+  ++g_onRampPointer;
+}
+
+// Returns true if you are currently on a ramp
+bool getIsOnRamp()
+{
+  int sum = 0;
+  for (int i=0; i<ON_RAMP_ARR_SIZE; ++i)
+  {
+    if (g_onRampIterations[i] == true) ++sum;
+  }
+  int average = (double)sum/(double)ON_RAMP_ARR_SIZE;
+  if (average > 0.5) return true;
+  else return false;
+}
+
+
 // What to run inside of the driveStep loop (the driving forward-portion)
 // Arguments have the same names as the variables they should accept in driveStep.
 // wallToUse - which wall to follow/measure
@@ -1287,31 +1331,31 @@ double measurementAverage(double arrayToCalc[]) // Use a reference to the array 
 // gyroOffset - which angle the gyro indicates when the step starts (mathangle)
 // dumbDistanceDriven - used to keep track of the distance travelled measured by the encoder
 // stopReason - gives the reason for why the robot stopped moving
-bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, StoppingReason& stopReason)
+bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, StoppingReason& stopReason, bool& rampDriven)
 {
   getUltrasonics1();
   ColourSensor::FloorColour g_floorColour = colSensor.checkFloorColour();
-  // if (g_driveBack == false)
-  // {
-  //   switch (g_floorColour)
-  //   {
-  //     case ColourSensor::floor_notUpdated:
-  //       break; // Do nothing
-  //     case ColourSensor::floor_black:
-  //       // Drive back to last point and exit the loop
-  //       stopReason = stop_floorColour;
-  //       return true; // Exit the loop
-  //       break;
-  //     case ColourSensor::floor_blue:
-  //       // Go on driving and tell Marcus that there is a blue tile
-  //       // stopReason = stop_floorColour;
-  //       // return true; // Exit the loop
-  //       break;
-  //     default:
-  //       // Do nothing (includes silver)
-  //       break; // Potential problem with the last break statement?
-  //   }
-  // }
+  if (g_driveBack == false)
+  {
+    switch (g_floorColour)
+    {
+      case ColourSensor::floor_notUpdated:
+        break; // Do nothing
+      case ColourSensor::floor_black:
+        // Drive back to last point and exit the loop
+        stopReason = stop_floorColour;
+        return true; // Exit the loop
+        break;
+      case ColourSensor::floor_blue:
+        // Go on driving and tell Marcus that there is a blue tile
+        // stopReason = stop_floorColour;
+        // return true; // Exit the loop
+        break;
+      default:
+        // Do nothing (includes silver)
+        break; // Potential problem with the last break statement?
+    }
+  }
   getUltrasonics2();
   // printUltrasonics();
   checkWallPresence();
@@ -1333,11 +1377,55 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
   // Updating the distances
   // Increment the true distance driven.
   // Done by calculating the leg parallell to the wall in the right triangle formed by the distance travelled and the lines parallell to walls in both directions (see notes on paper)
-  g_trueDistanceDriven += multiplier*(getDistanceDriven()-dumbDistanceDriven) * cos(abs(g_robotAngle*DEG_TO_RAD)); // Because g_lastWallAngle is updated continuosly, it can be used here. Or I can just use robotAngle instead.
+  double trueDistanceIncrement = multiplier*(getDistanceDriven()-dumbDistanceDriven) * cos(abs(g_robotAngle*DEG_TO_RAD)); // Because g_lastWallAngle is updated continuosly, it can be used here. Or I can just use robotAngle instead.
+  g_trueDistanceDriven += trueDistanceIncrement;
   dumbDistanceDriven = getDistanceDriven();
 
   // Checking lack of progress switch
   checkAndHandleLOP();
+
+  
+  // Ramp handling -------------------
+
+  // Checking for ramps (perhaps do running average?)
+  // Need to handle when you get off the ramp, so that you don't stop immediately
+  if (abs(gyro.getAngleX()) > 10) addOnRampValue(true);
+  else addOnRampValue(false);
+
+  bool onRamp = getIsOnRamp();
+  bool rampChange = false;
+  // if (onRamp != g_previousOnRampState) rampChange = true;
+
+  if (onRamp == true)
+  {
+    g_trueDistanceDrivenOnRamp += trueDistanceIncrement;
+    if (g_trueDistanceDrivenOnRamp > 10) rampDriven = true;
+    // RampDrive. Do nothing special?
+    lights::onRamp();
+    
+  }
+  else // What to do ONLY when NOT on a ramp ------------------------------------------------------
+  {
+    // Checking if you are done
+    if (ultrasonicDistanceF < (15 - ultrasonicFrontOffset + 4.5) && g_driveBack == false) // If the robot is the correct distance away from the front wall. The goal is that ultrasonicDistanceF is 5.2 when the robot stops. Should not do when driving backwards.
+    {
+      // lights::setColour(3, colourBase, true);
+      // g_trueDistanceDriven = 30; // The robot has arrived
+      stopReason = stop_frontWallPresent;
+      // stopReason = stop_floorColour; // For debugging driving backwards
+      // g_floorColour = ColourSensor::floor_black; // Same as line above
+      return true;
+    }
+    //Serial.println(ultrasonicDistanceF); // Debugging
+
+
+    if (g_trueDistanceDriven >= g_targetDistance-2 && rampDriven == false) // Should not drive based on encoders if you have driven up the ramp
+    {
+      if (stopReason == stop_none) stopReason = stop_deadReckoning;
+      g_driveBack = false; // Reset the driveBack variable (do not drive back the next step)
+      return true;
+    }
+  }
 
   // Checking for wallchanges (needs some more robustness!)
   WallChangeType backWallCheck = wallchange_none;
@@ -1441,47 +1529,9 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
     }
   }
 
-  bool onRamp = false;
-  // Determine onRamp
-
-// Checking for ramps (perhaps do running average?)
-// Need to handle when you get off the ramp, so that you don't stop immediately
-  if (abs(gyro.getAngleX()) > 10)
-  {
-    onRamp = true;
-  }
-  else onRamp = false;
-
-  if (onRamp == true)
-  {
-    // RampDrive. Do nothing special?
-  }
-
-  else // What to do ONLY when NOT on a ramp ------------------------------------------------------
-  {
-    // Checking if you are done
-    if (ultrasonicDistanceF < (15 - ultrasonicFrontOffset + 4.5) && g_driveBack == false) // If the robot is the correct distance away from the front wall. The goal is that ultrasonicDistanceF is 5.2 when the robot stops. Should not do when driving backwards.
-    {
-      // lights::setColour(3, colourBase, true);
-      // g_trueDistanceDriven = 30; // The robot has arrived
-      stopReason = stop_frontWallPresent;
-      // stopReason = stop_floorColour; // For debugging driving backwards
-      // g_floorColour = ColourSensor::floor_black; // Same as line above
-      return true;
-    }
-    //Serial.println(ultrasonicDistanceF); // Debugging
 
 
-    if (g_trueDistanceDriven >= g_targetDistance-2 )
-    {
-      if (stopReason == stop_none) stopReason = stop_deadReckoning;
-      g_driveBack = false; // Reset the driveBack variable (do not drive back the next step)
-      return true;
-    }
-  }
-
-
-
+  // g_previousOnRampState = onRamp; // Update for the next loop
   return false; // The default return - not finished
 }
 
@@ -1539,7 +1589,7 @@ bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, bo
   // Drive until the truDistanceDriven is 30 or greater. This is the original way I did it, but the alternative way below may be used if the later parts of this code are changed.
   while (shouldStop == false)
   {
-  shouldStop = driveStepDriveLoop(wallToUse, dumbDistanceDriven, stoppingReason); // There does not seem to be a time difference between calling the function like this and pasting in the code
+  shouldStop = driveStepDriveLoop(wallToUse, dumbDistanceDriven, stoppingReason, rampDriven); // There does not seem to be a time difference between calling the function like this and pasting in the code
   // Serial.print(dumbDistanceDriven);
   // Serial.print("      ");
   // Serial.print(g_trueDistanceDriven);
@@ -1562,10 +1612,11 @@ bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, bo
   // Continue driving forward if necessary (close enough to the wall in front)
   if (stoppingReason != stop_frontWallPresent && stoppingReason != stop_floorColour && ultrasonicDistanceF < (15-ultrasonicFrontOffset + 10) && (g_floorColour != ColourSensor::floor_black) && g_driveBack == false) // && g_floorColour != ColourSensor::floor_blue // Removed due to strategy change
   {
+    bool throwaWayRampDriven = false; // Just to give driveStepDriveLoop someting. Is not used for anything.
     lights::setColour(3, colourOrange, true);
     while (ultrasonicDistanceF > (15-ultrasonicFrontOffset + 4.5) && (g_trueDistanceDriven-trueDistanceDrivenFlag) < 7) // The part about trueDistance is a failsafe in case the sensor fails
     {
-      driveStepDriveLoop(wallToUse, dumbDistanceDriven, stoppingReason);
+      driveStepDriveLoop(wallToUse, dumbDistanceDriven, stoppingReason, throwaWayRampDriven);
     }
     // lights::setColour(3, colourBase, true);
      stoppingReason = stop_frontWallPresentFaraway;
@@ -1828,9 +1879,10 @@ void LOPActive()
 {
   stopWheels();
   // Ideally, this should wait for the switch to be switched off and then to to the beginning of the main control loop
-  serialcomm::sendLOP();
+  serialcomm::sendLOPStop();
   while (digitalRead(LOPSWOFFPin) == HIGH) {} // Wait until the switch is flipped
   // Send something serial
+
   // Trigger reset
   resetFunc();
 
@@ -1842,7 +1894,12 @@ void checkAndHandleLOP()
   LOPActive();
 }
 
-void serialcomm::sendLOP()
+void serialcomm::sendLOPStop()
 {
-  Serial.println("!l");
+  Serial.println("!l,s");
+}
+
+void serialcomm::sendLOPResume()
+{
+  Serial.println("!l,r");
 }

@@ -19,6 +19,7 @@ void setup()
   initColourSensor();
   initSwitches();
   flushDistanceArrays();
+  fillRampArrayFalse();
   // startDistanceMeasure(); // Why is this here?
   
 

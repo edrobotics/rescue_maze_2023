@@ -7,6 +7,9 @@
 // #include <MeGyro.h>
 #include <colour_sensor.h>
 
+const int ON_RAMP_ARR_SIZE = 5;
+
+
 //////////////// Public functions /////////////////////////////
 
 // Drives one step (30cm) forwards.
@@ -71,7 +74,9 @@ namespace serialcomm
     // Should accept types in the same way that Serial.print() does.
     bool sendDebug();
 
-    void sendLOP();
+    void sendLOPStop();
+
+    void sendLOPResume();
 }
 
 // Makes a navigation decision
@@ -129,6 +134,8 @@ namespace lights
     void indicateFrontSensor();
 
     void reversing();
+
+    void onRamp();
 
 }
 
@@ -339,10 +346,14 @@ enum StoppingReason
   stop_frontSensor,
 };
 
+
+// For ramp driving
+void fillRampArrayFalse();
+
 // What to run inside of the driveStep loop (the driving forward-portion)
 // wallToUse - which wall to follow/measure
 // dumbDistanceDriven - used to keep track of the distance travelled measured by the encoder
-bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, StoppingReason& stopReason);
+bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, StoppingReason& stopReason, bool& rampDriven);
 
 
 //------------------------- Rescue kits -----------------------------------//
