@@ -94,7 +94,7 @@ Encoder_port_type encoder_Port[6] =
   { 19,     42,     11,     49,     48},
   //ENB A   ENB B   PWMB    DIR B1  DIR B2
   { 18,     43,     10,     47,     46},
-  { 2,     4,     5,     17,     16},
+  { 2,     31,     5,     17,     16},
   { 3,     6,     7,     8,     9},
   { NC,     NC,     NC,     NC,     NC},
 };

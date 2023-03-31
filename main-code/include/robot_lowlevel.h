@@ -74,9 +74,7 @@ namespace serialcomm
     // Should accept types in the same way that Serial.print() does.
     bool sendDebug();
 
-    void sendLOPStop();
-
-    void sendLOPResume();
+    void sendLOP();
 }
 
 // Makes a navigation decision
@@ -381,13 +379,6 @@ void initSwitches();
 
 // Returns true if the front sensor is activated (pressed in)
 bool frontSensorActivated();
-
-bool LOPSWActivated();
-
-void LOPActive();
-
-void checkAndHandleLOP();
-
 
 
 

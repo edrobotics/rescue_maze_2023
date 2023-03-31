@@ -27,6 +27,7 @@ void setup()
   delay(500);
   lights::activated();
   delay(100);
+  serialcomm::sendLOP();
 }
 
 // Why are these here?

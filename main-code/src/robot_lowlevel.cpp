@@ -69,7 +69,7 @@ double g_startDistance = 0; // The distance that you start from
 const double ULTRASONIC_SPACING = 14.6; // The distance between the centers two ultrasonic sensors.
 const double ULTRASONIC_FRONT_OFFSET = 9.5; // The distance from the front sensor to the center of the robot
 const double ultrasonicDistanceToWall = 7.1; // The distance between the ultrasonic sensor (edge of the robot) and the wall when the robot is centered.
-const double wallPresenceTreshold = 15; // Not calibrated !!!!!!!!!!!!!!!!!!!!!!!! Just a guess!!!!!!!!!!!!!!!!!!!!!!!
+const double wallPresenceTreshold = 20; // Not calibrated !!!!!!!!!!!!!!!!!!!!!!!! Just a guess!!!!!!!!!!!!!!!!!!!!!!!
 
 // Sensor data
 // const int DISTANCE_MEASUREMENT_SIZE = 5; // The number of measurements in the distance arrays
@@ -131,7 +131,7 @@ void serialcomm::returnFailure()
 void serialcomm::returnAnswer(int answer)
 {
   Serial.print("!a,");
-  Serial.write(answer);
+  Serial.print(answer);
   Serial.println("");
   // Serial.write('\n');
   Serial.flush();
@@ -755,7 +755,6 @@ void gyroTurn(double turnAngle, bool stopMoving, double baseSpeed = 0)
       g_currentGyroAngle = gyroAngleToMathAngle(gyro.getAngleZ());
       loopEncoders();
       varLeftToTurn = leftToTurn(crossingZero, multiplier, targetGyroAngle, g_currentGyroAngle);
-      checkAndHandleLOP();
     }
 
     // Slowing down in the end of the turn.
@@ -770,7 +769,6 @@ void gyroTurn(double turnAngle, bool stopMoving, double baseSpeed = 0)
       g_currentGyroAngle = gyroAngleToMathAngle(gyro.getAngleZ());
       loopEncoders();
       varLeftToTurn = leftToTurn(crossingZero, multiplier, targetGyroAngle, g_currentGyroAngle);
-      checkAndHandleLOP();
     }
 
     if (stopMoving==true) stopWheels();
@@ -1417,9 +1415,6 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
   g_trueDistanceDriven += trueDistanceIncrement;
   dumbDistanceDriven = getDistanceDriven();
 
-  // Checking lack of progress switch
-  checkAndHandleLOP();
-
   
   // Ramp handling -------------------
 
@@ -1450,7 +1445,7 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
     }
     useNormPID();
     // Checking if you are done
-    if (ultrasonicDistanceF < (15 - ULTRASONIC_FRONT_OFFSET + 2.5) && g_driveBack == false) // If the robot is the correct distance away from the front wall. The goal is that ultrasonicDistanceF is 5.2 when the robot stops. Should not do when driving backwards.
+    if (ultrasonicDistanceF < (15 - ULTRASONIC_FRONT_OFFSET + 1.5) && g_driveBack == false) // If the robot is the correct distance away from the front wall. The goal is that ultrasonicDistanceF is 5.2 when the robot stops. Should not do when driving backwards.
     {
       // lights::setColour(3, colourBase, true);
       // g_trueDistanceDriven = 30; // The robot has arrived
@@ -1893,16 +1888,10 @@ void deployRescueKit()
 const int pressPlateSW1 = 34;
 const int pressPlateSW2 = 36;
 
-// Lack of progress switch (two pins for one switch)
-const int LOPSWONPin = 32;
-const int LOPSWOFFPin = 30;
-
 void initSwitches()
 {
   pinMode(pressPlateSW1, INPUT_PULLUP);
   pinMode(pressPlateSW2, INPUT_PULLUP);
-  pinMode(LOPSWONPin, INPUT_PULLUP);
-  pinMode(LOPSWOFFPin, INPUT_PULLUP);
 }
 
 bool frontSensorActivated()
@@ -1914,42 +1903,7 @@ bool frontSensorActivated()
   else return false;
 }
 
-bool LOPSWActivated()
+void serialcomm::sendLOP()
 {
-  if (digitalRead(LOPSWONPin) == LOW)
-  {
-    return true;
-  }
-  else return false;
-}
-
-void(* resetFunc) (void) = 0; // Reset function
-
-void LOPActive()
-{
-  stopWheels();
-  // Ideally, this should wait for the switch to be switched off and then to to the beginning of the main control loop
-  serialcomm::sendLOPStop();
-  while (digitalRead(LOPSWOFFPin) == HIGH) {} // Wait until the switch is flipped
-  // Send something serial
-
-  // Trigger reset
-  resetFunc();
-
-}
-
-void checkAndHandleLOP()
-{
-  if (LOPSWActivated() == false) return;
-  LOPActive();
-}
-
-void serialcomm::sendLOPStop()
-{
-  Serial.println("!l,s");
-}
-
-void serialcomm::sendLOPResume()
-{
-  Serial.println("!l,r");
+  Serial.println("!l");
 }
