@@ -137,6 +137,8 @@ namespace lights
 
     void indicateCheckpoint();
 
+    void rampDriven();
+
 }
 
 namespace sounds

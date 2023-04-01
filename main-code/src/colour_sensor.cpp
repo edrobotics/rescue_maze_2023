@@ -132,13 +132,13 @@ ColourSensor::FloorColour ColourSensor::identifyColour()
     // printValues();
     // printRatios();
 
-    if (lowerUpperEval(rbRatio, 0, 0.95) && lowerUpperEval(gbRatio, 0, 0.95)) return floor_blue; // Could be lower (0.85?) for both
+    if (lowerUpperEval(rbRatio, 0, 1.05) && lowerUpperEval(rbRatio, 0, 1) && lowerUpperEval(gbRatio, 0, 0.99)) return floor_blue; // Could be lower (0.85?) for both
 
-    else if (lowerUpperEval(rgRatio, 1.17, 1.5) && lowerUpperEval(rbRatio, 1.3, 1.45) && lowerUpperEval(gbRatio, 1.01, 1.2)) return floor_reflective;
+    else if (lowerUpperEval(rgRatio, 1.0, 1.4) && lowerUpperEval(rbRatio, 1.25, 1.6) && lowerUpperEval(gbRatio, 1.15, 1.3)) return floor_reflective;
 
-    else if (lowerUpperEval(rgRatio, 1.0, 1.2) && lowerUpperEval(rbRatio, 1.15, 1.4) && lowerUpperEval(gbRatio, 1.1, 1.3)) return floor_white; // reflective falls (partly) into the same span, but because reflective would have returned all that is left in this area should be white
+    else if (lowerUpperEval(rgRatio, 0.9, 1.1) && lowerUpperEval(rbRatio, 1.0, 1.3) && lowerUpperEval(gbRatio, 1.0, 1.2)) return floor_white; // reflective falls (partly) into the same span, but because reflective would have returned all that is left in this area should be white
     
-    else if (lowerUpperEval(rgRatio, 1.7, 6) && lowerUpperEval(rbRatio, 2.3, 6) && lowerUpperEval(gbRatio, 1.2, 1.5)) return floor_black;
+    else if (lowerUpperEval(rgRatio, 1.7, 6) && lowerUpperEval(rbRatio, 2.0, 6) && lowerUpperEval(gbRatio, 1.2, 1.5)) return floor_black;
 
     else return floor_unknown;
 

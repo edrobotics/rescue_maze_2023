@@ -275,6 +275,7 @@ RGBColour colourBlue {0, 0, 150};
 RGBColour colourError {200, 10, 0};
 RGBColour colourAffirmative { 20, 150, 0};
 RGBColour colourYellow {50, 50, 0};
+RGBColour colourPurple {100, 0, 150};
 
 void lights::turnOff()
 {
@@ -438,6 +439,11 @@ void lights::indicateCheckpoint()
     delay(200);
 
   }
+}
+
+void lights::rampDriven()
+{
+  setColour(9, colourPurple, true);
 }
 
 void sounds::errorBeep()
@@ -1696,6 +1702,11 @@ bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, bo
 
   g_driveBack = false;
 
+  if (colSensor.lastKnownFloorColour == ColourSensor::floor_reflective)
+  {
+    g_floorColour = ColourSensor::floor_reflective;
+  }
+
   switch (stoppingReason)
   {
     case stop_frontWallPresent:
@@ -1743,6 +1754,9 @@ bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, bo
   //   delay(300);
   //   colSensor.checkFloorColour();
   //   // Handle checkpoints.
+  //   lights::indicateCheckpoint();
+  //   delay(100);
+  //   lights::turnOff();
   // }
   if (colSensor.lastKnownFloorColour == ColourSensor::floor_blue)
   {
@@ -1765,6 +1779,12 @@ bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, bo
   // g_lastWallAngle = g_robotAngle;
   updateRobotPose(); // Replaces the previous code
 
+  if (rampDriven == true)
+  {
+    lights::rampDriven();
+    delay(500);
+    lights::turnOff();
+  }
 
   // Determine whether you have driven a step or not
   if (g_trueDistanceDriven > 15 && stoppingReason != stop_floorColour) return true;
@@ -1898,7 +1918,7 @@ void handleVictim(double fromInterrupt)
 
 int servoPos = 10; // Servo position. Here set to starting position
 const int servoLower = 5;
-const int servoUpper = 170;
+const int servoUpper = 176;
 
 void servoSetup()
 {

@@ -35,8 +35,8 @@ void setup()
 // double robotAngle = 0;
 // double wallDistance = 0;
 
-#define PICODE
-// #define TESTING_NAV
+// #define PICODE
+#define TESTING_NAV
 // #define TESTING
 
 
@@ -58,10 +58,10 @@ void loop()
 
   
   // ColourSensor::FloorColour identifiedColour = colourSensor.checkFloorColour();
-  // // colourSensor.printRatios();
+  // colourSensor.printRatios();
   // colourSensor.printColourName(identifiedColour);
-  // colourSensor.printValues();
-  // // Serial.println("");
+  // // colourSensor.printValues();
+  // Serial.println("");
   // delay(200);
 
   // driveStep();
@@ -76,6 +76,8 @@ void loop()
   // delay(500);
   // turnSteps(ccw, 1);
   // delay(500);
+  
+  
   deployRescueKit();
   delay(2000);
   
@@ -126,6 +128,7 @@ void loop()
         if (floorColourAhead == ColourSensor::floor_reflective)
         {
           lights::indicateCheckpoint();
+          
         }
         // If we have moved, mazenav has to know the new colour. If we have not moved, the colour is already known.
         if (commandSuccess == true) //  || floorColourAhead == ColourSensor::floor_black || floorColourAhead == ColourSensor::floor_blue // Removed because it would return success every time it saw blue or black, regardless if it had driven a step or not.
