@@ -38,6 +38,11 @@ void ColourSensor::printRatios()
     // Serial.println(" ");
 }
 
+void ColourSensor::printClearVal()
+{
+    Serial.print("C: "); Serial.print(sensorClear, DEC); Serial.print(" ");
+}
+
 void ColourSensor::printColourName(ColourSensor::FloorColour colourToPrint)
 {
     switch (colourToPrint)
@@ -132,14 +137,15 @@ ColourSensor::FloorColour ColourSensor::identifyColour()
     // printValues();
     // printRatios();
 
-    if (lowerUpperEval(rbRatio, 0, 1.05) && lowerUpperEval(rbRatio, 0, 1) && lowerUpperEval(gbRatio, 0, 0.99)) return floor_blue; // Could be lower (0.85?) for both
+    int boolSumBlack = lowerUpperEval(rgRatio, 1.5, 6) + lowerUpperEval(rbRatio, 1.7, 6) + lowerUpperEval(gbRatio, 1.05, 2.0) + (sensorClear < 100);
+    int boolSumBlue = lowerUpperEval(rbRatio, 0, 1.05) + lowerUpperEval(rbRatio, 0, 1) + lowerUpperEval(gbRatio, 0, 0.99);
+    int boolSumReflective = lowerUpperEval(rgRatio, 1.0, 1.4) + lowerUpperEval(rbRatio, 1.1, 1.45) + lowerUpperEval(gbRatio, 1.1, 1.3);
+    int boolSumWhite = lowerUpperEval(rgRatio, 0.9, 1.1) + lowerUpperEval(rbRatio, 1.0, 1.3) + lowerUpperEval(gbRatio, 1.0, 1.2) + (sensorClear > 500);
 
-    else if (lowerUpperEval(rgRatio, 1.0, 1.4) && lowerUpperEval(rbRatio, 1.25, 1.6) && lowerUpperEval(gbRatio, 1.15, 1.3)) return floor_reflective;
-
-    else if (lowerUpperEval(rgRatio, 0.9, 1.1) && lowerUpperEval(rbRatio, 1.0, 1.3) && lowerUpperEval(gbRatio, 1.0, 1.2)) return floor_white; // reflective falls (partly) into the same span, but because reflective would have returned all that is left in this area should be white
-    
-    else if (lowerUpperEval(rgRatio, 1.7, 6) && lowerUpperEval(rbRatio, 2.0, 6) && lowerUpperEval(gbRatio, 1.2, 1.5)) return floor_black;
-
+    if (boolSumBlack >= 3) return floor_black;
+    else if (boolSumBlue >=3) return floor_blue; // Could be lower (0.85?) for both
+    else if (boolSumReflective >= 3 && (sensorClear > 200 && sensorClear < 500)) return floor_reflective;
+    else if (boolSumWhite >= 3) return floor_white; // reflective falls (partly) into the same span, but because reflective would have returned all that is left in this area should be white
     else return floor_unknown;
 
 
@@ -193,10 +199,12 @@ char ColourSensor::floorColourAsChar(ColourSensor::FloorColour floorColour)
       break;
     case ColourSensor::floor_reflective:
       return 'c';
+      break;
     case ColourSensor::floor_white:
       return 'v';
-    default:
-      return 'u'; // If some error occured
       break;
+    // default:
+    //   return 'u'; // If some error occured
+    //   break;
   }
 }

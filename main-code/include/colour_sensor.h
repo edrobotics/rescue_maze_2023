@@ -21,6 +21,7 @@ class ColourSensor
         char floorColourAsChar(FloorColour floorColour);
         void printValues();
         void printRatios();
+        void printClearVal();
         void printColourName(FloorColour colourToPrint);
 
         FloorColour lastKnownFloorColour;

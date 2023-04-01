@@ -35,9 +35,14 @@ void setup()
 // double robotAngle = 0;
 // double wallDistance = 0;
 
-// #define PICODE
-#define TESTING_NAV
+#define PICODE
+// #define TESTING_NAV
 // #define TESTING
+// #define COLSENS_CALIBRATION
+
+#ifdef COLSENS_CALIBRATION
+#define TESTING
+#endif
 
 
 void loop()
@@ -56,13 +61,21 @@ void loop()
   // delay(20);
   // serialcomm::clearBuffer();
 
-  
-  // ColourSensor::FloorColour identifiedColour = colourSensor.checkFloorColour();
-  // colourSensor.printRatios();
-  // colourSensor.printColourName(identifiedColour);
-  // // colourSensor.printValues();
-  // Serial.println("");
-  // delay(200);
+  #ifdef COLSENS_CALIBRATION
+  ColourSensor::FloorColour identifiedColour = colourSensor.checkFloorColour();
+  colourSensor.printRatios();
+  colourSensor.printClearVal();
+  colourSensor.printColourName(identifiedColour);
+  // colourSensor.printValues();
+  Serial.println("");
+  delay(200);
+
+  #else
+
+  deployRescueKit();
+  delay(2000);
+
+  #endif
 
   // driveStep();
   // delay(500);
@@ -77,9 +90,6 @@ void loop()
   // turnSteps(ccw, 1);
   // delay(500);
   
-  
-  deployRescueKit();
-  delay(2000);
   
 
   #else
@@ -123,6 +133,7 @@ void loop()
         {
           lights::reversing();
           driveStep(); // For driving back
+          // commandSuccess = true; // Not really, but Markus program wants it
         }
 
         if (floorColourAhead == ColourSensor::floor_reflective)
@@ -130,8 +141,10 @@ void loop()
           lights::indicateCheckpoint();
           
         }
+        // Serial.print("Floor colour ahead: ");
+        // Serial.println(floorColourAhead);
         // If we have moved, mazenav has to know the new colour. If we have not moved, the colour is already known.
-        if (commandSuccess == true) //  || floorColourAhead == ColourSensor::floor_black || floorColourAhead == ColourSensor::floor_blue // Removed because it would return success every time it saw blue or black, regardless if it had driven a step or not.
+        if (commandSuccess == true || (floorColourAhead == ColourSensor::floor_black)) //  || floorColourAhead == ColourSensor::floor_black || floorColourAhead == ColourSensor::floor_blue // Removed because it would return success every time it saw blue or black, regardless if it had driven a step or not.
         {
           Serial.print("!a,");
           Serial.print(colourSensor.floorColourAsChar(floorColourAhead)); // If you have not driven back floorColourAhead will actually be the current tile

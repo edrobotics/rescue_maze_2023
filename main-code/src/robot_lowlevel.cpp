@@ -1621,9 +1621,10 @@ bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, bo
   {
     // g_targetDistance = g_trueDistanceDriven + 2;
     // g_targetDistance = 15;
-    g_startDistance = g_trueDistanceDriven;
+    g_startDistance = g_targetDistance - g_trueDistanceDriven;
+    g_targetDistance += 3;
   }
-  g_trueDistanceDriven = 0;
+  g_trueDistanceDriven = g_startDistance;
   dumbDistanceDriven = 0;
 
   // Get sensor data for initial values
@@ -1702,10 +1703,15 @@ bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, bo
 
   g_driveBack = false;
 
-  if (colSensor.lastKnownFloorColour == ColourSensor::floor_reflective)
-  {
-    g_floorColour = ColourSensor::floor_reflective;
-  }
+  // Serial.print(g_floorColour); Serial.print("  ");
+  // Serial.println(colSensor.lastKnownFloorColour);
+
+  // if (colSensor.lastKnownFloorColour == ColourSensor::floor_reflective)
+  // {
+  //   g_floorColour = ColourSensor::floor_reflective;
+  // }
+  g_floorColour = colSensor.lastKnownFloorColour;
+  
 
   switch (stoppingReason)
   {
