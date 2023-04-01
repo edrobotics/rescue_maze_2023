@@ -1,9 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.IO.Ports;
 using System.Net.Sockets;
 using System.Text;
+using System.Threading;
 
 namespace SerialConsole
 {
@@ -48,6 +50,14 @@ namespace SerialConsole
         static bool wallNZ;
         static bool wallPX;
 
+        enum Directions
+        {
+            front,
+            left,
+            back,
+            right
+        }
+
         //******** Mapping & Checkpoints ********
 
         //static readonly ushort[,] mainMap = new ushort[50, 50]; //W = 0, A = 1, S = 2, D = 3, explored = 4, mapSearched = 5, victim  = 6, ramp = 7, black tile = 8, checkp = 9, blue = 10 -more? obstacles?
@@ -55,12 +65,13 @@ namespace SerialConsole
         static readonly List<ushort[,]> maps = new();
         static readonly List<string> mapInfo = new();
         static int currentMap = 0;
+        static bool reset = false;
 
         //******** Rescue Kits ********
 
         static bool dropKits = false;
-        static int dropAmount;
-        static char dropSide;
+        static int dropAmount = 0;
+        static char dropSide = 'l';
         static int kitsLeft = 12;
 
 
@@ -70,14 +81,20 @@ namespace SerialConsole
         static readonly TcpListener listener = new(System.Net.IPAddress.Any, 4242);
         static TcpClient client;
 
-        //check for binary switch reset - in serialcomm + drive?,
+        //******** Timing ********
+
+        static readonly Stopwatch timer = new();
+
         //Test (+finish?) sinceCheckpoint
         //Send to auriga if there is likely an obstacle present?
         //Compare map to sensor and vision data?
         //If we are in a dead end OR at every turn - look for map openings? Store divergefrompath coords?
         //See how many (driveway = 0 && map[explored}) tiles - if many we are likely going around a floating wall
-        //Multiple map fixsa
         //ADD LIST FOR SHORTEST PATH?
+        //Look at findpath when turnng
+        //Resume function?
+
+        //Double check ramp data
 
         // ********************************** Main Navigation Loop ********************************** 
 
@@ -86,10 +103,13 @@ namespace SerialConsole
             Thread.Sleep(100);
 
             StartUp();
+            Console.WriteLine(sinceCheckpoint[0]);
 
             //Main loop
             while (true)
             {
+                reset = false;
+                CheckTimer();
                 Turnlogic();
                 Drive();
                 Thread.Sleep(10);
@@ -98,6 +118,8 @@ namespace SerialConsole
 
         static void StartUp()
         {
+            timer.Start();
+
             listener.Start();
             Console.WriteLine("Waiting for connection...");
             client = listener.AcceptTcpClient();
@@ -121,8 +143,12 @@ namespace SerialConsole
                 {
                     foreach (string _port in _ports)
                     {
-                        serialPort1.PortName = _port;
-                        serialPort1.Open();
+                        Console.WriteLine(_port + " is open");
+                        if (_port.Contains("/dev/ttyUSB") || _port.Contains("COM"))
+                        {
+                            serialPort1.PortName = _port;
+                            serialPort1.Open();
+                        }
                     }
                 }
                 catch
@@ -139,10 +165,32 @@ namespace SerialConsole
             }
 
             Thread.Sleep(3000);
-            serialPort1.DiscardInBuffer();
-            serialPort1.DiscardOutBuffer();
 
-            SerialComm("!w");
+            if (serialPort1.BytesToRead != 0)
+            {
+                if (serialPort1.ReadLine() == "!l")
+                {
+                    serialPort1.DiscardInBuffer();
+                    serialPort1.DiscardOutBuffer();
+                }
+                else
+                {
+                    serialPort1.WriteLine("!w");
+                    while (serialPort1.BytesToRead == 0)
+                    {
+                        Thread.Sleep(20);
+                    }
+                }
+            }
+            else
+            {
+                serialPort1.WriteLine("!w");
+                while (serialPort1.BytesToRead == 0)
+                {
+                    Thread.Sleep(20);
+                }
+            }
+
             //set all map bits to 0, update map
             currentMap = 0;
             direction = 0;
@@ -161,31 +209,37 @@ namespace SerialConsole
             Turn('l');
             WriteMapBit(posX, posZ, 2, leftPresent);
             Turn('r');
+            AddSinceCheckPoint();
 
             Thread.Sleep(1000);
-            Thread t = new(ServerLoop);
-            t.Start();
+            Thread server = new(ServerLoop);
+            server.Start();
         }
 
         static void Turnlogic()
         {
             SensorCheck();
             CheckAndDropKits();
+            if (reset)
+                return;
+
             if (driveWay.Count == 0)
             {
-                while (!leftPresent || frontPresent || ReadInFront(posX, posZ, blackTile))
+                while (!leftPresent || frontPresent || ReadNextTo(posX, posZ, blackTile, Directions.front) || RampCheck(direction))
                 {
-                    if (!leftPresent)
+                    if (!leftPresent && !ReadNextTo(posX, posZ, blackTile, Directions.left) && !RampCheck(direction + 1))
                     {
                         Turn('l');
                         Thread.Sleep(500);
                         Drive();
                     }
-                    else if (frontPresent || ReadInFront(posX, posZ, blackTile))
+                    else if (frontPresent || ReadNextTo(posX, posZ, blackTile, Directions.front) || RampCheck(direction))
                     {
                         Turn('r');
                         Thread.Sleep(100);
                     }
+                    if (reset)
+                        return;
                     Thread.Sleep(10);
                 }
             }
@@ -193,12 +247,14 @@ namespace SerialConsole
             {
                 TurnTo(driveWay[0]);
                 driveWay.RemoveAt(0);
+                if (reset)
+                    return;
             }
         }
 
         // ********************************** Socket server ********************************** 
 
-        static void ServerLoop() // I ONLY READ DATA THAT IS NOT 0
+        static void ServerLoop()
         {
             NetworkStream stream = client.GetStream();
             //StreamReader sr = new StreamReader(client.GetStream());
@@ -236,11 +292,12 @@ namespace SerialConsole
                 }
                 catch
                 {
-                    Console.WriteLine("Something went wrong...");
+                    Console.WriteLine("Client falure, retrying...");
                 }
                 //listener.Stop();
             }
         }
+
 
         // ********************************** Driving ********************************** 
 
@@ -249,13 +306,16 @@ namespace SerialConsole
             locationUpdated = false;
             CheckAndDropKits();
 
+            if (reset)
+                return;
+
             Console.WriteLine("Driving");
+
+            string _recived = "";
+            string _interruptRec = "";
 
             serialPort1.WriteLine("!d");
             Thread.Sleep(100);
-
-            string _recived;
-            string _interruptRec = "";
 
             while (serialPort1.BytesToRead == 0)
             {
@@ -263,9 +323,15 @@ namespace SerialConsole
             }
 
             _recived = serialPort1.ReadLine();
+            if (_recived.Contains("!l"))
+            {
+                Reset();
+                return;
+            }
             _recived = "";
             serialPort1.DiscardInBuffer();
             Thread.Sleep(20);
+
 
             while (serialPort1.BytesToRead == 0)
             {
@@ -294,8 +360,15 @@ namespace SerialConsole
                 _recived = serialPort1.ReadLine();
             }
 
+            if (_recived.Contains("!l"))
+            {
+                Reset();
+                return;
+            }
+
             try
             {
+
                 if (_recived[0] != '!')
                 {
                     _recived = _recived.Remove(0, _recived.IndexOf('!'));
@@ -306,9 +379,10 @@ namespace SerialConsole
                     Console.WriteLine(_recived);
                     Console.WriteLine("Something went wrong, retrying");
                     SensorCheck();
-                    if (!frontPresent || !ReadInFront(posX, posZ, blackTile))
+                    if (!frontPresent && !ReadNextTo(posX, posZ, blackTile, Directions.front))
                     {
                         Drive();
+                        return;
                     }
                     else
                     {
@@ -321,9 +395,10 @@ namespace SerialConsole
                 Console.WriteLine(_recived);
                 Console.WriteLine("Something went very wrong, retrying");
                 SensorCheck();
-                if (!frontPresent || !ReadInFront(posX, posZ, blackTile))
+                if (!frontPresent && !ReadNextTo(posX, posZ, blackTile, Directions.front))
                 {
                     Drive();
+                    return;
                 }
                 else
                 {
@@ -333,8 +408,10 @@ namespace SerialConsole
 
             try
             {
-                if (_recived.Split(',')[2] == "1")
+                if (_recived.Split(',')[2] == "1" || _recived.Split(',')[2] == Encoding.ASCII.GetString(new byte[] { 1 }))
                 {
+                    Console.Write("recived ramp: ");
+                    Console.WriteLine(_recived);
                     if ((!ReadMapBit(posX, posZ, ramp) && currentMap == 0) || (ReadMapBit(posX, posZ, ramp) && currentMap != 0))
                     {
                         WriteMapBit(posX, posZ, ramp, true);
@@ -368,16 +445,18 @@ namespace SerialConsole
                     else
                     {
                         TurnTo(direction - 2);
-                        DriveBlind();
+                        DriveDeaf();
                     }
                 }
                 else
                 {
                     if (_recived.Split(',')[1] == "s") //Did not move a tile
                     {
+                        Console.Write("recived black tile: ");
+                        Console.WriteLine(_recived);
                         try
                         {
-                            WriteInFront(posX, posZ, blackTile, true);
+                            WriteNextTo(posX, posZ, blackTile, true, Directions.front);
                         }
                         catch
                         {
@@ -396,6 +475,8 @@ namespace SerialConsole
 
                         if (_recived.Split(',')[1] == "c")
                         {
+                            Console.Write("recived checkpoint: ");
+                            Console.WriteLine(_recived);
                             WriteMapBit(posX, posZ, checkPointTile, true);
 
                             if (ReadMapBit(posX, posZ, checkPointTile))
@@ -407,6 +488,8 @@ namespace SerialConsole
                         }
                         else if (_recived.Split(',')[1] == "b")
                         {
+                            Console.Write("recived blue tile: ");
+                            Console.WriteLine(_recived);
                             WriteMapBit(posX, posZ, blueTile, true);
                         }
                     }
@@ -428,22 +511,25 @@ namespace SerialConsole
             CheckAndDropKits();
         }
 
-        static void DriveBlind()
+        static void DriveDeaf()
         {
-            locationUpdated = false;
-            CheckAndDropKits();
+            string _recived = "";
 
             serialPort1.WriteLine("!d");
             Thread.Sleep(100);
-
-            string _recived;
-            string _interruptRec = "";
 
             while (serialPort1.BytesToRead == 0)
             {
                 Thread.Sleep(20);
             }
 
+            _recived = serialPort1.ReadLine();
+            if (_recived.Contains("!l"))
+            {
+                Reset();
+                return;
+            }
+            _recived = "";
             serialPort1.DiscardInBuffer();
             Thread.Sleep(200);
 
@@ -452,14 +538,11 @@ namespace SerialConsole
                 Thread.Sleep(20);
             }
 
-            if (serialPort1.BytesToRead == 0)
+            _recived = serialPort1.ReadLine();
+            if (_recived.Contains("!l"))
             {
-                _recived = _interruptRec;
-                Thread.Sleep(800); //DO NOT REMOVE
-            }
-            else
-            {
-                _recived = serialPort1.ReadLine();
+                Reset();
+                return;
             }
 
             try
@@ -474,9 +557,9 @@ namespace SerialConsole
                     Console.WriteLine(_recived);
                     Console.WriteLine("Something went wrong, retrying");
                     SensorCheck();
-                    if (!frontPresent || !ReadInFront(posX, posZ, blackTile))
+                    if (!frontPresent && !ReadNextTo(posX, posZ, blackTile, Directions.front))
                     {
-                        DriveBlind();
+                        DriveDeaf();
                     }
                     else
                     {
@@ -489,9 +572,9 @@ namespace SerialConsole
                 Console.WriteLine(_recived);
                 Console.WriteLine("Something went very wrong, retrying");
                 SensorCheck();
-                if (!frontPresent || ReadInFront(posX, posZ, blackTile))
+                if (!frontPresent && ReadNextTo(posX, posZ, blackTile, Directions.front))
                 {
-                    DriveBlind();
+                    DriveDeaf();
                 }
                 else
                 {
@@ -515,6 +598,8 @@ namespace SerialConsole
 
         static void Turn(char _direction)
         {
+            if (reset)
+                return;
             if (_direction == 'l')
             {
                 Console.WriteLine("Turning left");
@@ -537,6 +622,8 @@ namespace SerialConsole
 
         static void TurnTo(int _toDirection)
         {
+            if (reset)
+                return;
             while (_toDirection > 3)
             {
                 _toDirection -= 4;
@@ -561,6 +648,8 @@ namespace SerialConsole
 
         static void SensorCheck()
         {
+            if (reset)
+                return;
             Console.WriteLine("checking sensors");
             string _sensorInfo = SerialComm("!w");
             try
@@ -582,6 +671,10 @@ namespace SerialConsole
             }
             catch
             {
+                if (_sensorInfo == "!l")
+                {
+                    return;
+                }
                 Console.WriteLine(_sensorInfo + " - Sensorcheck error - incorrect format recived, retrying");
                 SensorCheck();
             }
@@ -589,20 +682,23 @@ namespace SerialConsole
 
         static void CheckAndDropKits()
         {
+            if (reset)
+                return;
+
             if (dropKits && !ReadMapBit(posX, posZ, victim))
             {
                 if (kitsLeft < dropAmount)
                     dropAmount = 0;
                 Console.WriteLine($"Dropping {dropAmount} kits");
-                string recived = SerialComm($"!k,{dropAmount},{dropSide}");
+                string _recived = SerialComm($"!k,{dropAmount},{dropSide}");
                 kitsLeft -= dropAmount;
                 try
                 {
-                    if (recived[1] == 's' || recived.Split(',')[1].Contains('0'))
+                    if (_recived[1] == 's' || _recived.Split(',')[1].Contains('0'))
                     {
                         WriteMapBit(posX, posZ, victim, true);
                     }
-                    else if (recived.Split(',')[1].Contains('1'))
+                    else if (_recived.Split(',')[1].Contains('1'))
                     {
                         if (!locationUpdated)
                         {
@@ -614,13 +710,17 @@ namespace SerialConsole
                     }
                     else
                     {
-                        Console.Write(recived);
+                        Console.Write(_recived);
                         Console.WriteLine(" -problem with kit step");
                     }
                 }
                 catch
                 {
-                    Console.Write(recived);
+                    if (_recived == "!l")
+                    {
+                        return;
+                    }
+                    Console.Write(_recived);
                     Console.WriteLine(" WRONG");
                 }
                 Thread.Sleep(100);
@@ -634,15 +734,19 @@ namespace SerialConsole
 
         static string Interrupt()
         {
+            if (reset)
+                return "!l";
             Console.WriteLine("interrupting");
             string _recived = SerialComm("!i");
-            Console.WriteLine(_recived);
             Thread.Sleep(100);
             return _recived;
         }
 
         static string SerialComm(string _send)
         {
+            if (reset)
+                return "!l";
+
             serialPort1.WriteLine(_send);
 
             while (serialPort1.BytesToRead == 0)
@@ -653,6 +757,12 @@ namespace SerialConsole
             Thread.Sleep(50);
             string _recived = serialPort1.ReadLine();
 
+            if (_recived.Contains("!l"))
+            {
+                Reset();
+                return _recived;
+            }
+
             try
             {
                 if (_recived[0] != '!')
@@ -660,7 +770,7 @@ namespace SerialConsole
                     _recived = _recived.Remove(0, _recived.IndexOf('!'));
                 }
 
-                if (_recived[1] != 's' && _recived[1] != 'a')
+                if (_recived[1] != 's' && _recived[1] != 'a' && _recived[1] != 'l')
                 {
                     Console.WriteLine("Something went wrong, retrying");
                     Console.WriteLine(_recived);
@@ -699,6 +809,8 @@ namespace SerialConsole
 
         static void UpRamp(int _rampDirection)
         {
+            Console.WriteLine("Going up ramp");
+
             maps.Add(new ushort[50, 50]);
             currentMap = maps.Count - 1;
             AddMapInfo(posX, posZ, _rampDirection, currentMap);
@@ -708,6 +820,8 @@ namespace SerialConsole
 
         static void DownRamp()
         {
+            Console.WriteLine("Going down ramp");
+
             if (currentMap != 0)
             {
                 string[] _info = mapInfo[currentMap].Split(',');
@@ -770,7 +884,7 @@ namespace SerialConsole
 
             if (!ReadMapBit(posX, posZ, explored)) // WASD, forward left back right
             {
-                if (direction == 0)//something wrong?
+                if (direction == 0)
                 {
                     SensorCheck();
                     wallPZ = frontPresent; //front is front
@@ -827,36 +941,74 @@ namespace SerialConsole
                 }*/
             }
 
-            //if (posX == 28 && posZ == 23)
-            //{
-            //    FindPathTo(startPosX, startPosZ);
-            //}
-
             Console.Write(posX + " , " + posZ + ": ");
 
-            for (ushort i = 15; i >= 3; i--)
+            for (int i = 15; i >= 0; i--)
             {
                 Console.Write(ReadMapBit(posX, posZ, i) ? "1" : "0");
             }
-            Console.Write(ReadMapBit(posX, posZ, 2) ? "1" : "0");
-            Console.Write(ReadMapBit(posX, posZ, 1) ? "1" : "0");
-            Console.Write(ReadMapBit(posX, posZ, 0) ? "1" : "0");
             Console.WriteLine();
         }
 
+        static void AddMapInfo(int _fromX, int _fromZ, int _rampDirection, int _map)
+        {
+            try
+            {
+                Console.Write(mapInfo[_map]);
+                Console.WriteLine($"{_map} already exists");
+            }
+            catch
+            {
+                mapInfo.Add($"{_fromX},{_fromZ},{_rampDirection}");
+            }
+        }
+
+        static bool RampCheck(int _direction)
+        {
+            if (currentMap != 0)
+                return false;
+
+            while (_direction > 3)
+            {
+                _direction -= 4;
+            }
+            while (_direction < 0)
+            {
+                _direction += 4;
+            }
+
+            if (ReadMapBit(posX, posZ, ramp))
+            {
+                foreach (string _mapInform in mapInfo)
+                {
+                    if (int.Parse(_mapInform.Split(',')[2]) == _direction)
+                    {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
 
         // ********************************** Checkpoints ********************************** 
 
         static void Reset()
         {
+            Console.WriteLine("Reset");
+            reset = true;
             try
             {
+                serialPort1.DiscardInBuffer();
+                serialPort1.DiscardOutBuffer();
+                driveWay.Clear();
+
                 string[] _checkpointXZ = sinceCheckpoint[0].Split(',');
                 posX = int.Parse(_checkpointXZ[0]);
                 posZ = int.Parse(_checkpointXZ[1]);
                 currentMap = int.Parse(_checkpointXZ[2]);
                 direction = int.Parse(_checkpointXZ[3]);
 
+                Console.WriteLine("Started reset");
                 for (int i = 0; i < sinceCheckpoint.Count; i++)
                 {
                     string[] _coords = sinceCheckpoint[0].Split(',');
@@ -872,15 +1024,18 @@ namespace SerialConsole
                     sinceCheckpoint.RemoveAt(0);
                 }
             }
-            catch
+            catch (Exception e)
             {
                 Console.WriteLine("Reset error");
+                Console.WriteLine(e.Message);
             }
-        }
 
-        static void AddMapInfo(int _fromX, int _fromZ, int _rampDirection, int _map)
-        {
-            mapInfo.Add($"{_fromX},{_fromZ},{_rampDirection}");
+            Thread.Sleep(100);
+            serialPort1.DiscardInBuffer();
+            serialPort1.DiscardOutBuffer();
+
+            SerialComm("!w");
+            Thread.Sleep(100);
         }
 
         static void AddSinceCheckPoint()
@@ -918,7 +1073,7 @@ namespace SerialConsole
         static void WriteMapBit(int _x, int _z, int _write, bool _value)
         {
             ushort _t = (ushort)(0b1 << _write);
-            if (_value && !ReadMapBit(0, 0, _write))
+            if (_value)
             {
                 maps[currentMap][_x, _z] = (ushort)(maps[0][_x, _z] | (_t));
             }
@@ -931,7 +1086,7 @@ namespace SerialConsole
         static void WriteMapBit(int _x, int _z, int _write, bool _value, int _mapIndex)
         {
             ushort _t = (ushort)(0b1 << _write);
-            if (_value && !ReadMapBit(0, 0, _write))
+            if (_value)
             {
                 maps[_mapIndex][_x, _z] = (ushort)(maps[0][_x, _z] | (_t));
             }
@@ -941,54 +1096,68 @@ namespace SerialConsole
             }
         }
 
-        static void WriteInFront(int _x, int _z, int _write, bool value)
+        static void WriteNextTo(int _x, int _z, int _write, bool value, Directions _toDirection)
         {
-            if (direction == 0)
+            if ((direction == 0 && _toDirection == Directions.front) || (direction == 1 && _toDirection == Directions.right) || (direction == 2 && _toDirection == Directions.back) || (direction == 3 && _toDirection == Directions.left))
             {
                 WriteMapBit(_x, _z - 1, _write, value);
             }
-            else if (direction == 1)
+            else if ((direction == 0 && _toDirection == Directions.left) || (direction == 1 && _toDirection == Directions.front) || (direction == 2 && _toDirection == Directions.right) || (direction == 3 && _toDirection == Directions.back))
             {
                 WriteMapBit(_x - 1, _z, _write, value);
             }
-            else if (direction == 2)
+            else if ((direction == 0 && _toDirection == Directions.back) || (direction == 1 && _toDirection == Directions.left) || (direction == 2 && _toDirection == Directions.front) || (direction == 3 && _toDirection == Directions.right))
             {
                 WriteMapBit(_x, _z + 1, _write, value);
             }
-            else if (direction == 3)
+            else if ((direction == 0 && _toDirection == Directions.right) || (direction == 1 && _toDirection == Directions.back) || (direction == 2 && _toDirection == Directions.left) || (direction == 3 && _toDirection == Directions.front))
             {
                 WriteMapBit(_x + 1, _z, _write, value);
             }
             else
             {
-                Console.WriteLine("Direction error ");
+                Console.WriteLine("ReadNextTo Direction error ");
             }
         }
 
-        static bool ReadInFront(int _x, int _z, int _read)
+        static bool ReadNextTo(int _x, int _z, int _read, Directions _toDirection)
         {
-            if (direction == 0)
+            if ((direction == 0 && _toDirection == Directions.front) || (direction == 1 && _toDirection == Directions.right) || (direction == 2 && _toDirection == Directions.back) || (direction == 3 && _toDirection == Directions.left))
             {
                 return ReadMapBit(_x, _z - 1, _read);
             }
-            else if (direction == 1)
+            else if ((direction == 0 && _toDirection == Directions.left) || (direction == 1 && _toDirection == Directions.front) || (direction == 2 && _toDirection == Directions.right) || (direction == 3 && _toDirection == Directions.back))
             {
                 return ReadMapBit(_x - 1, _z, _read);
             }
-            else if (direction == 2)
+            else if ((direction == 0 && _toDirection == Directions.back) || (direction == 1 && _toDirection == Directions.left) || (direction == 2 && _toDirection == Directions.front) || (direction == 3 && _toDirection == Directions.right))
             {
                 return ReadMapBit(_x, _z + 1, _read);
             }
-            else if (direction == 3)
+            else if ((direction == 0 && _toDirection == Directions.right) || (direction == 1 && _toDirection == Directions.back) || (direction == 2 && _toDirection == Directions.left) || (direction == 3 && _toDirection == Directions.front))
             {
                 return ReadMapBit(_x + 1, _z, _read);
             }
             else
             {
-                Console.WriteLine("Direction error ");
+                Console.WriteLine("ReadNextTo Direction error ");
             }
             return false;
         }
+
+
+        // ********************************** Timing ********************************** 
+
+        static void CheckTimer()
+        {
+            if (timer.ElapsedMilliseconds > 420 * 1000)//7 min = 420 s = 420 * 10^3 ms
+            {
+                Console.WriteLine("7 mins passed, returning");
+                ReturnToStart();
+                timer.Reset();
+            }
+        }
+
 
         // ********************************** Map Navigation ********************************** 
 
@@ -1055,15 +1224,28 @@ namespace SerialConsole
             }
         }
 
+        static void ReturnToStart()
+        {
+            FindPathTo(startPosX, startPosZ, 0);
+            Thread.Sleep(100);
+
+            while (driveWay.Count > 0)
+            {
+                TurnTo(driveWay[0]);
+                driveWay.RemoveAt(0);
+                Drive();
+            }
+
+            Thread.Sleep(30000);
+        }
+
         static void FindExploredCells(int _onX, int _onZ)
         {
             if (_onX == toPosX && _onZ == toPosZ)
             {
                 foundWay = true;
             }
-            Console.WriteLine("ok " + _onX + " " + _onZ);
-            Console.WriteLine("found " + !foundWay);
-            Console.WriteLine("mapbit " + !ReadMapBit(_onX, _onZ, 5));
+
             if (!foundWay && !ReadMapBit(_onX, _onZ, 5) && !ShortenPath(_onX, _onZ))
             {
                 WriteMapBit(_onX, _onZ, mapSearched, true);
