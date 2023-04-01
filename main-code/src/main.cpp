@@ -35,9 +35,9 @@ void setup()
 // double robotAngle = 0;
 // double wallDistance = 0;
 
-// #define PICODE
+#define PICODE
 // #define TESTING_NAV
-#define TESTING
+// #define TESTING
 
 
 void loop()
@@ -122,13 +122,19 @@ void loop()
           lights::reversing();
           driveStep(); // For driving back
         }
+
+        if (floorColourAhead == ColourSensor::floor_reflective)
+        {
+          lights::indicateCheckpoint();
+        }
         // If we have moved, mazenav has to know the new colour. If we have not moved, the colour is already known.
         if (commandSuccess == true) //  || floorColourAhead == ColourSensor::floor_black || floorColourAhead == ColourSensor::floor_blue // Removed because it would return success every time it saw blue or black, regardless if it had driven a step or not.
         {
           Serial.print("!a,");
           Serial.print(colourSensor.floorColourAsChar(floorColourAhead)); // If you have not driven back floorColourAhead will actually be the current tile
           Serial.print(',');
-          Serial.print(rampDriven);
+          if (rampDriven == true) Serial.print("1");
+          else Serial.print("0");
           Serial.println("");
           // serialcomm::returnFloorColour(floorColourAhead); // Interpreted as success by mazenav (except for black tile)
         }

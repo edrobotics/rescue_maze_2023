@@ -135,6 +135,8 @@ namespace lights
 
     void onRamp();
 
+    void indicateCheckpoint();
+
 }
 
 namespace sounds
@@ -270,7 +272,7 @@ enum UltrasonicGroup {
 
 // For smoothing out the recieved distance measurements
 
-const int DISTANCE_MEASUREMENT_SIZE = 5;
+const int DISTANCE_MEASUREMENT_SIZE = 3;
 
 void pushBackArray(double curDistanceData, double distanceArray[DISTANCE_MEASUREMENT_SIZE]);
 

@@ -78,11 +78,11 @@ const double wallPresenceTreshold = 20; // Not calibrated !!!!!!!!!!!!!!!!!!!!!!
 // Sensor data
 // const int DISTANCE_MEASUREMENT_SIZE = 5; // The number of measurements in the distance arrays
 // Distance arrays (maybe fill with function instead?)
-double ultrasonicDistancesF[DISTANCE_MEASUREMENT_SIZE] = {0, 0, 0, 0, 0};
-double ultrasonicDistancesLF[DISTANCE_MEASUREMENT_SIZE] = {0, 0, 0, 0, 0};
-double ultrasonicDistancesLB[DISTANCE_MEASUREMENT_SIZE] = {0, 0, 0, 0, 0};
-double ultrasonicDistancesRF[DISTANCE_MEASUREMENT_SIZE] = {0, 0, 0, 0, 0};
-double ultrasonicDistancesRB[DISTANCE_MEASUREMENT_SIZE] = {0, 0, 0, 0, 0};
+double ultrasonicDistancesF[DISTANCE_MEASUREMENT_SIZE] = {0, 0, 0};
+double ultrasonicDistancesLF[DISTANCE_MEASUREMENT_SIZE] = {0, 0, 0};
+double ultrasonicDistancesLB[DISTANCE_MEASUREMENT_SIZE] = {0, 0, 0};
+double ultrasonicDistancesRF[DISTANCE_MEASUREMENT_SIZE] = {0, 0, 0};
+double ultrasonicDistancesRB[DISTANCE_MEASUREMENT_SIZE] = {0, 0, 0};
 // Averaged distances
 double ultrasonicDistanceLF = 0;
 double ultrasonicDistanceLB = 0;
@@ -274,6 +274,7 @@ RGBColour colourRed {150, 0, 0};
 RGBColour colourBlue {0, 0, 150};
 RGBColour colourError {200, 10, 0};
 RGBColour colourAffirmative { 20, 150, 0};
+RGBColour colourYellow {50, 50, 0};
 
 void lights::turnOff()
 {
@@ -422,6 +423,22 @@ void lights::onRamp()
   setColour(10, colourBlue, true);
 }
 
+
+void lights::indicateCheckpoint()
+{
+  for (int k=0; k<3; ++k)
+  {
+    for (int i=1; i<=11; i += 2)
+    {
+      setColour(i, colourWhite, false);
+      setColour(i+1, colourYellow, true);
+    }
+    delay(200);
+    turnOff();
+    delay(200);
+
+  }
+}
 
 void sounds::errorBeep()
 {
@@ -733,8 +750,16 @@ void gyroTurn(double turnAngle, bool stopMoving, double baseSpeed = 0)
     if (turnAngle<0) multiplier=-1; // Negative is cw
 
     // Checking for unreasonable values:
-    if (turnAngle > 170) turnAngle = 90;
-    if (turnAngle < -170) turnAngle = -90;
+    if (turnAngle > 170)
+    {
+      turnAngle = 90;
+      sounds::errorBeep();
+    }
+    if (turnAngle < -170)
+    {
+      turnAngle = -90;
+      sounds::errorBeep();
+    }
 
     gyro.update();
     g_currentGyroAngle = gyroAngleToMathAngle(gyro.getAngleZ()); // Sets positive to be counter-clockwise and makes all valid values between 0 and 360
@@ -747,7 +772,7 @@ void gyroTurn(double turnAngle, bool stopMoving, double baseSpeed = 0)
     crossingZero = true;
   }
     //double speedToRun = multiplier*1.5*BASE_SPEED_CMPS*CMPS_TO_RPM;
-    double speedToRun = multiplier*69/CMPS_TO_RPM;
+    double speedToRun = multiplier*35/CMPS_TO_RPM;
     if (baseSpeed != 0) speedToRun = baseSpeed + speedToRun*gyroDriveCorrectionCoeff;
     runWheelSide(wheels_left, -speedToRun);
     runWheelSide(wheels_right, speedToRun);
@@ -1194,7 +1219,7 @@ double getDistanceDriven()
 }
 
 const double normAngleP = 1; //    1  , 1, 1  ,
-const double normDistanceP = 3; // 2.2, 3, 3  ,
+const double normDistanceP = 2.5; // 2.2, 3, 3  ,
 const double normDistanceD = 1; // 0, 1, 0.5,
 
 const double rampAngleP = 0.2;
@@ -1449,7 +1474,7 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
     }
     useNormPID();
     // Checking if you are done
-    if (ultrasonicDistanceF < (15 - ULTRASONIC_FRONT_OFFSET + 1.5) && g_driveBack == false) // If the robot is the correct distance away from the front wall. The goal is that ultrasonicDistanceF is 5.2 when the robot stops. Should not do when driving backwards.
+    if (ultrasonicDistanceF < (15 - ULTRASONIC_FRONT_OFFSET + 1) && g_driveBack == false) // If the robot is the correct distance away from the front wall. The goal is that ultrasonicDistanceF is 5.2 when the robot stops. Should not do when driving backwards.
     {
       // lights::setColour(3, colourBase, true);
       // g_trueDistanceDriven = 30; // The robot has arrived
@@ -1658,9 +1683,10 @@ bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, bo
     bool throwaWayRampDriven = false; // Just to give driveStepDriveLoop someting. Is not used for anything.
     lights::setColour(3, colourOrange, true);
     shouldStop = false;
-    while (shouldStop == false && (g_trueDistanceDriven-trueDistanceDrivenFlag) < 7) // The part about trueDistance is a failsafe in case the sensor fails
+    while (ultrasonicDistanceF > (15 - ULTRASONIC_FRONT_OFFSET + 1)) // The part about trueDistance is a failsafe in case the sensor fails && (g_trueDistanceDriven-trueDistanceDrivenFlag) < 7
     {
-      shouldStop = driveStepDriveLoop(wallToUse, dumbDistanceDriven, stoppingReason, throwaWayRampDriven);
+      driveStepDriveLoop(wallToUse, dumbDistanceDriven, stoppingReason, throwaWayRampDriven);
+      // Serial.println(ultrasonicDistanceF);
     }
     // lights::setColour(3, colourBase, true);
      stoppingReason = stop_frontWallPresentFaraway;
@@ -1718,6 +1744,10 @@ bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, bo
   //   colSensor.checkFloorColour();
   //   // Handle checkpoints.
   // }
+  if (colSensor.lastKnownFloorColour == ColourSensor::floor_blue)
+  {
+    delay(5000);
+  }
 
   // Give back the floor colour
   // Should update/double-check this before sending (but not always?)
@@ -1867,7 +1897,7 @@ void handleVictim(double fromInterrupt)
 }
 
 int servoPos = 10; // Servo position. Here set to starting position
-const int servoLower = 10;
+const int servoLower = 5;
 const int servoUpper = 170;
 
 void servoSetup()
@@ -1890,6 +1920,9 @@ void deployRescueKit()
     servo.write(servoPos);
     delay(15);
   }
+
+  // sounds::tone(440, 200);
+  // sounds::tone(880, 200);
 }
 
 
