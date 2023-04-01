@@ -48,6 +48,8 @@ nH = cv2.cvtColor(nH,cv2.COLOR_BGR2GRAY)
 nS = cv2.imread('S1.png')
 rS = cv2.cvtColor(nS,cv2.COLOR_BGR2GRAY)
 lS = cv2.rotate(rS, cv2.ROTATE_180)
+pS = cv2.imread('S2.png')
+pS = cv2.cvtColor(pS,cv2.COLOR_BGR2GRAY)
 
 SampleVictims = (rU, lU, nH, rS, lS)
 
@@ -80,7 +82,7 @@ def identify_victim2(ivictim,victim):
                 cv2.imwrite("s.png", ivictim)
                 found = True
         if victim == "U":
-            if apr > 10 and apr < 15 and len(approx) > 17 and len(approx) < 23:
+            if apr > 10 and apr < 15 and len(approx) > 17 and len(approx) < 25:
                 print("U detected")
                 cv2.imwrite("U.png", ivictim)
                 found = True
@@ -107,7 +109,10 @@ def identify_victim(victim, side):
                 if identify_victim2(victim, "H"):
                     sendMessage("k3"+side)
             elif i == 3:
-                print("rS")
+#                print("rS")
+                victiminv = np.invert(victim)
+                positiv = cv2.bitwise_and(pS, victim)
+                if np.count_nonzero(positiv) <  600: break
                 if identify_victim2(victim, "S"):
                     sendMessage("k2"+side)
             elif i == 4:
@@ -122,8 +127,8 @@ def identify_victim(victim, side):
 def find_visual_victim():
     img = image.copy
     gray = cv2.cvtColor(image,cv2.COLOR_BGR2GRAY)
-    blurred = cv2.GaussianBlur(gray, (15, 15), 0)
-##    ret,binary = cv2.threshold(gray,125,255,0, cv2.THRESH_BINARY)
+    blurred = cv2.GaussianBlur(gray, (7, 7), 0)
+#    ret,binary = cv2.threshold(gray,125,255,0, cv2.THRESH_BINARY)
    # binary = cv2.adaptiveThreshold(blurred,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,cv2.THRESH_BINARY,21,10)
     binary = cv2.adaptiveThreshold(blurred,255,cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY,21,10)
     binary = np.invert(binary)
@@ -246,8 +251,8 @@ def find_colour_victim():
 camera = PiCamera()
 camera.resolution = (640, 480)
 camera.framerate = 10
-#camera.shutter_speed = 10000
-#camera.iso = 1600
+camera.shutter_speed = 10000
+camera.iso = 1600
 if ttime: start_etime = time.time()
 if ttime: frame_time = time.time()
 rawCapture = PiRGBArray(camera, size=(640, 480))
