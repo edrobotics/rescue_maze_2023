@@ -6,6 +6,9 @@ import socket
 import time
 import random
 import timeit
+import threading 
+import logging
+
 
 ssh = True
 showcolor = False
@@ -33,14 +36,49 @@ for i in range(10):
         connected = True
         break
 
+E = 0
+H = 0
+S = 0
+U = 0
+GREEN = 0
+YELLOW = 0
+RED = 0
 
 def log(image, name):
-    try:
-        n += 1
-    except:
-        n = 1
+    global E
+    global H
+    global S
+    global U
+    global GREEN
+    global YELLOW 
+    global RED
 
-    path = str(name)+ str(n)
+    path = "./log/" + name 
+
+    match name:
+        case["E"]:
+            E += 1
+            path += path + str(E)
+        case["H"]:
+            H += 1
+            path += path + str(H)
+        case["S"]:
+            S += 1
+            path += path + str(S)
+        case["U"]:
+            U += 1
+            path += path + str(U)
+        case["GREEN"]:
+            GREEN += 1
+            path += path + str(GREEN)
+        case["YELLOW"]:
+            YELLOW += 1
+            path += path + str(YELLOW)
+        case["RED"]:
+            RED += 1
+            path += path + str(RED)
+        case _ :
+            print("smt wrong: ", name)
     cv2.imwrite(path,image)
     
 
@@ -72,8 +110,6 @@ SampleVictims = (rU, lU, nH, rS, lS)
 
 
 def identify_victim2(ivictim,victim):
-#victim 
-#    victim = np.invert(victim)
   #  if ssh == False:
    #     cv2.imshow("victim", ivictim)
     found = False
@@ -92,18 +128,16 @@ def identify_victim2(ivictim,victim):
         if victim == "H":
             if apr > 11 and apr < 17 and len(approx) > 12 and len(approx) < 25:
                 print("H detected")
-                cv2.imwrite("H.png", ivictim)
                 found = True
         if victim == "S":
             if apr > 9 and apr < 13 and len(approx) > 32 and len(approx) < 40:
                 print("S detected")
-                cv2.imwrite("s.png", ivictim)
                 found = True
         if victim == "U":
             if apr > 10 and apr < 15 and len(approx) > 17 and len(approx) < 25:
                 print("U detected")
-                cv2.imwrite("U.png", ivictim)
                 found = True
+        if found: log(ivictim,victim)
         return found
 
 
@@ -213,70 +247,40 @@ def find_visual_victim():
             RImgCnt = cv2.resize(imgCnt, dsize)
             identify_victim(RImgCnt,side)
 
-def ColVicP(mask):
+def ColVicP(mask,color):
     kernel = np.ones((5, 5), np.uint8) 
     mask = cv2.erode(mask,kernel, iterations=1)
     mask = cv2.dilate(mask,kernel, iterations=1) 
-    return mask 
-
+    if np.count_nonzero(mask) > 2000:
+        ret,thresh = cv2.threshold(mask, 40, 255, 0)
+        contours, hierarchy = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+        c = max(contours, key = cv2.contourArea)
+        if cv2.contourArea(c) > 2000:
+            x,y,w,h = cv2.boundingRect(c)
+            if x < 300: side = "l"
+            else: side = "r"
+            sendMessage("k1"+side)
+            log(mask, color)
+    if showcolor: cv2.imshow(color, mask)
 
 
 def find_colour_victim():
     status = 0
     hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+    hsv[:, 290:350] = (0,0,0)
 
-    red_lower_range = np.array([100,1,1])
+    red_lower_range = np.array([100,100,100])
     red_upper_range = np.array([220,255,255])
     red_mask = cv2.inRange(hsv, red_lower_range, red_upper_range)
-    if showcolor: cv2.imshow("prew red",red_mask) 
-    red_mask = ColVicP(red_mask)
-    if showcolor: cv2.imshow("red", red_mask)
-    if np.count_nonzero(red_mask) > 2000:
-        print("has red")
-        print(np.count_nonzero(red_mask))
-        ret,thresh = cv2.threshold(red_mask, 40, 255, 0)
-        contours, hierarchy = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
-        c = max(contours, key = cv2.contourArea)
-        x,y,w,h = cv2.boundingRect(c)
-        if x < 300: side = "l"
-        else: side = "r"
-        sendMessage("k1"+side)
+    ColVicP(red_mask, "RED")
     green_lower_range = np.array([50,40,40])
     green_upper_range = np.array([65,255,255])
     green_mask = cv2.inRange(hsv, green_lower_range, green_upper_range)
-    green_mask[:, 290:370] = (0)
-    kernel = np.ones((5, 5), np.uint8)
-    green_mask = ColVicP(green_mask)
-    if showcolor: cv2.imshow("green", green_mask)
-    if np.count_nonzero(green_mask) > 2000:
-        print("has green")
-        print(np.count_nonzero(green_mask))
-        ret,thresh = cv2.threshold(green_mask, 40, 255, 0)
-        contours, hierarchy = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
-        c = max(contours, key = cv2.contourArea)
-        if cv2.contourArea(c) > 2000: print("big green")
-        x,y,w,h = cv2.boundingRect(c)
-        if x < 300: side = "l"
-        else: side = "r"
-        sendMessage("k0"+side)
+    ColVicP(green_mask, "GREEN")
     yellow_lower_range = np.array([15,100,100])
     yellow_upper_range = np.array([25,255,255])
     yellow_mask = cv2.inRange(hsv, yellow_lower_range, yellow_upper_range)
-    yellow_mask = ColVicP(yellow_mask)
-    if np.count_nonzero(yellow_mask) > 2000:
-        print("has yellow")
-        print(np.count_nonzero(yellow_mask))
-        ret,thresh = cv2.threshold(yellow_mask, 40, 255, 0)
-        contours, hierarchy = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
-        c = max(contours, key = cv2.contourArea)
-        if cv2.contourArea(c) > 2000:
-            print("big yellow")
-            x,y,w,h = cv2.boundingRect(c)
-            if x < 300: side = "l"
-            else: side = "r"
-            sendMessage("k1"+side)
-    if showcolor: cv2.imshow("yellow", yellow_mask)
-    return status
+    ColVicP(yellow_mask, "YELLOW")
 
 
 
@@ -290,7 +294,7 @@ camera.framerate = 10
 rawCapture = PiRGBArray(camera, size=(640, 480))
 for frame in camera.capture_continuous(rawCapture, format="bgr", use_video_port=True):
     image = frame.array
-    log(image, E)
+    log(image, "E")
     rawCapture.truncate(0)
     find_colour_victim()
     find_visual_victim()
