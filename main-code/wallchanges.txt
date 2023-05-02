@@ -1,0 +1,15 @@
+I need a "shadow" or potential truedistance driven, alternatively just save the current truedistancedriven when a potential wallchange is detected and when the wallchange is confirmed, set the wallchange accordingly and add the travelled difference between then and now (risky because another wallchange could interrupt).
+My best solution: the shadow distances. I would need at least one shadow distance per sensor, but probably two. Maybe just two per front/back? (one for approaching and one for leaving)
+
+
+Structure:
+
+Increment all shadow distances every execution
+
+If a potential wallchange is detected, set the shadow distance to the expected amount. It will be incremented the following loops. Previous increments are not a problem because the value is set to some constant every time.
+
+If a smooth wallchange comes that matches the potential wallchange and is inside of some timeframe, update the truedistancedriven to the shadowdistance for that sensor.
+
+If a smooth wallchange is detected and it is not within a timeframe or there is no potential wallchange, do as I always have.
+
+Idea: If there are multiple detected wallchanges, instead of using the latest checked one (like currently), use some kind of median value.

@@ -9,6 +9,33 @@
 
 const int ON_RAMP_ARR_SIZE = 5;
 
+enum UltrasonicSensorEnum
+{
+  ultrasonic_F,
+  ultrasonic_LF,
+  ultrasonic_LB,
+  ultrasonic_RF,
+  ultrasonic_RB,
+  ULTRASONIC_NUM, // The number of ultrasonic sensors
+};
+
+enum US_MeasurementType
+{
+  usmt_raw,
+  usmt_smooth,
+  USMT_NUM,
+};
+
+
+enum WallChangeOffsets
+{
+  wcoff_frontLeaving,
+  wcoff_frontApproaching,
+  wcoff_backLeaving,
+  wcoff_backApproaching,
+  wcoff_num,
+};
+
 
 //////////////// Public functions /////////////////////////////
 
@@ -229,6 +256,7 @@ void centerAngle180(double& refAngle, double& calcAngle);
 enum WallSide {
     wall_left,
     wall_right,
+    wall_front,
     wall_both,
     wall_none,
 };
@@ -276,7 +304,7 @@ enum UltrasonicGroup {
 
 const int DISTANCE_MEASUREMENT_SIZE = 3;
 
-void pushBackArray(double curDistanceData, double distanceArray[DISTANCE_MEASUREMENT_SIZE]);
+void updateDistanceArray(UltrasonicSensorEnum sensorToUse);
 
 double calcDistanceAverage(double distanceArray[DISTANCE_MEASUREMENT_SIZE]);
 
@@ -286,10 +314,14 @@ void flushDistanceArrays();
 // Perhaps return an array in the future (or take on as a mutable(?) argument?)
 void getUltrasonics();
 
+void ultrasonicUpdateLoop(UltrasonicSensorEnum sensor, double maxDistance, bool waitForInterference);
+
+void ultrasonicIdle();
+
 // Print all sensor data for debugging
 void printUltrasonics();
 
-// Check if the walls are present. Uses raw distance data instead of "true" distance data.
+// Check if the walls are present. Uses raw distance data instead of "true" distance data. What does this mean?
 void checkWallPresence();
 
 
@@ -302,13 +334,31 @@ void checkWallPresence();
 // useGyroAngle - whether to use the angle calculated by the gyro (true) or calculate the angle youself (false)
 void calcRobotPose(WallSide wallSide, double& angle, double& trueDistance, bool useGyroAngle);
 
+struct PotWallChange
+{
+  double shadowDistanceDriven {};
+  long timestamp {};
+  bool detected {false};
+
+};
+
 enum WallChangeType {
   wallchange_approaching,
   wallchange_leaving,
+  wallchange_potApproaching,
+  wallchange_potLeaving,
+  wallchange_confApproaching,
+  wallchange_confLeaving,
   wallchange_none,
 };
 
-WallChangeType checkWallChanges(UltrasonicGroup ultrasonicGroup);
+// Checks for wallchanges in smooth sensor data
+WallChangeType checkSmoothWallChanges(UltrasonicGroup ultrasonicGroup);
+
+void checkPotWallChanges();
+
+
+
 
 
 
@@ -328,6 +378,9 @@ void testDistanceMeasureRight();
 // Returns the distance driven by the robot since startDistanceMeasure() was called. Return is in cm.
 // Idea: Handle if one encoder is very off?
 double getDistanceDriven();
+
+// Increments the "ghost" distances for potential wallchanges.
+void incrementShadowDistances(double incrementDistance);
 
 
 // Drive with wall following. Will do one iteration, so to actually follow the wall, call it multiple times in short succession.

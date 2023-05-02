@@ -1,0 +1,1 @@
+Check that the initialization of bool arrays sets all elements to false
