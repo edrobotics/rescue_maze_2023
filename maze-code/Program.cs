@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.ComponentModel;
 using System.Diagnostics;
 using System.IO.Ports;
 using System.Net.Sockets;
@@ -21,10 +20,15 @@ namespace SerialConsole
         static readonly short blackTile = 8;
         static readonly short checkPointTile = 8;
         static readonly short blueTile = 10;
+        static readonly short inDriveWay = 11;
 
 
         //******** Localization ********
 
+        static int highestX = 25;
+        static int highestZ = 25;
+        static int lowestX = 25;
+        static int lowestZ = 25;
         static readonly int startPosX = 25;
         static readonly int startPosZ = 25;
         static int toPosX;
@@ -36,19 +40,11 @@ namespace SerialConsole
 
         static int direction = 0;
 
-        static bool foundWay = false;
-        static bool shortenAvailable;
-        static readonly List<int> driveWay = new();
-
         static bool locationUpdated;
 
         static bool frontPresent;
         static bool leftPresent;
         static bool rightPresent;
-        static bool wallPZ;
-        static bool wallNX;
-        static bool wallNZ;
-        static bool wallPX;
 
         enum Directions
         {
@@ -58,12 +54,24 @@ namespace SerialConsole
             right
         }
 
+        //******** Navigation ********
+
+        static List<byte[]> driveWay = new();
+        static List<byte[]> saveWay = new();
+        static List<byte[]> crossRoads = new();
+        static List<byte[]> saveCross = new();
+
+        static bool skipNext;
+        static bool returningFromGoal;
+        static bool foundWay = false;
+        static bool shortenAvailable;
+
         //******** Mapping & Checkpoints ********
 
-        //static readonly ushort[,] mainMap = new ushort[50, 50]; //W = 0, A = 1, S = 2, D = 3, explored = 4, mapSearched = 5, victim  = 6, ramp = 7, black tile = 8, checkp = 9, blue = 10 -more? obstacles?
-        static readonly List<string> sinceCheckpoint = new();
+        //static readonly ushort[,] mainMap = new ushort[50, 50]; //W = 0, A = 1, S = 2, D = 3, explored = 4, mapSearched = 5, victim  = 6, ramp = 7, black tile = 8, checkp = 9, blue = 10, crossroad = 11 -more? obstacles?
+        static readonly List<byte[]> sinceCheckpoint = new();
         static readonly List<ushort[,]> maps = new();
-        static readonly List<string> mapInfo = new();
+        static readonly List<int[]> mapInfo = new(); //For storing info of where the ramp is
         static int currentMap = 0;
         static bool reset = false;
 
@@ -81,35 +89,32 @@ namespace SerialConsole
         static readonly TcpListener listener = new(System.Net.IPAddress.Any, 4242);
         static TcpClient client;
 
-        //******** Timing ********
+        //******** Timing & exiting ********
 
         static readonly Stopwatch timer = new();
 
-        //Test (+finish?) sinceCheckpoint
-        //Send to auriga if there is likely an obstacle present?
-        //Compare map to sensor and vision data?
-        //If we are in a dead end OR at every turn - look for map openings? Store divergefrompath coords?
-        //See how many (driveway = 0 && map[explored}) tiles - if many we are likely going around a floating wall
-        //ADD LIST FOR SHORTEST PATH?
-        //Look at findpath when turnng
-        //Resume function?
-
-        //Double check ramp data
-
-        // ********************************** Main Navigation Loop ********************************** 
+        // ********************************** Main Navigation Loop & Startup ********************************** 
 
         static void Main()
         {
+            Console.CancelKeyPress += delegate (object? o, ConsoleCancelEventArgs e)
+            {
+                e.Cancel = false;
+                Exit();
+                throw new Exception();
+            };
+
             Thread.Sleep(100);
 
             StartUp();
+
             Console.WriteLine(sinceCheckpoint[0]);
 
             //Main loop
             while (true)
             {
                 reset = false;
-                CheckTimer();
+                //CheckTimer();
                 Turnlogic();
                 Drive();
                 Thread.Sleep(10);
@@ -194,8 +199,9 @@ namespace SerialConsole
             //set all map bits to 0, update map
             currentMap = 0;
             direction = 0;
+            maps.Capacity = 15;
             maps.Add(new ushort[50, 50]);
-            AddMapInfo(25, 25, direction, currentMap);
+            mapInfo.Add(new int[] { 25, 25, direction });
 
             for (int i = 0; i < maps[0].GetLength(0); i++)
             {
@@ -212,36 +218,148 @@ namespace SerialConsole
             AddSinceCheckPoint();
 
             Thread.Sleep(1000);
-            Thread server = new(ServerLoop);
-            server.Start();
+            Thread serverThread = new(ServerLoop);
+            serverThread.Start();
         }
 
         static void Turnlogic()
         {
+            if (reset)
+                return;
+            SensorCheck();
+            CheckAndDropKits();
+            UpdateMap();
+
+            bool[] _unExplored = {!ReadMapBit(posX, posZ - 1, explored) && !ReadMapBit(posX, posZ, 0), //NOT BLACK TILES
+                             !ReadMapBit(posX - 1, posZ, explored) && !ReadMapBit(posX, posZ, 1),
+                             !ReadMapBit(posX, posZ + 1, explored) && !ReadMapBit(posX, posZ, 2),
+                             !ReadMapBit(posX + 1, posZ, explored) && !ReadMapBit(posX, posZ, 3)};
+
+
+            int _unExpTiles = 0;
+            foreach (bool _unExpTile in _unExplored)
+            {
+                if (_unExpTile)
+                    _unExpTiles++;
+            }
+
+        Logic:
+            if (reset)
+                return;
+            Thread.Sleep(20);
+            if (driveWay.Count == 0 && crossRoads.Count == 0 && _unExpTiles == 0 && posX == startPosX && posZ == startPosZ)
+            {
+                timer.Stop();
+                Console.WriteLine("DONE");
+                Thread.Sleep(20_000);
+                return;
+            }
+
+            if (driveWay.Count > 0)
+            {
+                if (_unExpTiles != 0)
+                {
+                    crossRoads.Add(new byte[] { (byte)posX, (byte)posZ }); //CLEAR SINCECHECKP. FROM COORDS ON RESET ++ ADD CURRENT MAP
+                }
+                while (driveWay[0][0] == posX && driveWay[0][1] == posZ)
+                {
+                    driveWay.RemoveAt(0);
+                }
+                TurnTo(TileToDirection(driveWay[0]));
+                driveWay.RemoveAt(0);
+            }
+            else if (_unExpTiles > 0)
+            {
+                if (_unExpTiles != 1)
+                    crossRoads.Add(new byte[] { (byte)posX, (byte)posZ }); //CLEAR SINCECHECKP. FROM COORDS ON RESET ++ ADD CURRENT MAP
+                for (int i = direction + 1; i > direction - 3; i--)
+                {
+                    if (_unExplored[FixDirection(i)])
+                    {
+                        TurnTo(FixDirection(i));
+                        break;
+                    }
+                }
+            }
+            else if (_unExpTiles == 0)
+            {
+                if (crossRoads.Count > 1)
+                {
+                    byte[] _currentCoords = new byte[] { (byte)posX, (byte)posZ };
+                    while (crossRoads.Contains(_currentCoords))
+                    {
+                        crossRoads.Remove(_currentCoords);
+                    }
+
+                    int _crossX = crossRoads.Last()[0];
+                    int _crossZ = crossRoads.Last()[1];
+
+                    while (!((!ReadMapBit(_crossX, _crossZ - 1, explored) && !ReadMapBit(_crossX, _crossZ, 0)) || //NOT BLACK TILES
+                            (!ReadMapBit(_crossX - 1, _crossZ, explored) && !ReadMapBit(_crossX, _crossZ, 1)) ||
+                            (!ReadMapBit(_crossX, _crossZ + 1, explored) && !ReadMapBit(_crossX, _crossZ, 2)) ||
+                            (!ReadMapBit(_crossX + 1, _crossZ, explored) && !ReadMapBit(_crossX, _crossZ, 3))))
+                    {
+                        crossRoads.RemoveAt(crossRoads.Count - 1);
+
+                        if (crossRoads.Count == 0)
+                        {
+                            FindPathTo(startPosX, startPosZ);
+                            goto Logic;
+                        }
+
+                        _crossX = crossRoads.Last()[0];
+                        _crossZ = crossRoads.Last()[1];
+                    }
+
+                    if (FindPathTo(_crossX, _crossZ))
+                        crossRoads.RemoveAt(crossRoads.Count - 1);
+                    goto Logic;
+                }
+                else
+                {
+                    FindPathTo(startPosX, startPosZ);
+                    goto Logic;
+                }
+            }
+            else
+            {
+                Console.WriteLine("TURN ISSUE AIUAUIWS");
+            }
+            /*
             SensorCheck();
             CheckAndDropKits();
             if (reset)
                 return;
 
-            if (driveWay.Count == 0)
+            while (!leftPresent || frontPresent || ReadNextTo(posX, posZ, blackTile, Directions.front) || RampCheck(direction))
             {
-                while (!leftPresent || frontPresent || ReadNextTo(posX, posZ, blackTile, Directions.front) || RampCheck(direction))
+                if (reset)
+                    return;
+                if (!leftPresent && !ReadNextTo(posX, posZ, blackTile, Directions.left) && !RampCheck(direction + 1))
                 {
-                    if (!leftPresent && !ReadNextTo(posX, posZ, blackTile, Directions.left) && !RampCheck(direction + 1))
-                    {
-                        Turn('l');
-                        Thread.Sleep(500);
-                        Drive();
-                    }
-                    else if (frontPresent || ReadNextTo(posX, posZ, blackTile, Directions.front) || RampCheck(direction))
+                    Turn('l');
+                    Thread.Sleep(500);
+                    Drive();
+                    if (ReadNextTo(posX, posZ, blackTile, Directions.front))
                     {
                         Turn('r');
-                        Thread.Sleep(100);
                     }
-                    if (reset)
-                        return;
-                    Thread.Sleep(10);
                 }
+                else if (frontPresent || ReadNextTo(posX, posZ, blackTile, Directions.front) || RampCheck(direction))
+                {
+                    Turn('r');
+                    Thread.Sleep(100);
+                }
+                else
+                {
+                    break;
+                }
+                Thread.Sleep(10);
+            }
+            /*
+            if (driveWay.Count == 0)
+            {
+                
             }
             else
             {
@@ -249,7 +367,7 @@ namespace SerialConsole
                 driveWay.RemoveAt(0);
                 if (reset)
                     return;
-            }
+            }*/
         }
 
         // ********************************** Socket server ********************************** 
@@ -408,7 +526,11 @@ namespace SerialConsole
 
             try
             {
-                if (_recived.Split(',')[2] == "1" || _recived.Split(',')[2] == Encoding.ASCII.GetString(new byte[] { 1 }))
+                //    Console.Write("recived: ");
+                //    Console.WriteLine(_recived); //!a,v,0
+                string[] _driveInfo = _recived.Split(',');
+
+                if (_driveInfo[2].Contains("1"))
                 {
                     Console.Write("recived ramp: ");
                     Console.WriteLine(_recived);
@@ -424,18 +546,15 @@ namespace SerialConsole
                             DownRamp();
                         }
 
-                        if (_recived.Split(',')[1] == "c")
+                        if (_driveInfo[1].Contains('c'))
                         {
                             WriteMapBit(posX, posZ, checkPointTile, true);
+                            Console.WriteLine("New Checkp");
+                            ResetSinceCheckpoint();
 
-                            if (ReadMapBit(posX, posZ, checkPointTile))
-                            {
-                                Console.WriteLine("New Checkp");
-                                ResetSinceCheckpoint();
-                            }
                             AddSinceCheckPoint();
                         }
-                        else if (_recived.Split(',')[1] == "b")
+                        else if (_driveInfo[1].Contains('b'))
                         {
                             WriteMapBit(posX, posZ, blueTile, true);
                         }
@@ -450,17 +569,30 @@ namespace SerialConsole
                 }
                 else
                 {
-                    if (_recived.Split(',')[1] == "s") //Did not move a tile
+                    if (_driveInfo[1].Contains('s')) //Did not move a tile
                     {
                         Console.Write("recived black tile: ");
                         Console.WriteLine(_recived);
+                        //if (!leftPresent)
+                        //{
+                        //    Turn('l');
+                        //    Thread.Sleep(100);
+                        //    Drive();
+                        //}
+                        //else if (!rightPresent)
+                        //{
+                        //    Turn('r');
+                        //    Thread.Sleep(100);
+                        //    Drive();
+                        //}
+
                         try
                         {
                             WriteNextTo(posX, posZ, blackTile, true, Directions.front);
                         }
                         catch
                         {
-                            Console.WriteLine("Error - no black tile in front!!!");
+                            Console.WriteLine("Error - cannot write black tile in front!!!");
                             Thread.Sleep(5000);
                         }
                     }
@@ -473,7 +605,7 @@ namespace SerialConsole
                         }
                         UpdateMap();
 
-                        if (_recived.Split(',')[1] == "c")
+                        if (_driveInfo[1].Contains('c'))
                         {
                             Console.Write("recived checkpoint: ");
                             Console.WriteLine(_recived);
@@ -486,7 +618,7 @@ namespace SerialConsole
                             }
                             AddSinceCheckPoint();
                         }
-                        else if (_recived.Split(',')[1] == "b")
+                        else if (_driveInfo[1].Contains('b'))
                         {
                             Console.Write("recived blue tile: ");
                             Console.WriteLine(_recived);
@@ -656,6 +788,7 @@ namespace SerialConsole
             {
                 if (_sensorInfo[1] == 'a')
                 {
+                    //'0' = 00110000, '1' = 00110001
                     byte _sensorData = (byte)_sensorInfo.Split(',')[1][0];
 
                     rightPresent = (_sensorData & 0b1) == 1;
@@ -665,7 +798,7 @@ namespace SerialConsole
                 }
                 else
                 {
-                    Console.WriteLine(_sensorInfo + " - Sensorcheck error - incorrect format recived, trying again");
+                    Console.WriteLine($"{_sensorInfo} - Sensorcheck error - incorrect format recived, trying again");
                     SensorCheck();
                 }
             }
@@ -675,7 +808,7 @@ namespace SerialConsole
                 {
                     return;
                 }
-                Console.WriteLine(_sensorInfo + " - Sensorcheck error - incorrect format recived, retrying");
+                Console.WriteLine($"{_sensorInfo} - Sensorcheck error - incorrect format recived, trying again");
                 SensorCheck();
             }
         }
@@ -716,7 +849,7 @@ namespace SerialConsole
                 }
                 catch
                 {
-                    if (_recived == "!l")
+                    if (_recived.Contains("!l"))
                     {
                         return;
                     }
@@ -793,9 +926,9 @@ namespace SerialConsole
 
         // ********************************** Map And Localization Updates ********************************** 
 
-        static void UpdateDirection(int leftTurns)
+        static void UpdateDirection(int _leftTurns)
         {
-            direction += leftTurns;
+            direction += _leftTurns;
 
             while (direction > 3)
             {
@@ -807,13 +940,53 @@ namespace SerialConsole
             }
         }
 
+        static int FixDirection(int dir)
+        {
+            while (dir > 3)
+            {
+                dir -= 4;
+            }
+            while (dir < 0)
+            {
+                dir += 4;
+            }
+            return dir;
+        }
+
+        static int TileToDirection(byte[] cell)
+        {
+            if (cell[0] == posX && cell[1] == posZ - 1)
+            {
+                return 0;
+            }
+            if (cell[0] == posX - 1 && cell[1] == posZ)
+            {
+                return 1;
+            }
+            if (cell[0] == posX && cell[1] == posZ + 1)
+            {
+                return 2;
+            }
+            if (cell[0] == posX + 1 && cell[1] == posZ)
+            {
+                return 3;
+            }
+
+            Console.WriteLine("********* ACHTUNG ACHTUNG, DAS IST NICHT GUT ************");
+            Console.WriteLine("********* ACHTUNG ACHTUNG, DAS IST NICHT GUT ************");
+            Console.WriteLine("********* ACHTUNG ACHTUNG, DAS IST NICHT GUT ************");
+            Console.WriteLine("********* ACHTUNG ACHTUNG, DAS IST NICHT GUT ************");
+            Console.WriteLine("********* ACHTUNG ACHTUNG, DAS IST NICHT GUT ************");
+            return -1;
+        }
+
         static void UpRamp(int _rampDirection)
         {
             Console.WriteLine("Going up ramp");
 
             maps.Add(new ushort[50, 50]);
             currentMap = maps.Count - 1;
-            AddMapInfo(posX, posZ, _rampDirection, currentMap);
+            mapInfo.Add(new int[] { 25, 25, _rampDirection });
             posX = 25;
             posZ = 25;
         }
@@ -824,12 +997,12 @@ namespace SerialConsole
 
             if (currentMap != 0)
             {
-                string[] _info = mapInfo[currentMap].Split(',');
-                posX = int.Parse(_info[0]);
-                posZ = int.Parse(_info[1]);
-                direction = int.Parse(_info[2]);
+                int[] _info = mapInfo[currentMap];
+                posX = _info[0];
+                posZ = _info[1];
+                direction = _info[2];
                 currentMap = 0;
-                UpdateDirection(0);
+                UpdateDirection(2);
             }
             else
             {
@@ -876,50 +1049,76 @@ namespace SerialConsole
                 posZ = 0;
                 Console.WriteLine("Error posZ");
             }
+
+            if (posX == startPosX && posZ == startPosZ && currentMap == 0 && timer.ElapsedMilliseconds > (7 * 60 + 30) * 1000)
+            {
+                Thread.Sleep(30_000);
+            }
+
+            if (posX > highestX)
+                highestX = posX;
+            if (posX < lowestX)
+                lowestX = posX;
+            if (posZ > highestZ)
+                highestZ = posZ;
+            if (posZ < lowestZ)
+                lowestZ = posZ;
         }
 
-        static void UpdateMap()//Behind - Always false when driving normally, always(?) true at start, CHANGE IF DIMENSION 3 ON MAP IS CHANGED?
+        static void UpdateMap()//Behind - Always false when driving normally
         {
             SensorCheck();
 
             if (!ReadMapBit(posX, posZ, explored)) // WASD, forward left back right
             {
+                bool wallNZ;
+                bool wallNX;
+                bool wallPZ;
+                bool wallPX;
                 if (direction == 0)
                 {
                     SensorCheck();
-                    wallPZ = frontPresent; //front is front
+                    wallNZ = frontPresent; //front is front
                     wallNX = leftPresent;
-                    wallNZ = false;
+                    wallPZ = false;
                     wallPX = rightPresent;
                 }
-                if (direction == 1)
+                else if (direction == 1)
                 {
                     SensorCheck();
-                    wallPZ = rightPresent; //right is front = Z
+                    wallNZ = rightPresent; //right is front
                     wallNX = frontPresent;
-                    wallNZ = leftPresent;
+                    wallPZ = leftPresent;
                     wallPX = false;
                 }
-                if (direction == 2)
+                else if (direction == 2)
                 {
                     SensorCheck();
-                    wallPZ = false; //back is front
+                    wallNZ = false; //back is front
                     wallNX = rightPresent;
-                    wallNZ = frontPresent;
+                    wallPZ = frontPresent;
                     wallPX = leftPresent;
                 }
-                if (direction == 3)
+                else if (direction == 3)
                 {
                     SensorCheck();
-                    wallPZ = leftPresent; //left is front
+                    wallNZ = leftPresent; //left is front
                     wallNX = false;
-                    wallNZ = rightPresent;
+                    wallPZ = rightPresent;
                     wallPX = frontPresent;
                 }
+                else
+                {
+                    wallNZ = false;
+                    wallNX = false;
+                    wallPZ = false;
+                    wallPX = false;
+                    Console.WriteLine("ERROR");
+                }
 
-                WriteMapBit(posX, posZ, 0, wallPZ);
+                WriteMapBit(posX, posZ, 0, wallNZ);
                 WriteMapBit(posX, posZ, 1, wallNX);
-                WriteMapBit(posX, posZ, 2, wallNZ);
+                WriteMapBit(posX, posZ, 2, wallPZ);
                 WriteMapBit(posX, posZ, 3, wallPX);
                 WriteMapBit(posX, posZ, explored, true);
 
@@ -950,19 +1149,6 @@ namespace SerialConsole
             Console.WriteLine();
         }
 
-        static void AddMapInfo(int _fromX, int _fromZ, int _rampDirection, int _map)
-        {
-            try
-            {
-                Console.Write(mapInfo[_map]);
-                Console.WriteLine($"{_map} already exists");
-            }
-            catch
-            {
-                mapInfo.Add($"{_fromX},{_fromZ},{_rampDirection}");
-            }
-        }
-
         static bool RampCheck(int _direction)
         {
             if (currentMap != 0)
@@ -979,9 +1165,9 @@ namespace SerialConsole
 
             if (ReadMapBit(posX, posZ, ramp))
             {
-                foreach (string _mapInform in mapInfo)
+                foreach (int[] _mapInform in mapInfo)
                 {
-                    if (int.Parse(_mapInform.Split(',')[2]) == _direction)
+                    if (_mapInform[2] == _direction)
                     {
                         return true;
                     }
@@ -1001,27 +1187,31 @@ namespace SerialConsole
                 serialPort1.DiscardInBuffer();
                 serialPort1.DiscardOutBuffer();
                 driveWay.Clear();
+                crossRoads = new List<byte[]>(saveCross);
 
-                string[] _checkpointXZ = sinceCheckpoint[0].Split(',');
-                posX = int.Parse(_checkpointXZ[0]);
-                posZ = int.Parse(_checkpointXZ[1]);
-                currentMap = int.Parse(_checkpointXZ[2]);
-                direction = int.Parse(_checkpointXZ[3]);
-
-                Console.WriteLine("Started reset");
-                for (int i = 0; i < sinceCheckpoint.Count; i++)
+                if (sinceCheckpoint.Count > 0)
                 {
-                    string[] _coords = sinceCheckpoint[0].Split(',');
-                    if (ReadMapBit(posX, posZ, blackTile))
+                    byte[] _checkpointXZ = sinceCheckpoint[0];
+                    posX = _checkpointXZ[0];
+                    posZ = _checkpointXZ[1];
+                    currentMap = _checkpointXZ[2];
+                    direction = _checkpointXZ[3];
+
+                    Console.WriteLine("Started reset");
+                    for (int i = 0; i < sinceCheckpoint.Count; i++)
                     {
-                        maps[int.Parse(_coords[2])][int.Parse(_coords[0]), int.Parse(_coords[1])] = 0;
-                        WriteMapBit(int.Parse(_coords[0]), int.Parse(_coords[1]), victim, true, int.Parse(_coords[2]));
+                        byte[] _coords = sinceCheckpoint[0];
+                        if (ReadMapBit(posX, posZ, victim))
+                        {
+                            maps[_coords[2]][_coords[0], _coords[1]] = 0;
+                            WriteMapBit(_coords[0], _coords[1], victim, true, _coords[2]);
+                        }
+                        else
+                        {
+                            maps[_coords[2]][_coords[0], _coords[1]] = 0;
+                        }
+                        sinceCheckpoint.RemoveAt(0);
                     }
-                    else
-                    {
-                        maps[int.Parse(_coords[2])][int.Parse(_coords[0]), int.Parse(_coords[1])] = 0;
-                    }
-                    sinceCheckpoint.RemoveAt(0);
                 }
             }
             catch (Exception e)
@@ -1034,32 +1224,27 @@ namespace SerialConsole
             serialPort1.DiscardInBuffer();
             serialPort1.DiscardOutBuffer();
 
+            dropKits = false;
             SerialComm("!w");
             Thread.Sleep(100);
         }
 
         static void AddSinceCheckPoint()
         {
-            if (!ReadMapBit(posX, posZ, explored))
+            if (sinceCheckpoint.Count == 0)
             {
-                if (sinceCheckpoint.Count == 0)
-                {
-                    sinceCheckpoint.Add($"{posX},{posZ},{currentMap},{direction}");
-                }
-                else
-                {
-                    sinceCheckpoint.Add($"{posX},{posZ},{currentMap}");
-                }
+                sinceCheckpoint.Add(new byte[] { (byte)posX, (byte)posZ, (byte)currentMap, (byte)direction });
             }
-            else if (sinceCheckpoint.Count == 0)
+            else if (!ReadMapBit(posX, posZ, explored))
             {
-                sinceCheckpoint.Add($"{posX},{posZ},{currentMap},{direction}");
+                sinceCheckpoint.Add(new byte[] { (byte)posX, (byte)posZ, (byte)currentMap });
             }
         }
 
         static void ResetSinceCheckpoint()
         {
             sinceCheckpoint.Clear();
+            saveCross = new List<byte[]>(crossRoads);
         }
 
 
@@ -1146,21 +1331,55 @@ namespace SerialConsole
         }
 
 
-        // ********************************** Timing ********************************** 
-
+        // ********************************** Timing & exiting ********************************** 
+        /*
         static void CheckTimer()
         {
-            if (timer.ElapsedMilliseconds > 420 * 1000)//7 min = 420 s = 420 * 10^3 ms
+            if (timer.ElapsedMilliseconds > 7*60*1000)//7 min = 420 s = 420 * 10^3 ms
             {
                 Console.WriteLine("7 mins passed, returning");
                 ReturnToStart();
                 timer.Reset();
             }
+        }*/
+
+        static void Exit()
+        {
+            string[] mapToText = new string[(3 + highestZ - lowestZ)];
+            int loops = 0;
+            for (int i = lowestZ - 1; i <= highestZ + 1; i++)
+            {
+                for (int j = lowestX - 1; j <= highestX + 1; j++)
+                {
+                    string bits = $"{i};{j}:";
+                    for (int k = 15; k >= 0; k--)
+                    {
+                        bits += ReadMapBit(i, j, k) ? "1" : "0";
+                    }
+
+                    mapToText[loops] += bits + ",";
+                }
+                loops++;
+            }
+            try
+            {
+                File.WriteAllText(/*@"C:\Users\0515frma\Desktop\Test\log.txt"*/"map.txt", string.Join('\n', mapToText)); // Writes array to text file
+            }
+            catch (Exception e)
+            {
+                Console.Write("Could not create log because ");
+                Console.WriteLine(e.Message);
+            }
+            Console.WriteLine("done file");
+            Thread.Sleep(1000);
+            listener.Stop();
+            serialPort1.Close();
+            //throw new Exception();
         }
 
 
         // ********************************** Map Navigation ********************************** 
-
+        /*
         static void FindPathTo(int _toX, int _toZ, int _map)
         {
             // Test each cell for options
@@ -1175,7 +1394,7 @@ namespace SerialConsole
             foundWay = false;
             FindExploredCells(posX, posZ);
             foundWay = false;
-            driveWay.ForEach(num => Console.WriteLine(num + " , "));
+            driveWay.ForEach(way => Console.WriteLine(way + " , "));
 
             for (int i = 0; i < maps[currentMap].GetLength(0); i++)
             {
@@ -1184,7 +1403,7 @@ namespace SerialConsole
                     WriteMapBit(i, j, mapSearched, false);
                 }
             }
-        }
+        }*/
 
         static void GoBackLevel(int _map)
         {
@@ -1194,7 +1413,7 @@ namespace SerialConsole
                 toPosZ = 25;
 
                 foundWay = false;
-                FindExploredCells(posX, posZ);
+                FindFrom((byte)posX, (byte)posZ);
                 foundWay = false;
                 driveWay.ForEach(num => Console.WriteLine(num + " , "));
 
@@ -1209,7 +1428,7 @@ namespace SerialConsole
 
             while (driveWay.Count > 0)
             {
-                TurnTo(driveWay[0]);
+                TurnTo(TileToDirection(driveWay[0]));
                 driveWay.RemoveAt(0);
                 Drive();
             }
@@ -1224,6 +1443,372 @@ namespace SerialConsole
             }
         }
 
+        static bool FindPathTo(int _toX, int _toZ)
+        {
+            // Test each cell for options
+            if (_toX == posX && _toZ == posZ)
+                return true;
+
+            toPosX = _toX;
+            toPosZ = _toZ;
+
+            foundWay = false;
+            skipNext = false;
+            returningFromGoal = false;
+            shortenAvailable = false;
+            FindFrom((byte)posX, (byte)posZ);
+
+            if ((driveWay.Count > saveWay.Count || driveWay.Count == 0) && saveWay.Count > 0)
+            {
+                driveWay = new List<byte[]>(saveWay);
+            }
+
+            //driveWay.ForEach(num => Debug.Log(num.X + " , " + num.Z + " ; "));
+            Console.WriteLine($"FINDPATHTO {_toX},{_toZ} from {posX},{posZ} AT {driveWay.Count} LENGTH");
+
+            for (int i = 0; i < maps[currentMap].GetLength(0); i++)
+            {
+                for (int j = 0; j < maps[currentMap].GetLength(1); j++)
+                {
+                    WriteMapBit(i, j, mapSearched, false);
+                    WriteMapBit(i, j, inDriveWay, false);
+                }
+            }
+
+            saveWay.Clear();
+            if (driveWay.Count == 0 && _toX != posX && _toZ != posZ)
+            {
+                Console.WriteLine("!!!!!!Could not find path!!!!!!!!!!");
+                return false;
+            }
+
+            return true;
+        }
+
+        static void FindFrom(byte _onX, byte _onZ)
+        {
+            WriteMapBit(_onX, _onZ, inDriveWay, true);
+
+            if (Math.Abs(_onZ - toPosZ) >= Math.Abs(_onX - toPosX))
+            {
+                if (_onZ <= toPosZ)
+                {
+                    FindPZ(_onX, _onZ);
+                    returningFromGoal = false;
+                }
+                else
+                {
+                    FindNZ(_onX, _onZ);
+                    returningFromGoal = false;
+                }
+
+                if (_onX <= toPosX)
+                {
+                    FindPX(_onX, _onZ);
+                    returningFromGoal = false;
+                }
+                else
+                {
+                    FindNX(_onX, _onZ);
+                    returningFromGoal = false;
+                }
+
+                if (_onZ > toPosZ)
+                {
+                    FindPZ(_onX, _onZ);
+                    returningFromGoal = false;
+                }
+                else
+                {
+                    FindNZ(_onX, _onZ);
+                    returningFromGoal = false;
+                }
+
+                if (_onX > toPosX)
+                {
+                    FindPX(_onX, _onZ);
+                    returningFromGoal = false;
+                }
+                else
+                {
+                    FindNX(_onX, _onZ);
+                    returningFromGoal = false;
+                }
+            }
+            else
+            {
+                if (_onX <= toPosX)
+                {
+                    FindPX(_onX, _onZ);
+                    returningFromGoal = false;
+                }
+                else
+                {
+                    FindNX(_onX, _onZ);
+                    returningFromGoal = false;
+                }
+
+                if (_onZ <= toPosZ)
+                {
+                    FindPZ(_onX, _onZ);
+                    returningFromGoal = false;
+                }
+                else
+                {
+                    FindNZ(_onX, _onZ);
+                    returningFromGoal = false;
+                }
+
+                if (_onX > toPosX)
+                {
+                    FindPX(_onX, _onZ);
+                    returningFromGoal = false;
+                }
+                else
+                {
+                    FindNX(_onX, _onZ);
+                    returningFromGoal = false;
+                }
+
+                if (_onZ > toPosZ)
+                {
+                    FindPZ(_onX, _onZ);
+                    returningFromGoal = false;
+                }
+                else
+                {
+                    FindNZ(_onX, _onZ);
+                    returningFromGoal = false;
+                }
+            }
+        }
+
+        static void SearchCell(byte _onX, byte _onZ)
+        {
+            if (_onX == toPosX && _onZ == toPosZ)
+            {
+                Console.WriteLine("Found " + driveWay.Count + " long");
+
+                if ((driveWay.Count < saveWay.Count || saveWay.Count == 0) && driveWay.Count > 0)
+                {
+                    saveWay = new List<byte[]>(driveWay);
+                    if (saveWay.Count == Math.Abs(posX - toPosX) + Math.Abs(posZ - toPosZ))
+                    {
+                        foundWay = true;
+                    }
+                }
+                skipNext = true;
+                returningFromGoal = true;
+                return;
+            }
+
+            bool returning = returningFromGoal;
+            returningFromGoal = false;
+
+            WriteMapBit(_onX, _onZ, inDriveWay, true);
+            //Better way when these are equal?
+            if (Math.Abs(_onZ - toPosZ) >= Math.Abs(_onX - toPosX))
+            {
+                if (_onZ <= toPosZ)
+                {
+                    FindPZ(_onX, _onZ);
+                }
+                else
+                {
+                    FindNZ(_onX, _onZ);
+                }
+
+                if (_onX <= toPosX)
+                {
+                    FindPX(_onX, _onZ);
+                }
+                else
+                {
+                    FindNX(_onX, _onZ);
+                }
+
+                if (_onZ > toPosZ)
+                {
+                    FindPZ(_onX, _onZ);
+                }
+                else
+                {
+                    FindNZ(_onX, _onZ);
+                }
+
+                if (_onX > toPosX)
+                {
+                    FindPX(_onX, _onZ);
+                }
+                else
+                {
+                    FindNX(_onX, _onZ);
+                }
+            }
+            else
+            {
+                if (_onX <= toPosX)
+                {
+                    FindPX(_onX, _onZ);
+                }
+                else
+                {
+                    FindNX(_onX, _onZ);
+                }
+
+                if (_onZ <= toPosZ)
+                {
+                    FindPZ(_onX, _onZ);
+                }
+                else
+                {
+                    FindNZ(_onX, _onZ);
+                }
+
+                if (_onX > toPosX)
+                {
+                    FindPX(_onX, _onZ);
+                }
+                else
+                {
+                    FindNX(_onX, _onZ);
+                }
+
+                if (_onZ > toPosZ)
+                {
+                    FindPZ(_onX, _onZ);
+                }
+                else
+                {
+                    FindNZ(_onX, _onZ);
+                }
+            }
+
+            WriteMapBit(_onX, _onZ, inDriveWay, false);
+            returningFromGoal = returning || returningFromGoal;
+            if (!returningFromGoal)
+            {
+                WriteMapBit(_onX, _onZ, mapSearched, true);
+            }
+
+            skipNext = false;
+        }
+
+        static void FindNZ(byte _onX, byte _onZ)
+        {
+            if (skipNext)
+            {
+                return;
+            }
+            if (shortenAvailable)
+            {
+                if (shortenToX == _onX && shortenToZ == _onZ)
+                {
+                    shortenAvailable = false;
+                }
+                else
+                {
+                    return;
+                }
+            }
+            if (!foundWay && _onZ - 1 >= 0 /*&& !ReadMapBit(_onX, _onZ, shortestPath)*/) //If there is a position one step +Z
+            {
+                if (ReadMapBit(_onX, _onZ - 1, explored) && !ReadMapBit(_onX, _onZ - 1, mapSearched) && !ReadMapBit(_onX, _onZ, 0) && !ReadMapBit(_onX, _onZ - 1, inDriveWay))
+                {
+                    driveWay.Add(new byte[] { _onX, (byte)(_onZ - 1) });
+                    SearchCell(_onX, (byte)(_onZ - 1));
+                    if (!foundWay)
+                        driveWay.RemoveAt(driveWay.Count - 1);
+                }
+            }
+        }
+        static void FindPZ(byte _onX, byte _onZ)
+        {
+            if (skipNext)
+            {
+                return;
+            }
+            if (shortenAvailable)
+            {
+                if (shortenToX == _onX && shortenToZ == _onZ)
+                {
+                    shortenAvailable = false;
+                }
+                else
+                {
+                    return;
+                }
+            }
+            if (!foundWay && _onZ + 1 < maps[currentMap].GetLength(1)) //If there is a position one step -Z
+            {
+                if (ReadMapBit(_onX, _onZ + 1, explored) && !ReadMapBit(_onX, _onZ + 1, mapSearched) && !ReadMapBit(_onX, _onZ, 2) && !ReadMapBit(_onX, _onZ + 1, inDriveWay))
+                {
+                    driveWay.Add(new byte[] { _onX, (byte)(_onZ + 1) });
+                    SearchCell(_onX, (byte)(_onZ + 1));
+                    if (!foundWay)
+                        driveWay.RemoveAt(driveWay.Count - 1);
+                }
+            }
+        }
+        static void FindPX(byte _onX, byte _onZ)
+        {
+            if (skipNext)
+            {
+                return;
+            }
+            if (shortenAvailable)
+            {
+                if (shortenToX == _onX && shortenToZ == _onZ)
+                {
+                    shortenAvailable = false;
+                }
+                else
+                {
+                    return;
+                }
+            }
+            if (!foundWay && _onX + 1 < maps[currentMap].GetLength(1)) //If there is a position one step +X
+            {
+                if (ReadMapBit(_onX + 1, _onZ, explored) && !ReadMapBit(_onX + 1, _onZ, mapSearched) && !ReadMapBit(_onX, _onZ, 3) && !ReadMapBit(_onX + 1, _onZ, inDriveWay))
+                {
+                    driveWay.Add(new byte[] { (byte)(_onX + 1), _onZ });
+                    SearchCell((byte)(_onX + 1), _onZ);
+                    if (!foundWay)
+                        driveWay.RemoveAt(driveWay.Count - 1);
+                }
+            }
+        }
+        static void FindNX(byte _onX, byte _onZ)
+        {
+            if (skipNext)
+            {
+                return;
+            }
+            if (shortenAvailable)
+            {
+                if (shortenToX == _onX && shortenToZ == _onZ)
+                {
+                    shortenAvailable = false;
+                }
+                else
+                {
+                    return;
+                }
+            }
+
+            if (!foundWay && _onX - 1 >= 0) //If there is a position one step -X
+            {
+                if (ReadMapBit(_onX - 1, _onZ, explored) && !ReadMapBit(_onX - 1, _onZ, mapSearched) && !ReadMapBit(_onX, _onZ, 1) && !ReadMapBit(_onX - 1, _onZ, inDriveWay))
+                {
+                    driveWay.Add(new byte[] { (byte)(_onX - 1), _onZ });
+                    SearchCell((byte)(_onX - 1), _onZ);
+                    if (!foundWay)
+                        driveWay.RemoveAt(driveWay.Count - 1);
+                }
+            }
+        }
+
+        /*
         static void ReturnToStart()
         {
             FindPathTo(startPosX, startPosZ, 0);
@@ -1238,7 +1823,7 @@ namespace SerialConsole
 
             Thread.Sleep(30000);
         }
-
+        
         static void FindExploredCells(int _onX, int _onZ)
         {
             if (_onX == toPosX && _onZ == toPosZ)
@@ -1361,6 +1946,7 @@ namespace SerialConsole
             }
         }
 
+        
         static bool ShortenPath(int _onX, int _onZ)
         {
             if (shortenAvailable)
@@ -1437,5 +2023,6 @@ namespace SerialConsole
 
             return false;
         }
+        */
     }
 }
