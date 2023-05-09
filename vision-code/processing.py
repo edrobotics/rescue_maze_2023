@@ -1,24 +1,26 @@
 #!/usr/bin/env python3
+import time
+import_time = time.time()
 import cv2
 import numpy as np
-from picamera.array import PiRGBArray
-from picamera import PiCamera
+#from picamera.array import PiRGBArray
+#from picamera import PiCamera
 import socket
-import time
 import random
 import timeit
 import threading 
 import logging
+print(f"importtime {import_time - time.time()}")
 
-
-ssh = True
+print(__name__)
+ssh = False
 showcolor = False
 inRobot = True
 connected = False
 ttime = False
+logging.info("started")
 
-
-for i in range(10):
+for i in range(1):
     print("connecting...")
     try:
         HEADER = 16
@@ -37,49 +39,8 @@ for i in range(10):
         connected = True
         break
 
-E = 0
-H = 0
-S = 0
-U = 0
-GREEN = 0
-YELLOW = 0
-RED = 0
-
-def log(image, name):
-    global E
-    global H
-    global S
-    global U
-    global GREEN
-    global YELLOW 
-    global RED
-
-    path = "./log/" + name 
-
-    match name:
-        case["E"]:
-            E += 1
-            path += path + str(E)
-        case["H"]:
-            H += 1
-            path += path + str(H)
-        case["S"]:
-            S += 1
-            path += path + str(S)
-        case["U"]:
-            U += 1
-            path += path + str(U)
-        case["GREEN"]:
-            GREEN += 1
-            path += path + str(GREEN)
-        case["YELLOW"]:
-            YELLOW += 1
-            path += path + str(YELLOW)
-        case["RED"]:
-            RED += 1
-            path += path + str(RED)
-        case _ :
-            print("smt wrong: ", name)
+def log(image, name, frame):
+    path = f'./log/{name}{frame}.png'
     cv2.imwrite(path,image)
     
 
@@ -110,7 +71,7 @@ pS = cv2.cvtColor(pS,cv2.COLOR_BGR2GRAY)
 SampleVictims = (rU, lU, nH, rS, lS)
 
 
-def identify_victim2(ivictim,victim):
+def identify_victim2(ivictim,victim,n):
   #  if ssh == False:
    #     cv2.imshow("victim", ivictim)
     found = False
@@ -122,10 +83,9 @@ def identify_victim2(ivictim,victim):
             break
         approx = cv2.approxPolyDP(cnt, 0.003 * cv2.arcLength(cnt, True), True)
         apr = area/para
-        print("apr: ",str(apr))
-        print("area: ", str(area))
-        print("para: ", str(para))
-        print("approx: ", len(approx))
+#        print("apr: ",str(apr))
+#        print("para: ", str(para))
+#        print("approx: ", len(approx))
         if victim == "H":
             if apr > 11 and apr < 17 and len(approx) > 12 and len(approx) < 25:
                 print("H detected")
@@ -138,11 +98,11 @@ def identify_victim2(ivictim,victim):
             if apr > 10 and apr < 15 and len(approx) > 17 and len(approx) < 25:
                 print("U detected")
                 found = True
-        if found: log(ivictim,victim)
+        if found: log(ivictim,victim,n)
         return found
 
 
-def identify_victim(victim, side):
+def identify_victim(victim, side,n):
 #    if not ssh: cv2.imshow("victim", victim)
     i = 0
     for sample in SampleVictims:
@@ -151,33 +111,33 @@ def identify_victim(victim, side):
             if i == 0:
                 print("rU")
                 print(np.count_nonzero(negativ))
-                if identify_victim2(victim, "U"):
+                if identify_victim2(victim, "U",n):
                     sendMessage("k0"+side)
             elif i == 1:
                 print("lU")
-                if identify_victim2(victim, "U"):
+                if identify_victim2(victim, "U",n):
                     sendMessage("k0"+side)
             elif i == 2:
                 print("nH")
-                if identify_victim2(victim, "H"):
+                if identify_victim2(victim, "H",n):
                     sendMessage("k3"+side)
             elif i == 3:
 #                print("rS")
                 victiminv = np.invert(victim)
                 positiv = cv2.bitwise_and(pS, victim)
                 if np.count_nonzero(positiv) <  600: break
-                if identify_victim2(victim, "S"):
+                if identify_victim2(victim, "S",n):
                     sendMessage("k2"+side)
             elif i == 4:
                 print("lS")
-                if identify_victim2(victim, "S"):
+                if identify_victim2(victim, "S",n):
                     sendMessage("k2"+side)
 #                cv2.waitKey(0)
             else:
                 print("smt wrong")
         i = i + 1
 
-def find_visual_victim():
+def find_visual_victim(image,framenum):
     img = image.copy
     gray = cv2.cvtColor(image,cv2.COLOR_BGR2GRAY)
     blurred = cv2.GaussianBlur(gray, (7, 7), 0)
@@ -246,9 +206,9 @@ def find_visual_victim():
             h, v = imgCnt.shape
             dsize = (200,200)
             RImgCnt = cv2.resize(imgCnt, dsize)
-            identify_victim(RImgCnt,side)
+            identify_victim(RImgCnt,side,framenum)
 
-def ColVicP(mask,color):
+def ColVicP(mask,color,n):
     kernel = np.ones((5, 5), np.uint8) 
     mask = cv2.erode(mask,kernel, iterations=1)
     mask = cv2.dilate(mask,kernel, iterations=1) 
@@ -261,52 +221,26 @@ def ColVicP(mask,color):
             if x < 300: side = "l"
             else: side = "r"
             sendMessage("k1"+side)
-            log(mask, color)
+            log(mask, color,n)
     if showcolor: cv2.imshow(color, mask)
 
 
-def find_colour_victim():
+def find_colour_victim(image,n):
     status = 0
-    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+    hsv = image
+   # hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
     hsv[:, 290:350] = (0,0,0)
 
     red_lower_range = np.array([100,100,100])
     red_upper_range = np.array([220,255,255])
     red_mask = cv2.inRange(hsv, red_lower_range, red_upper_range)
-    ColVicP(red_mask, "RED")
+    ColVicP(red_mask, "RED",n)
     green_lower_range = np.array([50,40,40])
     green_upper_range = np.array([65,255,255])
     green_mask = cv2.inRange(hsv, green_lower_range, green_upper_range)
-    ColVicP(green_mask, "GREEN")
+    ColVicP(green_mask, "GREEN",n)
     yellow_lower_range = np.array([15,100,100])
     yellow_upper_range = np.array([25,255,255])
     yellow_mask = cv2.inRange(hsv, yellow_lower_range, yellow_upper_range)
-    ColVicP(yellow_mask, "YELLOW")
+    ColVicP(yellow_mask, "YELLOW",n)
 
-
-if __name__ == '__main__':
-
-
-
-    #camera starts here
-    camera = PiCamera()
-    camera.resolution = (640, 480)
-    camera.framerate = 10
-    #camera.shutter_speed = 10000
-    #camera.iso = 800
-    rawCapture = PiRGBArray(camera, size=(640, 480))
-    for frame in camera.capture_continuous(rawCapture, format="bgr", use_video_port=True):
-        image = frame.array
-        log(image, "E")
-        rawCapture.truncate(0)
-        find_colour_victim()
-        find_visual_victim()
-        try:
-            if not ssh: cv2.imshow("frame", image)
-            pass
-        except:
-            ssh = True
-            showcolor = False
-        #key = cv2.waitKey(1)
-    #  if key == 27:
-    #     break
