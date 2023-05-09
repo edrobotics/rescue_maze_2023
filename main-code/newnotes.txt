@@ -1,1 +1,3 @@
 Om den är sned och tappar ena kanten för tidigt hinner den andra kanten inte tappas i tid. Kan åtgärdas genom att ta robotens vinkel i hänsyn i wallchanges och uppskatta deras "sanna" position.
+
+För att detektera att man halvt kör mot en vägg (som efter för kort körning med sväng) kan man använda att endast den ena framsensors aktiveras.

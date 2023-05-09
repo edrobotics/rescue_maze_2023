@@ -152,11 +152,11 @@ bool normalWallPresence[3] {};
 bool safeWallPresence[3] {};
 
 // For gyro turning and angles
-double g_currentGyroAngle = 0;
-double targetGyroAngle = 0;
+double g_currentGyroAngle = 0; // The current angle value for the gyro, but converted to a mathangle
+double g_targetGyroAngle = 0;
 double g_lastWallAngle = 0; // Used to determine the angle in relation to the wall when a move ends
-double g_robotAngle = 0; // The angle of the robot in relation to the wall
-double g_wallDistance = 0;
+double g_robotAngle = 0; // The (current) angle of the robot in relation to the wall
+double g_wallDistance = 0; // The (current) angle of the robot to the wall
 double g_startWallAngle = 0;
 double g_gyroOffset = 0;
 
@@ -759,7 +759,7 @@ void updateRobotPose(WallSide wallSide)
 }
 
 // Returns the distance left to turn in degrees. When you get closer, it decreases. When you have overshot, it will be negative.
-// zeroCross - if the turn will cross over 0
+// zeroCross - if the turn will cross over 0. Should not be needed anymore?
 // turningdirection - which direction you will turn. 1 is counter-clockwise and -1 is clockwise (math angles)
 // tarAng - the angle you want to turn to.
 // curAng - the angle you are currently at.
@@ -830,27 +830,27 @@ void gyroTurn(double turnAngle, bool stopMoving, double baseSpeed = 0)
 
     gyro.update();
     g_currentGyroAngle = gyroAngleToMathAngle(gyro.getAngleZ()); // Sets positive to be counter-clockwise and makes all valid values between 0 and 360
-    targetGyroAngle = (g_currentGyroAngle + turnAngle);
-    if (targetGyroAngle<0) {
-    targetGyroAngle +=360; // If the target angle is negative, add 360 to make it between 0 and 360 (no angle should be smaller than -360)
+    g_targetGyroAngle = g_currentGyroAngle + turnAngle;
+    if (g_targetGyroAngle<0) {
+    g_targetGyroAngle +=360; // If the target angle is negative, add 360 to make it between 0 and 360 (no angle should be smaller than -360)
     crossingZero = true;
-  } else if (targetGyroAngle >= 360) {
-    targetGyroAngle -= 360; // Should bind the value to be between 0 and 360 for positive target angles ( no angle should be 720 degrees or greater, so this should work)
+  } else if (g_targetGyroAngle >= 360) {
+    g_targetGyroAngle -= 360; // Should bind the value to be between 0 and 360 for positive target angles (no angle should be 720 degrees or greater, so this should work)
     crossingZero = true;
   }
     //double speedToRun = multiplier*1.5*BASE_SPEED_CMPS*CMPS_TO_RPM;
     double speedToRun = multiplier*35/CMPS_TO_RPM;
-    if (baseSpeed != 0) speedToRun = baseSpeed + speedToRun*gyroDriveCorrectionCoeff;
+    if (baseSpeed != 0) speedToRun = baseSpeed + speedToRun*gyroDriveCorrectionCoeff; // If moving forward while turning
     runWheelSide(wheels_left, -speedToRun);
     runWheelSide(wheels_right, speedToRun);
 
-    double varLeftToTurn = leftToTurn(crossingZero, multiplier, targetGyroAngle, g_currentGyroAngle);
+    double varLeftToTurn = leftToTurn(crossingZero, multiplier, g_targetGyroAngle, g_currentGyroAngle);
 
     while (varLeftToTurn > 15) {
       gyro.update();
       g_currentGyroAngle = gyroAngleToMathAngle(gyro.getAngleZ());
       loopEncoders();
-      varLeftToTurn = leftToTurn(crossingZero, multiplier, targetGyroAngle, g_currentGyroAngle);
+      varLeftToTurn = leftToTurn(crossingZero, multiplier, g_targetGyroAngle, g_currentGyroAngle);
     }
 
     // Slowing down in the end of the turn.
@@ -864,7 +864,7 @@ void gyroTurn(double turnAngle, bool stopMoving, double baseSpeed = 0)
       gyro.update();
       g_currentGyroAngle = gyroAngleToMathAngle(gyro.getAngleZ());
       loopEncoders();
-      varLeftToTurn = leftToTurn(crossingZero, multiplier, targetGyroAngle, g_currentGyroAngle);
+      varLeftToTurn = leftToTurn(crossingZero, multiplier, g_targetGyroAngle, g_currentGyroAngle);
     }
 
     if (stopMoving==true) stopWheels();
@@ -880,6 +880,7 @@ void gyroTurnSteps(TurningDirection direction, int steps, bool doCorrection)
   int multiplier=-1;
   if (direction==ccw) multiplier=1;
   double turnAngle = multiplier*90;
+  if (steps==0) turnAngle = 0;
   updateRobotPose();
   g_startWallAngle = g_lastWallAngle;
 
@@ -899,17 +900,31 @@ void gyroTurnSteps(TurningDirection direction, int steps, bool doCorrection)
 
   // Serial.print(g_startWallAngle);
   // Serial.print("  ");
-  updateRobotPose();
-  g_startWallAngle = g_lastWallAngle + angleDiff -multiplier*90; // This does not read the actual angle, but the intended turning angle
-  updateRobotPose();
+  updateRobotPose(); // Also updates g_lastWallAngle
+  g_startWallAngle = g_lastWallAngle + angleDiff -multiplier*90; // Returns the actual amount turned
+  if (steps==0) g_startWallAngle = g_lastWallAngle + angleDiff; // For the straightening
+  updateRobotPose(); // Also updates g_lastWallAngle
   // Serial.println(g_lastWallAngle);
 
 }
 
 void turnSteps(TurningDirection direction, int steps)
 {
+  flushDistanceArrays();
   gyroTurnSteps(direction, steps, true);
   flushDistanceArrays();
+  straighten();
+  flushDistanceArrays();
+}
+
+void straighten()
+{
+  gyroTurnSteps(cw, 0, true);
+}
+
+void turnToPIDAngle()
+{
+  // Use gyroturn to do it.
 }
 
 
@@ -1792,6 +1807,7 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
 
 bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, bool& frontSensorDetected)
 {
+  straighten();
   WallSide wallToUse = wall_none; // Initialize a variable for which wall to follow
   startDistanceMeasure(); // Starts the distance measuring (encoders)
   double dumbDistanceDriven = 0;
@@ -1975,6 +1991,7 @@ bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, bo
     delay(500);
     lights::turnOff();
   }
+  straighten();
 
   // Determine whether you have driven a step or not
   if (g_trueDistanceDriven > 15 && stoppingReason != stop_floorColour) return true;

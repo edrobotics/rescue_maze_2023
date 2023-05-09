@@ -55,7 +55,6 @@ enum TurningDirection {
 // The direction may be separated into a separate argument and given its own type.
 void turnSteps(TurningDirection direction, int steps);
 
-
 // Returns an byte giving information about whether the walls are present
 int getWallStates();
 
@@ -288,6 +287,9 @@ void gyroTurn(double turnAngle, bool stopMoving, double baseSpeed = 0);
 // steps - the amount of 90-degree turns to do in the chosen direction.
 // doCorrection - Whether or not you should correct for the lastWallAngle
 void gyroTurnSteps(TurningDirection direction, int steps, bool doCorrection);
+
+// Aligns the robot to the grid (parallel/normal to the walls)
+void straighten();
 
 //--------------------- Sensors ----------------------------------------//
 

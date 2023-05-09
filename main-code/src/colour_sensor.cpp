@@ -147,6 +147,8 @@ ColourSensor::FloorColour ColourSensor::identifyColour()
     else if (boolSumReflective >= 3 && (sensorClear > 200 && sensorClear < 500)) return floor_reflective;
     else if (boolSumWhite >= 3) return floor_white; // reflective falls (partly) into the same span, but because reflective would have returned all that is left in this area should be white
     else return floor_unknown;
+    
+    // return floor_unknown; // For debugging, disabling colour detection
 
 
 
