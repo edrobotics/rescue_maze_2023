@@ -324,6 +324,8 @@ void printUltrasonics();
 // Check if the walls are present. Uses raw distance data instead of "true" distance data. What does this mean?
 void checkWallPresence();
 
+void printWallPresence();
+
 
 // Update the "true" distance to the wall and the angle from upright
 // Other code should call the getUltrasonics() beforehand
@@ -353,7 +355,7 @@ enum WallChangeType {
 };
 
 // Checks for wallchanges in smooth sensor data
-WallChangeType checkSmoothWallChanges(UltrasonicGroup ultrasonicGroup);
+void checkSmoothWallChanges();
 
 void checkPotWallChanges();
 

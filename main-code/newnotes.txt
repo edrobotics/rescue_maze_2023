@@ -1,1 +1,1 @@
-Om den är sned och tappar ena kanten för tidigt hinner den andra kanten inte tappas i tid. Kan åtgärdas genom att ta robotens vinkel i hänsyn.
+Om den är sned och tappar ena kanten för tidigt hinner den andra kanten inte tappas i tid. Kan åtgärdas genom att ta robotens vinkel i hänsyn i wallchanges och uppskatta deras "sanna" position.

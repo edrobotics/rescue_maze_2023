@@ -73,7 +73,6 @@ const double CMPS_TO_RPM = 1.0/WHEEL_CIRCUMFERENCE*60.0; // Constant to convert 
 const double BASE_SPEED_CMPS = 15; // The base speed of driving (cm/s)
 const double BASE_SPEED_RPM = CMPS_TO_RPM*BASE_SPEED_CMPS; // The base speed of driving (rpm)
 double g_trueDistanceDriven = 0; // The correct driven distance. Measured as travelling along the wall and also updated when landmarks are seen
-// double g_shadowDistancesDriven[ULTRASONIC_NUM][2] {};
 double g_targetDistance = 0; // The distance that you want to drive
 double g_startDistance = 0; // The distance that you start from
 
@@ -85,6 +84,14 @@ PotWallChange g_potWallChanges[ULTRASONIC_NUM][2] {};
 WallChangeType g_smoothWallChanges[ULTRASONIC_NUM] {};
 
 // The offset from what should be correct when correcting with wallchanges
+
+// Sensor constants
+const double ULTRASONIC_SPACING = 14.6; // The distance between the centers two ultrasonic sensors.
+const double ULTRASONIC_FRONT_OFFSET = 9.5; // The distance from the front sensor to the center of the robot
+const double ULTRASONIC_DISTANCE_TO_WALL = 7.1; // The distance between the ultrasonic sensor (edge of the robot) and the wall when the robot is centered.
+const double WALL_PRESENCE_TRESHOLD = 20; // Not calibrated !!!!!!!!!!!!!!!!!!!!!!!! Just a guess!!!!!!!!!!!!!!!!!!!!!!!
+const double FRONT_WALL_STOPPING_TRESHOLD = 15 - ULTRASONIC_FRONT_OFFSET + 1.8;
+
 double wallChangeOffsets[wcoff_num] =
 {
   3.5,  // frontLeaving
@@ -93,11 +100,8 @@ double wallChangeOffsets[wcoff_num] =
   0     // backApproaching
 };
 
-// Sensor constants
-const double ULTRASONIC_SPACING = 14.6; // The distance between the centers two ultrasonic sensors.
-const double ULTRASONIC_FRONT_OFFSET = 9.5; // The distance from the front sensor to the center of the robot
-const double ULTRASONIC_DISTANCE_TO_WALL = 7.1; // The distance between the ultrasonic sensor (edge of the robot) and the wall when the robot is centered.
-const double WALL_PRESENCE_TRESHOLD = 20; // Not calibrated !!!!!!!!!!!!!!!!!!!!!!!! Just a guess!!!!!!!!!!!!!!!!!!!!!!!
+const double BACK_WALLCHANGE_DISTANCE = 15 + ULTRASONIC_SPACING/2.0;
+const double FRONT_WALLCHANGE_DISTANCE = 15 - ULTRASONIC_SPACING/2.0;
 
 // Array containing the order in which the sensors should be called
 UltrasonicSensorEnum ultrasonicCallingOrder[ULTRASONIC_NUM] =
@@ -129,7 +133,8 @@ bool currentSensorWallStates[ULTRASONIC_NUM][USMT_NUM];
 // Whether or not a wall was present at the previous execution of checkSmoothWallChanges
 // First dimension: Which sensor to use
 // Second dimension: Which data type to use (usmt_raw or usmt_smooth)
-bool previousSensorWallStates[ULTRASONIC_NUM][USMT_NUM] {}; // Double check that this sets them to false
+bool previousSensorWallStates[ULTRASONIC_NUM][USMT_NUM] {};
+// Double check that this sets them to false
 
 
 
@@ -923,7 +928,7 @@ void updateDistanceArray(UltrasonicSensorEnum sensorToUse)
   ultrasonicRawDistances[sensorToUse][ultrasonicRawDistancesPointer[sensorToUse]] = ultrasonicCurrentDistances[sensorToUse][usmt_raw];
   ++ultrasonicRawDistancesPointer[sensorToUse];
   while (ultrasonicRawDistancesPointer[sensorToUse] >= DISTANCE_MEASUREMENT_SIZE) ultrasonicRawDistancesPointer[sensorToUse] -= DISTANCE_MEASUREMENT_SIZE;
-  while (ultrasonicRawDistancesPointer[sensorToUse] < DISTANCE_MEASUREMENT_SIZE) ultrasonicRawDistancesPointer[sensorToUse] += DISTANCE_MEASUREMENT_SIZE;
+  while (ultrasonicRawDistancesPointer[sensorToUse] < 0) ultrasonicRawDistancesPointer[sensorToUse] += DISTANCE_MEASUREMENT_SIZE;
 }
 
 // Calculates the average (distance) for the specified array
@@ -994,14 +999,56 @@ void getUltrasonics()
 void printUltrasonics()
 {
 
-  // Serial.print("F:");Serial.print(ultrasonicDistanceF);
-  // Serial.print(" LF:");Serial.print(ultrasonicDistanceLF);
-  // Serial.print(" LB:");Serial.print(ultrasonicDistanceLB);
-  // Serial.print(" RF:");Serial.print(ultrasonicDistanceRF);
-  // Serial.print(" RB:");Serial.print(ultrasonicDistanceRB);
-  // Serial.print(" LBWall:");Serial.print(wallPresentLB);
-  // Serial.print(" RBWall: ");Serial.print(wallPresentRB);
-  Serial.println("Not yet fixed");
+  Serial.print("RAW:    ");
+  Serial.print("F:");Serial.print(ultrasonicCurrentDistances[ultrasonic_F][usmt_raw]);
+  Serial.print(" LF:");Serial.print(ultrasonicCurrentDistances[ultrasonic_LF][usmt_raw]);
+  Serial.print(" LB:");Serial.print(ultrasonicCurrentDistances[ultrasonic_LB][usmt_raw]);
+  Serial.print(" RF:");Serial.print(ultrasonicCurrentDistances[ultrasonic_RF][usmt_raw]);
+  Serial.print(" RB:");Serial.print(ultrasonicCurrentDistances[ultrasonic_RB][usmt_raw]);
+  Serial.println("");
+
+  Serial.print("SMOOTH: ");
+  Serial.print("F:");Serial.print(ultrasonicCurrentDistances[ultrasonic_F][usmt_smooth]);
+  Serial.print(" LF:");Serial.print(ultrasonicCurrentDistances[ultrasonic_LF][usmt_smooth]);
+  Serial.print(" LB:");Serial.print(ultrasonicCurrentDistances[ultrasonic_LB][usmt_smooth]);
+  Serial.print(" RF:");Serial.print(ultrasonicCurrentDistances[ultrasonic_RF][usmt_smooth]);
+  Serial.print(" RB:");Serial.print(ultrasonicCurrentDistances[ultrasonic_RB][usmt_smooth]);
+  Serial.println("");
+}
+
+void prinSensortWallPresence()
+{
+  Serial.print("RAW:    ");
+  Serial.print("F:");Serial.print(currentSensorWallStates[ultrasonic_F][usmt_raw]);
+  Serial.print(" LF:");Serial.print(currentSensorWallStates[ultrasonic_LF][usmt_raw]);
+  Serial.print(" LB:");Serial.print(currentSensorWallStates[ultrasonic_LB][usmt_raw]);
+  Serial.print(" RF:");Serial.print(currentSensorWallStates[ultrasonic_RF][usmt_raw]);
+  Serial.print(" RB:");Serial.print(currentSensorWallStates[ultrasonic_RB][usmt_raw]);
+  Serial.println("");
+
+
+  Serial.print("SMOOTH: ");
+  Serial.print("F:");Serial.print(currentSensorWallStates[ultrasonic_F][usmt_smooth]);
+  Serial.print(" LF:");Serial.print(currentSensorWallStates[ultrasonic_LF][usmt_smooth]);
+  Serial.print(" LB:");Serial.print(currentSensorWallStates[ultrasonic_LB][usmt_smooth]);
+  Serial.print(" RF:");Serial.print(currentSensorWallStates[ultrasonic_RF][usmt_smooth]);
+  Serial.print(" RB:");Serial.print(currentSensorWallStates[ultrasonic_RB][usmt_smooth]);
+  Serial.println("");
+}
+
+void printWallPresence()
+{
+  Serial.print("NORMAL: ");
+  Serial.print("F: ");Serial.print(normalWallPresence[wall_front]);
+  Serial.print(" L: ");Serial.print(normalWallPresence[wall_left]);
+  Serial.print(" R: ");Serial.print(normalWallPresence[wall_right]);
+  Serial.println("");
+
+  Serial.print("SAFE:   ");
+  Serial.print("F: ");Serial.print(safeWallPresence[wall_front]);
+  Serial.print(" L: ");Serial.print(safeWallPresence[wall_left]);
+  Serial.print(" R: ");Serial.print(safeWallPresence[wall_right]);
+  Serial.println("");
 }
 
 // Update individual sensor wall presence (raw and smooth)
@@ -1028,13 +1075,17 @@ void updateWallPresence(WallSide wallToUse)
     sensor1 = ultrasonic_LF;
     sensor2 = ultrasonic_LB;
   }
-  else if (wallToUse = wall_right)
+  else if (wallToUse == wall_right)
   {
     sensor1 = ultrasonic_RF;
     sensor2 = ultrasonic_RB;
   }
+  else
+  {
+    // Perhaps use for debugging
+  }
 
-  if (currentSensorWallStates[sensor1][usmt_smooth] == true && currentSensorWallStates[sensor2][usmt_smooth] == true)
+  if (currentSensorWallStates[sensor1][usmt_smooth] == true && currentSensorWallStates[sensor2][usmt_smooth] == true) // Could be more effective for front wall, but this does the job
   {
     normalWallPresence[wallToUse] = true;
     if (currentSensorWallStates[sensor1][usmt_raw] == true && currentSensorWallStates[sensor2][usmt_raw] == true)
@@ -1086,8 +1137,8 @@ void checkWallPresence()
 // sensor - the sensor to set the values for
 void setSinglePreviousSensorWallState(UltrasonicSensorEnum sensor)
 {
-  previousSensorWallStates[ultrasonic_LF][usmt_raw] = currentSensorWallStates[ultrasonic_LF][usmt_raw];
-  previousSensorWallStates[ultrasonic_LF][usmt_smooth] = currentSensorWallStates[ultrasonic_LF][usmt_smooth];
+  previousSensorWallStates[sensor][usmt_raw] = currentSensorWallStates[sensor][usmt_raw];
+  previousSensorWallStates[sensor][usmt_smooth] = currentSensorWallStates[sensor][usmt_smooth];
 }
 
 // Sets the vairable for previous wall states to the current ones
@@ -1120,13 +1171,13 @@ void calcRobotPose(WallSide wallSide, double& angle, double& trueDistance, bool 
   else if (wallSide==wall_right)
   {
     // Should this be inverted from the left side (like it is now)?
-    d1 = ultrasonicCurrentDistances[ultrasonic_RF][usmt_smooth];
-    d2 = ultrasonicCurrentDistances[ultrasonic_RB][usmt_smooth];
+    d1 = ultrasonicCurrentDistances[ultrasonic_RB][usmt_smooth];
+    d2 = ultrasonicCurrentDistances[ultrasonic_RF][usmt_smooth];
   }
 
   if (useGyroAngle==false) angle = atan((d2 - d1)/ULTRASONIC_SPACING);
   else angle *= DEG_TO_RAD; // Convert the angle to radians to execute the calculation
-  trueDistance = cos(angle) * ((d1 + d2)/(double)2);
+  trueDistance = cos(angle) * ((d1 + d2)/2.0);
   angle *= RAD_TO_DEG; // Convert the angle to degrees
 
   // Debugging
@@ -1192,7 +1243,7 @@ void checkSmoothWallChange(int sensor)
 
 // Checking for smooth wall changes
 // Needs to be more robust
-WallChangeType checkSmoothWallChanges()
+void checkSmoothWallChanges()
 {
   for (int i=1; i<ULTRASONIC_NUM; ++i)
   {
@@ -1306,15 +1357,18 @@ void pidDrive(WallSide wallSide)
   if (wallSide==wall_left)
   {
     distanceError = g_wallDistance - ULTRASONIC_DISTANCE_TO_WALL;
+    // Serial.println("Using left wall");
   }
   else if (wallSide==wall_right)
   {
     distanceError = ULTRASONIC_DISTANCE_TO_WALL - g_wallDistance;
+    // Serial.println("Using right wall");
   }
   else if (wallSide==wall_both)
   {
     // distanceError = g_wallDistance - ULTRASONIC_DISTANCE_TO_WALL; // Do as with left wall present
     distanceError = (g_wallDistance - secondaryWallDistance)/2.0; // (left - right)/2 . It should center the robot and also change the same amount as the other ones (hence the division by 2)
+    // Serial.println("Using both walls");
     // Debugging
     // Serial.print(wallSide);
     // Serial.print("    ");
@@ -1354,6 +1408,12 @@ void pidDrive(WallSide wallSide)
   loopEncoders(); // Could maybe remove - already done in getUltrasonics()
   g_lastWallAngle = g_robotAngle; // Update the g_lastWallAngle - okay to do because this will not be read during the execution loop of pidTurn. It will only be used before.
   // Serial.println(g_robotAngle);
+  
+  
+  // Debugging
+  // Serial.print(distanceError);Serial.println("");
+  // Serial.print(g_robotAngle);Serial.print(" ");Serial.print(goalAngle);Serial.println("");
+  // Serial.println(correction);
 
   // Debugging
   // Serial.print("Correction:");
@@ -1447,20 +1507,21 @@ void checkAndUseWallChange(int sensor, WallChangeType wallChangeToCheck, Stoppin
   if (g_smoothWallChanges[sensor] == wallChangeToCheck)
     {
       double offset = 0;
-      if (wallChangeToCheck == wallchange_approaching)
+      // Front wallchange
+      if ((g_driveBack==false && ultrasonicGroup==ultrasonics_front) || (g_driveBack==true && ultrasonicGroup==ultrasonics_back))
       {
-        if ((g_driveBack==true && ultrasonicGroup==ultrasonics_front) || (g_driveBack!=true && ultrasonicGroup==ultrasonics_back)) offset = wallChangeOffsets[wcoff_backApproaching];
-        else offset = wallChangeOffsets[wcoff_frontApproaching];
+        if (wallChangeToCheck == wallchange_approaching) offset = FRONT_WALLCHANGE_DISTANCE + wallChangeOffsets[wcoff_frontApproaching];
+        else offset = FRONT_WALLCHANGE_DISTANCE + wallChangeOffsets[wcoff_frontLeaving];
       }
+      // Back wallchange
       else
       {
-        if ((g_driveBack==true && ultrasonicGroup==ultrasonics_front) || (g_driveBack!=true && ultrasonicGroup==ultrasonics_back)) offset = wallChangeOffsets[wcoff_backLeaving];
-        else offset = wallChangeOffsets[wcoff_frontLeaving];
+        if (wallChangeToCheck == wallchange_approaching) offset = BACK_WALLCHANGE_DISTANCE + wallChangeOffsets[wcoff_backApproaching];
+        else offset = BACK_WALLCHANGE_DISTANCE + wallChangeOffsets[wcoff_backLeaving];
+        
       }
-      
 
-
-      if (g_potWallChanges[sensor][wallChangeToCheck].timestamp - millis() < 300)
+      if (g_potWallChanges[sensor][wallChangeToCheck].timestamp - millis() < 500) // Time is not tuned!!!
       {
         // Successful detection using potential wallchange
         g_trueDistanceDriven = g_potWallChanges[sensor][wallChangeToCheck].shadowDistanceDriven + offset;
@@ -1469,7 +1530,7 @@ void checkAndUseWallChange(int sensor, WallChangeType wallChangeToCheck, Stoppin
       else
       {
         // Normal detection using only smooth wallchange
-        g_trueDistanceDriven = 15 + ULTRASONIC_SPACING/2.0 + offset;
+        g_trueDistanceDriven = offset;
       }
 
       if (wallChangeToCheck == wallchange_leaving)
@@ -1486,13 +1547,15 @@ void checkAndUseWallChange(int sensor, WallChangeType wallChangeToCheck, Stoppin
 }
 
 // Checks for wallchanges and sets the truedistance driven variable accordingly.
+// stopReason - the variable to safe the stoppingreason in
+// This function can be run by itself and does not need any special code in driveStepDriveLoop
 void checkWallChanges(StoppingReason& stopReason)
 {
   checkPotWallChanges();
   checkSmoothWallChanges();
 
   // Check all the sensors for potential wallchanges, leaving and approaching.
-  // If a wallchange is detected, begin counting shadow distance. Also set detected to false.
+  // If a wallchange is detected, begin counting shadow distance.
   for (int i=0; i<2; ++i)
   {
     WallChangeType wallChangeToCheck = wallchange_approaching; // For when i=0
@@ -1501,16 +1564,13 @@ void checkWallChanges(StoppingReason& stopReason)
     {
       if (g_potWallChanges[k][wallChangeToCheck].detected == true)
       {
-        setShadowDistance(k, wallChangeToCheck, 15 + ULTRASONIC_SPACING/2.0); // Begins the shadowdistance
-        // g_potWallChanges[k][wallChangeToCheck].detected = false; // Unsets the detected flag. Should be done in checkPotWallChange
+        setShadowDistance(k, wallChangeToCheck, 0); // Begins the shadowdistance
       }
     }
   }
 
   for (int i=0; i<2; ++i)
   {
-    
-    
     WallChangeType wallChangeToCheck = wallchange_approaching; // For when i=0
     if (i==1) wallChangeToCheck = wallchange_leaving;
     
@@ -1518,8 +1578,47 @@ void checkWallChanges(StoppingReason& stopReason)
     {
       checkAndUseWallChange(i, wallChangeToCheck, stopReason);
     }
-
   }
+
+}
+
+void printPotWallChanges()
+{
+  Serial.print("APPR  ");
+  Serial.print("LF:");Serial.print(g_potWallChanges[ultrasonic_LF][wallchange_approaching].detected);Serial.print(" ");
+  Serial.print("LB:");Serial.print(g_potWallChanges[ultrasonic_LB][wallchange_approaching].detected);Serial.print(" ");
+  Serial.print("RF:");Serial.print(g_potWallChanges[ultrasonic_RF][wallchange_approaching].detected);Serial.print(" ");
+  Serial.print("RB:");Serial.print(g_potWallChanges[ultrasonic_RB][wallchange_approaching].detected);Serial.print(" ");
+  Serial.println("");
+
+  Serial.print("LEAV  ");
+  Serial.print("LF:");Serial.print(g_potWallChanges[ultrasonic_LF][wallchange_leaving].detected);Serial.print(" ");
+  Serial.print("LB:");Serial.print(g_potWallChanges[ultrasonic_LB][wallchange_leaving].detected);Serial.print(" ");
+  Serial.print("RF:");Serial.print(g_potWallChanges[ultrasonic_RF][wallchange_leaving].detected);Serial.print(" ");
+  Serial.print("RB:");Serial.print(g_potWallChanges[ultrasonic_RB][wallchange_leaving].detected);Serial.print(" ");
+  Serial.println("");
+}
+
+void printWallchangeData(UltrasonicSensorEnum sensor)
+{
+  Serial.print("POT  ");
+  Serial.print("CurrentPresent:");Serial.print(currentSensorWallStates[sensor][usmt_raw]);Serial.print(" ");
+  Serial.print("PreviousPresent:");Serial.print(previousSensorWallStates[sensor][usmt_raw]);Serial.print(" ");
+  Serial.println("");
+
+  Serial.print("APPR: ");
+  Serial.print("DETECT: ");
+  Serial.print(g_potWallChanges[sensor][wallchange_approaching].detected);Serial.print(" ");
+  Serial.print("ShadowDist: ");Serial.print(g_potWallChanges[sensor][wallchange_approaching].shadowDistanceDriven);Serial.print(" ");
+  Serial.print("TIME: ");Serial.print(millis()-g_potWallChanges[sensor][wallchange_approaching].timestamp);Serial.print(" ");
+  Serial.println("");
+  
+  Serial.print("LEAV: ");
+  Serial.print("DETECT: ");
+  Serial.print(g_potWallChanges[sensor][wallchange_leaving].detected);Serial.print(" ");
+  Serial.print("ShadowDist: ");Serial.print(g_potWallChanges[sensor][wallchange_leaving].shadowDistanceDriven);Serial.print(" ");
+  Serial.print("TIME: ");Serial.print(millis()-g_potWallChanges[sensor][wallchange_leaving].timestamp);Serial.print(" ");
+  Serial.println("");
 }
 
 // What to run inside of the driveStep loop (the driving forward-portion)
@@ -1531,31 +1630,33 @@ void checkWallChanges(StoppingReason& stopReason)
 // stopReason - gives the reason for why the robot stopped moving
 bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, StoppingReason& stopReason, bool& rampDriven)
 {
-  getUltrasonics1();
-  ColourSensor::FloorColour g_floorColour = colSensor.checkFloorColour();
-  if (g_driveBack == false)
-  {
-    switch (g_floorColour)
-    {
-      case ColourSensor::floor_notUpdated:
-        break; // Do nothing
-      case ColourSensor::floor_black:
-        // Drive back to last point and exit the loop
-        stopReason = stop_floorColour;
-        return true; // Exit the loop
-        break;
-      case ColourSensor::floor_blue:
-        // Go on driving and tell Marcus that there is a blue tile
-        // stopReason = stop_floorColour;
-        // return true; // Exit the loop
-        break;
-      default:
-        // Do nothing (includes silver)
-        break; // Potential problem with the last break statement?
-    }
-  }
-  getUltrasonics2();
+  // One way of doing it:
+  // getUltrasonics1();
+  // ColourSensor::FloorColour g_floorColour = colSensor.checkFloorColour();
+  // if (g_driveBack == false)
+  // {
+  //   switch (g_floorColour)
+  //   {
+  //     case ColourSensor::floor_notUpdated:
+  //       break; // Do nothing
+  //     case ColourSensor::floor_black:
+  //       // Drive back to last point and exit the loop
+  //       stopReason = stop_floorColour;
+  //       return true; // Exit the loop
+  //       break;
+  //     case ColourSensor::floor_blue:
+  //       // Go on driving and tell Marcus that there is a blue tile
+  //       // stopReason = stop_floorColour;
+  //       // return true; // Exit the loop
+  //       break;
+  //     default:
+  //       // Do nothing (includes silver)
+  //       break; // Potential problem with the last break statement?
+  //   }
+  // }
+  // getUltrasonics2();
   // printUltrasonics();
+  getUltrasonics();
   checkWallPresence();
   // Separate this out into its own function? (deciding what wall to follow)
   if (safeWallPresence[wall_left] && safeWallPresence[wall_right]) wallToUse = wall_both;
@@ -1610,7 +1711,7 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
     }
     useNormPID();
     // Checking if you are done
-    if (ultrasonicCurrentDistances[ultrasonic_F][usmt_smooth] < (15 - ULTRASONIC_FRONT_OFFSET + 1) && g_driveBack == false) // If the robot is the correct distance away from the front wall. The goal is that ultrasonicDistanceF is 5.2 when the robot stops. Should not do when driving backwards.
+    if (ultrasonicCurrentDistances[ultrasonic_F][usmt_smooth] < FRONT_WALL_STOPPING_TRESHOLD && g_driveBack == false) // If the robot is the correct distance away from the front wall. The goal is that ultrasonicDistanceF is 5.2 when the robot stops. Should not do when driving backwards.
     {
       // lights::setColour(3, colourBase, true);
       // g_trueDistanceDriven = 30; // The robot has arrived
@@ -1630,12 +1731,12 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
     }
   } // Only do when not on ramp ends here
 
-  // Checking for wallchanges (needs some more robustness!)
-  
+  // Checking for wallchanges
+  checkWallChanges(stopReason);
+  // printWallchangeData(ultrasonic_RF);
+  // Serial.println("");
 
-
-
-    // Checking for interrupts
+  // Checking for interrupts
   if (serialcomm::checkInterrupt() == true)
   {
     stopWheels();
@@ -1682,8 +1783,9 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
     }
   }
 
-
-  g_previousOnRampState = onRamp; // Update for the next loop
+  // Updates for the next loop (may not be all of themo)
+  g_previousOnRampState = onRamp;
+  setPreviousSensorWallStates();
   return false; // The default return - not finished
 }
 
@@ -1748,6 +1850,9 @@ bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, bo
   // Serial.print(g_trueDistanceDriven);
   // Serial.print("    ");
   // Serial.println(g_targetDistance);
+  // printUltrasonics();
+  // printWallPresence();
+  // Serial.println("");Serial.println("");
   // ++iterations;
   }
   // Serial.print("Time: ");
@@ -1768,7 +1873,7 @@ bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, bo
     bool throwaWayRampDriven = false; // Just to give driveStepDriveLoop someting. Is not used for anything.
     lights::setColour(3, colourOrange, true);
     shouldStop = false;
-    while (ultrasonicCurrentDistances[ultrasonic_F][usmt_smooth] > (15 - ULTRASONIC_FRONT_OFFSET + 1)) // The part about trueDistance is a failsafe in case the sensor fails && (g_trueDistanceDriven-trueDistanceDrivenFlag) < 7
+    while (ultrasonicCurrentDistances[ultrasonic_F][usmt_smooth] > FRONT_WALL_STOPPING_TRESHOLD) // The part about trueDistance is a failsafe in case the sensor fails && (g_trueDistanceDriven-trueDistanceDrivenFlag) < 7
     {
       driveStepDriveLoop(wallToUse, dumbDistanceDriven, stoppingReason, throwaWayRampDriven);
       // Serial.println(ultrasonicDistanceF);
@@ -1778,6 +1883,7 @@ bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, bo
   }
 
   stopWheels();
+  // Serial.println("STOPPED"); // Debugging
 
   g_driveBack = false;
 

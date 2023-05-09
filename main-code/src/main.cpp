@@ -35,8 +35,8 @@ void setup()
 // double robotAngle = 0;
 // double wallDistance = 0;
 
-#define PICODE
-// #define TESTING_NAV
+// #define PICODE
+#define TESTING_NAV
 // #define TESTING
 // #define COLSENS_CALIBRATION
 
@@ -72,8 +72,20 @@ void loop()
 
   #else
 
-  deployRescueKit();
-  delay(2000);
+  // deployRescueKit();
+  // delay(2000);
+
+  // getUltrasonics();
+  // checkWallPresence();
+  
+  driveStep();
+  Serial.println("");Serial.println("------------------------------------------------------------------------------");Serial.println("");
+  delay(1500);
+  lights::turnOff();
+  delay(500);
+
+  // IMPORTANT!!! ----------------------------------------------------------------------------------------------------------------------------------------------------------------
+  // I tried to change the usmt
 
   #endif
 
