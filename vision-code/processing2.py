@@ -54,16 +54,41 @@ nU = cv2.imread('U1.png')
 rU = cv2.cvtColor(nU,cv2.COLOR_BGR2GRAY)
 lU = cv2.rotate(rU, cv2.ROTATE_180)
 
+
 nH = cv2.imread('H1.png')
 nH = cv2.cvtColor(nH,cv2.COLOR_BGR2GRAY)
 
 nS = cv2.imread('S1.png')
 rS = cv2.cvtColor(nS,cv2.COLOR_BGR2GRAY)
 lS = cv2.rotate(rS, cv2.ROTATE_180)
+
 pS = cv2.imread('S2.png')
 pS = cv2.cvtColor(pS,cv2.COLOR_BGR2GRAY)
 
+Hand = cv2.imread('./samples/Hsample_and.png')
+Hand = cv2.cvtColor(Hand,cv2.COLOR_BGR2GRAY)
+
+Hor = cv2.imread('./samples/Hsample_or.png')
+Hor = cv2.cvtColor(Hor,cv2.COLOR_BGR2GRAY)
+
+Sand = cv2.imread('./samples/Ssample_and.png')
+Sand = cv2.cvtColor(Sand,cv2.COLOR_BGR2GRAY)
+
+Sor = cv2.imread('./samples/Ssample_or.png')
+Sor = cv2.cvtColor(Sor,cv2.COLOR_BGR2GRAY)
+
+Uand = cv2.imread('./samples/Usample_and.png')
+Uand = cv2.cvtColor(Uand,cv2.COLOR_BGR2GRAY)
+
+Uor = cv2.imread('./samples/Usample_or.png')
+Uor = cv2.cvtColor(Uor,cv2.COLOR_BGR2GRAY)
+
+
+
+
 SampleVictims = (rU, lU, nH, rS, lS)
+And_Victim = (Hand,Sand,Uand)
+OR_victim = (Hor,Sor,Uor)
 
 
 def identify_victim2(ivictim,victim,n):
@@ -85,17 +110,42 @@ def identify_victim2(ivictim,victim,n):
             if apr > 11 and apr < 17 and len(approx) > 12 and len(approx) < 25:
                 print("H detected")
                 found = True
-        if victim == "S":
+        elif victim == "S":
             if apr > 9 and apr < 13 and len(approx) > 32 and len(approx) < 40:
                 print("S detected")
                 found = True
-        if victim == "U":
+        elif victim == "U":
             if apr > 10 and apr < 15 and len(approx) > 17 and len(approx) < 25:
                 print("U detected")
                 found = True
         if found: log(ivictim,victim,n)
 
         return found
+    
+
+
+def identify_victimI(victim):
+    x = -1
+    for sample in And_Victim:
+        x = x +1 
+        M_AND = cv2.bitwise_and(sample, victim)
+        C_and = np.count_nonzero(sample)
+        M_OR = cv2.bitwise_and(OR_victim[x], victim)
+        C_or = np.count_nonzero(victim)
+
+        if C_and == M_AND & M_OR == C_or:
+            print("Victim identified ")
+            logging.info(f"identified victim: ")
+        elif C_and == M_AND:
+            print("only and")
+        elif C_or == M_OR:
+            print("only or")
+        else: 
+            print("not identified")
+        
+
+
+
 
 
 def identify_victim(victim, side,n):
@@ -209,7 +259,7 @@ def ColVicP(mask,color,n,image):
     kernel = np.ones((5, 5), np.uint8) 
     mask = cv2.erode(mask,kernel, iterations=1)
     mask = cv2.dilate(mask,kernel, iterations=1) 
-    if np.count_nonzero(mask) > 2000 and np.count_nonzero(mask <10000):
+    if np.count_nonzero(mask) > 2000 and np.count_nonzero(mask < 20000):
         ret,thresh = cv2.threshold(mask, 40, 255, 0)
         contours, hierarchy = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
         c = max(contours, key = cv2.contourArea)
