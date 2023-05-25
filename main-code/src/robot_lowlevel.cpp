@@ -871,6 +871,26 @@ void gyroTurn(double turnAngle, bool stopMoving, double baseSpeed = 0)
     if (stopMoving==true) stopWheels();
 }
 
+// GyroTurn but it is updating the robot pose variables accordingly.
+// The code is copied from gyroTurnSteps(), so I should probably make gyroTurnSteps() make use of awareGyroTurn().
+void awareGyroTurn(double turnAngle, bool stopMoving, double baseSpeed = 0)
+{
+  updateRobotPose();
+  g_startWallAngle = g_lastWallAngle;
+
+  double startGyroAngle = gyroAngleToMathAngle(gyro.getAngleZ());
+  gyroTurn(turnAngle, true, baseSpeed);
+  gyro.update();
+  double endGyroAngle = gyroAngleToMathAngle(gyro.getAngleZ());
+  centerAngle180(endGyroAngle, startGyroAngle);
+  double angleDiff = endGyroAngle - startGyroAngle;
+  g_gyroOffset = gyroAngleToMathAngle(gyro.getAngleZ());// The angle measured by the gyro (absolute angle) in the beginning.
+
+  updateRobotPose();
+  g_startWallAngle = g_lastWallAngle + angleDiff;
+
+}
+
 // Turns the specified steps (90 degrees) in the direction specified above.
 // Automatic correction for the last angle to the wall can be specified by the last argument. Make sure that the g_lastWallAngle is up to date!
 // direction - cw (clockwise) or ccw (counter-clockwise) turn.

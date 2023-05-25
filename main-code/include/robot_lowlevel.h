@@ -289,6 +289,11 @@ double leftToTurn(bool zeroCross, int turningDirection, double tarAng, double cu
 // baseSpeed - Optional argument for specifying the speed to move at while turning. cm/s
 void gyroTurn(double turnAngle, bool stopMoving, double baseSpeed = 0);
 
+// GyroTurn but it is updating the robot pose variables accordingly.
+// The code is copied from gyroTurnSteps(), so I should probably make gyroTurnSteps() make use of awareGyroTurn().
+// Same arguments as gyroTurn()
+void awareGyroTurn(double turnAngle, bool stopMoving, double baseSpeed = 0);
+
 // Turns the specified steps (90 degrees) in the direction specified above.
 // Automatic correction for the last angle to the wall can be specified by the last argument. Make sure that the lastWallAngle is up to date!
 // direction - cw (clockwise) or ccw (counter-clockwise) turn.
