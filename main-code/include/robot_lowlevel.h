@@ -36,12 +36,20 @@ enum WallChangeOffsets
   wcoff_num,
 };
 
+enum TouchSensorSide
+{
+  touch_none,
+  touch_left,
+  touch_right,
+  touch_both
+};
+
 
 //////////////// Public functions /////////////////////////////
 
 // Drives one step (30cm) forwards.
 // Could take a speed argument
-bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, bool& frontSensorDetected);
+bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, TouchSensorSide& frontSensorDetectionType, double& xDistanceOnRamp, double& yDistanceOnRamp);
 
 bool driveStep();
 
@@ -402,7 +410,7 @@ enum StoppingReason
   stop_backWallChangeLeaving,
   stop_deadReckoning,
   stop_floorColour,
-  stop_frontSensor,
+  stop_frontTouchSensor,
 };
 
 
@@ -438,8 +446,10 @@ void testWallChanges();
 
 void initSwitches();
 
+
+
 // Returns true if the front sensor is activated (pressed in)
-bool frontSensorActivated();
+TouchSensorSide frontSensorActivated();
 
 
 

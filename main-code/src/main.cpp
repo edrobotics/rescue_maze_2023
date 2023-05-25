@@ -35,8 +35,8 @@ void setup()
 // double robotAngle = 0;
 // double wallDistance = 0;
 
-// #define PICODE
-#define TESTING_NAV
+#define PICODE
+// #define TESTING_NAV
 // #define TESTING
 // #define COLSENS_CALIBRATION
 
@@ -80,6 +80,7 @@ void loop()
   
   driveStep();
   Serial.println("");Serial.println("------------------------------------------------------------------------------");Serial.println("");
+  
   delay(1500);
   lights::turnOff();
   delay(500);
@@ -137,15 +138,27 @@ void loop()
         // lights::showDirection(lights::front);
         ColourSensor::FloorColour floorColourAhead = ColourSensor::floor_notUpdated;
         bool rampDriven = false;
-        bool frontSensorDetected = false;
-        bool commandSuccess = driveStep(floorColourAhead, rampDriven, frontSensorDetected);
+        TouchSensorSide frontSensorDetectionType = touch_none;
+        double xDistanceOnRamp = 0;
+        double yDistanceOnRamp = 0;
+        bool commandSuccess = driveStep(floorColourAhead, rampDriven, frontSensorDetectionType, xDistanceOnRamp, yDistanceOnRamp);
         // bool commandSuccess = true;
         // lights::turnOff();
-        if (floorColourAhead == ColourSensor::floor_black || frontSensorDetected == true) // floorColourAhead == ColourSensor::floor_blue ||  // Removed due to strategy change
+        if (floorColourAhead == ColourSensor::floor_black || frontSensorDetectionType == touch_both)
         {
           lights::reversing();
           driveStep(); // For driving back
           // commandSuccess = true; // Not really, but Markus program wants it
+        }
+
+        if (frontSensorDetectionType == touch_left)
+        {
+          // Correct by turning right
+          gyroTurn(-10, true, -10);
+        }
+        else if (frontSensorDetectionType == touch_right)
+        {
+          // Correct by turning left
         }
 
         if (floorColourAhead == ColourSensor::floor_reflective)
@@ -161,7 +174,13 @@ void loop()
           Serial.print("!a,");
           Serial.print(colourSensor.floorColourAsChar(floorColourAhead)); // If you have not driven back floorColourAhead will actually be the current tile
           Serial.print(',');
-          if (rampDriven == true) Serial.print("1");
+          if (rampDriven == true)
+          {
+            Serial.print("1,");
+            Serial.print(xDistanceOnRamp);
+            Serial.print(',');
+            Serial.print(yDistanceOnRamp);
+          } 
           else Serial.print("0");
           Serial.println("");
           // serialcomm::returnFloorColour(floorColourAhead); // Interpreted as success by mazenav (except for black tile)

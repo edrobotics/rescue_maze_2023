@@ -163,6 +163,7 @@ double g_gyroOffset = 0;
 // For driving decision (driving backwards)
 bool g_driveBack = false;
 ColourSensor::FloorColour g_floorColour = ColourSensor::floor_notUpdated;
+TouchSensorSide g_lastTouchSensorState = touch_none;
 
 int g_kitsToDrop = 0;
 char g_dropDirection = ' ';
@@ -917,6 +918,7 @@ void turnSteps(TurningDirection direction, int steps)
   flushDistanceArrays();
 }
 
+// Should be done after every move. (at the end of drivestep and turnsteps) That way, the robot should always be straigt for the new measurements.
 void straighten()
 {
   gyroTurnSteps(cw, 0, true);
@@ -1466,6 +1468,8 @@ bool g_onRampIterations[ON_RAMP_ARR_SIZE];
 int g_onRampPointer = 0;
 bool g_previousOnRampState = false;
 double g_trueDistanceDrivenOnRamp = 0;
+double g_horizontalDistanceDrivenOnRamp = 0;
+double g_verticalDistanceDrivenOnRamp = 0;
 
 
 void fillRampArrayFalse()
@@ -1691,7 +1695,8 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
   // Updating the distances
   // Increment the true distance driven.
   // Done by calculating the leg parallell to the wall in the right triangle formed by the distance travelled and the lines parallell to walls in both directions (see notes on paper)
-  double trueDistanceIncrement = multiplier*(getDistanceDriven()-dumbDistanceDriven) * cos(abs(g_robotAngle*DEG_TO_RAD)); // Because g_lastWallAngle is updated continuosly, it can be used here. Or I can just use robotAngle instead.
+  double dumbDistanceIncrement = getDistanceDriven() - dumbDistanceDriven;
+  double trueDistanceIncrement = multiplier*(dumbDistanceIncrement) * cos(abs(g_robotAngle*DEG_TO_RAD)); // Because g_lastWallAngle is updated continuosly, it can be used here. Or I can just use robotAngle instead.
   g_trueDistanceDriven += trueDistanceIncrement;
   incrementShadowDistances(trueDistanceIncrement);
   dumbDistanceDriven = getDistanceDriven();
@@ -1712,8 +1717,11 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
   {
     useRampPID();
     g_trueDistanceDrivenOnRamp += trueDistanceIncrement;
-    if (g_trueDistanceDrivenOnRamp > 10) rampDriven = true;
-    // RampDrive. Do nothing special?
+    if (g_trueDistanceDrivenOnRamp > 10) rampDriven = true; // Could be moved to driveStep() ?
+    g_horizontalDistanceDrivenOnRamp += dumbDistanceIncrement * cos(abs(gyro.getAngleX())*DEG_TO_RAD);
+    g_verticalDistanceDrivenOnRamp += dumbDistanceIncrement * sin(-gyro.getAngleX()*DEG_TO_RAD);
+    // Serial.print(g_horizontalDistanceDrivenOnRamp);Serial.print("    ");Serial.print(g_verticalDistanceDrivenOnRamp);Serial.print("    ");Serial.println(-gyro.getAngleX());
+
     lights::onRamp();
     
   }
@@ -1744,6 +1752,31 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
       g_driveBack = false; // Reset the driveBack variable (do not drive back the next step)
       return true;
     }
+
+    // Checking for ground colour (should perhaps only be done when not on ramp?)
+  g_floorColour = colSensor.checkFloorColour();
+  if (g_driveBack == false)
+  {
+    switch (g_floorColour)
+    {
+      case ColourSensor::floor_notUpdated:
+        break; // Do nothing
+      case ColourSensor::floor_black:
+        // Drive back to last point and exit the loop
+        stopReason = stop_floorColour;
+        return true; // Exit the loop
+        break;
+      case ColourSensor::floor_blue:
+        // Go on driving and tell Marcus that there is a blue tile
+        // stopReason = stop_floorColour;
+        // return true; // Exit the loop
+        break;
+      default:
+        // Do nothing (includes silver)
+        break; // Potential problem with the last break statement?
+    }
+  }
+
   } // Only do when not on ramp ends here
 
   // Checking for wallchanges
@@ -1768,34 +1801,12 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
 
 
   // Checking the front touch sensor
-  if (frontSensorActivated() == true && g_driveBack == false)
+  TouchSensorSide touchSensorState = frontSensorActivated();
+  if (g_driveBack==false && (touchSensorState != touch_none))
   {
-    stopReason = stop_frontSensor;
-    return true; // Exit the loop
-  }
-
-  // Checking for ground colour (should perhaps only be done when not on ramp?)
-  g_floorColour = colSensor.checkFloorColour();
-  if (g_driveBack == false)
-  {
-    switch (g_floorColour)
-    {
-      case ColourSensor::floor_notUpdated:
-        break; // Do nothing
-      case ColourSensor::floor_black:
-        // Drive back to last point and exit the loop
-        stopReason = stop_floorColour;
-        return true; // Exit the loop
-        break;
-      case ColourSensor::floor_blue:
-        // Go on driving and tell Marcus that there is a blue tile
-        // stopReason = stop_floorColour;
-        // return true; // Exit the loop
-        break;
-      default:
-        // Do nothing (includes silver)
-        break; // Potential problem with the last break statement?
-    }
+      stopReason = stop_frontTouchSensor;
+      g_lastTouchSensorState = touchSensorState;
+      return true; // Exit the loop
   }
 
   // Updates for the next loop (may not be all of themo)
@@ -1805,12 +1816,14 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
 }
 
 
-bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, bool& frontSensorDetected)
+bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, TouchSensorSide& frontSensorDetectionType, double& xDistanceOnRamp, double& yDistanceOnRamp)
 {
-  straighten();
+  // straighten();
   WallSide wallToUse = wall_none; // Initialize a variable for which wall to follow
   startDistanceMeasure(); // Starts the distance measuring (encoders)
   double dumbDistanceDriven = 0;
+  g_horizontalDistanceDrivenOnRamp = 0;
+  g_verticalDistanceDrivenOnRamp = 0;
   g_targetDistance = 30; // The distance that you want to drive. Normally 30
   g_startDistance = 0; // Where you start. Normally 0, but different when going backwards.
   if (g_driveBack == true)
@@ -1945,9 +1958,8 @@ bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, bo
       g_driveBack = true;
       lights::floorIndicator(g_floorColour);
       break;
-    case stop_frontSensor:
+    case stop_frontTouchSensor:
       g_driveBack = true;
-      frontSensorDetected = true;
       lights::indicateFrontSensor();
       break;
     default:
@@ -1991,7 +2003,37 @@ bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, bo
     delay(500);
     lights::turnOff();
   }
-  straighten();
+
+  if (stoppingReason == stop_frontTouchSensor)
+  {
+    // Determine if the button values are still the same
+
+    TouchSensorSide sensorActivation = frontSensorActivated();
+    // If they are the same or both front sensors are detecting, continue with detection
+    if (sensorActivation==g_lastTouchSensorState || sensorActivation==touch_both)
+    {
+      frontSensorDetectionType = sensorActivation;
+    }
+    else // If the sensors are not the same as during the run and only one sensor (or none) is detected, consider it a false alarm
+    {
+      // Do nothing because it was a false detection and try to drive again.
+      // If it is not a false detection, it will hopefully be detected the next loop because of lower speed.
+      // Alternatively, if a detection is done enough times with short time between, consider it a real detection.
+    }
+
+    // Determine which side is affected and relay information to main loop
+  }
+  else
+  {
+    straighten(); // Only straighten when not by obstacle
+  }
+
+  xDistanceOnRamp = g_horizontalDistanceDrivenOnRamp;
+  yDistanceOnRamp = g_verticalDistanceDrivenOnRamp;
+
+  // Debugging
+  // Serial.println(xDistanceOnRamp);
+  // Serial.println(yDistanceOnRamp);
 
   // Determine whether you have driven a step or not
   if (g_trueDistanceDriven > 15 && stoppingReason != stop_floorColour) return true;
@@ -2005,8 +2047,10 @@ bool driveStep()
 {
   ColourSensor::FloorColour throwAwayColour;
   bool throwawayRampDriven = false;
-  bool throwawayFrontSensorDetected = false;
-  return driveStep(throwAwayColour, throwawayRampDriven, throwawayFrontSensorDetected);
+  TouchSensorSide throwawayFrontSensorDetectionType = touch_none;
+  double throwawayxDistance = 0;
+  double throwawayyDistance = 0;
+  return driveStep(throwAwayColour, throwawayRampDriven, throwawayFrontSensorDetectionType, throwawayxDistance, throwawayyDistance);
 }
 
 // Make a navigation decision.
@@ -2106,22 +2150,48 @@ void deployRescueKit()
 //----------------------------- Buttons and misc. sensors -------------------------//
 
 // Front touch sensor buttons
-const int pressPlateSW1 = 34;
-const int pressPlateSW2 = 36;
+class HardwareButton
+{
+public:
+  const int pin; // The pin the switch is on
+  void init()
+  {
+    pinMode(pin, INPUT_PULLUP);
+  }
+
+  bool isPressed()
+  {
+    return (digitalRead(pin) == LOW);
+  }
+};
+
+// Which button is on which side is not checked
+HardwareButton pressPlateLeft {34};
+HardwareButton pressPlateRight {36};
 
 void initSwitches()
 {
-  pinMode(pressPlateSW1, INPUT_PULLUP);
-  pinMode(pressPlateSW2, INPUT_PULLUP);
+  pressPlateLeft.init();
+  pressPlateRight.init();
 }
 
-bool frontSensorActivated()
+
+
+TouchSensorSide frontSensorActivated()
 {
-  if (digitalRead(pressPlateSW1) == LOW || digitalRead(pressPlateSW2) == LOW)
+  if (pressPlateLeft.isPressed()==true && pressPlateRight.isPressed()==true)
   {
-    return true;
+    return touch_both;
   }
-  else return false;
+  else if (pressPlateLeft.isPressed()==true)
+  {
+    return touch_left;
+  }
+  else if (pressPlateRight.isPressed()==true)
+  {
+    return touch_right;
+  }
+  else return touch_none;
 }
 
 void serialcomm::sendLOP()
