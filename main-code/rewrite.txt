@@ -1,1 +1,7 @@
 Check that the initialization of bool arrays sets all elements to false
+
+When detecting wallchanges, maybe indicate directly with lightning instead of doing it when stopping?
+
+Add condition that a wallchange distance update cannot be too far from the "real" distance.
+The reason for this is that when the robot drove back, it drove a whole step too far.
+With wallchanges, I need to compensate for the robot angle.

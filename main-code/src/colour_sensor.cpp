@@ -142,13 +142,13 @@ ColourSensor::FloorColour ColourSensor::identifyColour()
     int boolSumReflective = lowerUpperEval(rgRatio, 1.0, 1.4) + lowerUpperEval(rbRatio, 1.1, 1.45) + lowerUpperEval(gbRatio, 1.1, 1.3);
     int boolSumWhite = lowerUpperEval(rgRatio, 0.9, 1.1) + lowerUpperEval(rbRatio, 1.0, 1.3) + lowerUpperEval(gbRatio, 1.0, 1.2) + (sensorClear > 500);
 
-    if (boolSumBlack >= 3) return floor_black;
-    else if (boolSumBlue >=3) return floor_blue; // Could be lower (0.85?) for both
-    else if (boolSumReflective >= 3 && (sensorClear > 200 && sensorClear < 500)) return floor_reflective;
-    else if (boolSumWhite >= 3) return floor_white; // reflective falls (partly) into the same span, but because reflective would have returned all that is left in this area should be white
-    else return floor_unknown;
+    // if (boolSumBlack >= 3) return floor_black;
+    // else if (boolSumBlue >=3) return floor_blue; // Could be lower (0.85?) for both
+    // else if (boolSumReflective >= 3 && (sensorClear > 200 && sensorClear < 500)) return floor_reflective;
+    // else if (boolSumWhite >= 3) return floor_white; // reflective falls (partly) into the same span, but because reflective would have returned all that is left in this area should be white
+    // else return floor_unknown;
     
-    // return floor_unknown; // For debugging, disabling colour detection
+    return floor_unknown; // For debugging, disabling colour detection
 
 
 

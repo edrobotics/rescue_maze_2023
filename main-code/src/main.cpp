@@ -35,8 +35,8 @@ void setup()
 // double robotAngle = 0;
 // double wallDistance = 0;
 
-// #define PICODE
-#define TESTING_NAV
+#define PICODE
+// #define TESTING_NAV
 // #define TESTING
 // #define COLSENS_CALIBRATION
 
@@ -80,6 +80,7 @@ void loop()
   
   driveStep();
   Serial.println("");Serial.println("------------------------------------------------------------------------------");Serial.println("");
+  
   delay(1500);
   lights::turnOff();
   delay(500);
@@ -135,41 +136,65 @@ void loop()
       {
         serialcomm::returnSuccess(); // For validation and robustness of the communication protocol
         // lights::showDirection(lights::front);
-        ColourSensor::FloorColour floorColourAhead = ColourSensor::floor_notUpdated;
-        bool rampDriven = false;
-        bool frontSensorDetected = false;
-        bool commandSuccess = driveStep(floorColourAhead, rampDriven, frontSensorDetected);
-        // bool commandSuccess = true;
-        // lights::turnOff();
-        if (floorColourAhead == ColourSensor::floor_black || frontSensorDetected == true) // floorColourAhead == ColourSensor::floor_blue ||  // Removed due to strategy change
-        {
-          lights::reversing();
-          driveStep(); // For driving back
-          // commandSuccess = true; // Not really, but Markus program wants it
-        }
 
-        if (floorColourAhead == ColourSensor::floor_reflective)
-        {
-          lights::indicateCheckpoint();
-          
-        }
-        // Serial.print("Floor colour ahead: ");
-        // Serial.println(floorColourAhead);
-        // If we have moved, mazenav has to know the new colour. If we have not moved, the colour is already known.
-        if (commandSuccess == true || (floorColourAhead == ColourSensor::floor_black)) //  || floorColourAhead == ColourSensor::floor_black || floorColourAhead == ColourSensor::floor_blue // Removed because it would return success every time it saw blue or black, regardless if it had driven a step or not.
-        {
-          Serial.print("!a,");
-          Serial.print(colourSensor.floorColourAsChar(floorColourAhead)); // If you have not driven back floorColourAhead will actually be the current tile
-          Serial.print(',');
-          if (rampDriven == true) Serial.print("1");
-          else Serial.print("0");
-          Serial.println("");
-          // serialcomm::returnFloorColour(floorColourAhead); // Interpreted as success by mazenav (except for black tile)
-        }
-        else
-        {
-          serialcomm::returnFailure();
-        }
+        driveStepBegin: // Label to be able to use goto statements
+          ColourSensor::FloorColour floorColourAhead = ColourSensor::floor_notUpdated;
+          bool rampDriven = false;
+          TouchSensorSide frontSensorDetectionType = touch_none;
+          double xDistanceOnRamp = 0;
+          double yDistanceOnRamp = 0;
+          bool commandSuccess = driveStep(floorColourAhead, rampDriven, frontSensorDetectionType, xDistanceOnRamp, yDistanceOnRamp);
+          // bool commandSuccess = true;
+          // lights::turnOff();
+          if (floorColourAhead == ColourSensor::floor_black || frontSensorDetectionType == touch_both)
+          {
+            lights::reversing();
+            driveStep(); // For driving back
+            // commandSuccess = true; // Not really, but Markus program wants it
+          }
+
+          if (frontSensorDetectionType == touch_left)
+          {
+            // Correct by turning right
+            awareGyroTurn(-10, true, -10);
+            goto driveStepBegin;
+            
+          }
+          else if (frontSensorDetectionType == touch_right)
+          {
+            // Correct by turning left
+            awareGyroTurn(10, true, -10);
+            goto driveStepBegin;
+          }
+
+          if (floorColourAhead == ColourSensor::floor_reflective)
+          {
+            lights::indicateCheckpoint();
+            
+          }
+          // Serial.print("Floor colour ahead: ");
+          // Serial.println(floorColourAhead);
+          // If we have moved, mazenav has to know the new colour. If we have not moved, the colour is already known.
+          if (commandSuccess == true || (floorColourAhead == ColourSensor::floor_black)) //  || floorColourAhead == ColourSensor::floor_black || floorColourAhead == ColourSensor::floor_blue // Removed because it would return success every time it saw blue or black, regardless if it had driven a step or not.
+          {
+            Serial.print("!a,");
+            Serial.print(colourSensor.floorColourAsChar(floorColourAhead)); // If you have not driven back floorColourAhead will actually be the current tile
+            Serial.print(',');
+            if (rampDriven == true)
+            {
+              Serial.print("1,");
+              Serial.print(xDistanceOnRamp);
+              Serial.print(',');
+              Serial.print(yDistanceOnRamp);
+            } 
+            else Serial.print("0");
+            Serial.println("");
+            // serialcomm::returnFloorColour(floorColourAhead); // Interpreted as success by mazenav (except for black tile)
+          }
+          else
+          {
+            serialcomm::returnFailure();
+          }
         
       }
         break;

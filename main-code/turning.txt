@@ -1,5 +1,0 @@
-Document for updating the turning functions
-Goal: Write a self-righting function.
-
-The function will be written as just turning a step but the amount of steps being 0, as the code for correcting the angle is already there.
-Therefore I need to implement the "steps" parameter in turnSteps
