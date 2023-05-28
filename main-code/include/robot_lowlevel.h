@@ -49,7 +49,8 @@ enum TouchSensorSide
 
 // Drives one step (30cm) forwards.
 // Could take a speed argument
-bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, TouchSensorSide& frontSensorDetectionType, double& xDistanceOnRamp, double& yDistanceOnRamp);
+// continuing - if you should continue where you left off last time (keeping the truedistancedriven)
+bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, TouchSensorSide& frontSensorDetectionType, double& xDistanceOnRamp, double& yDistanceOnRamp, bool continuing);
 
 bool driveStep();
 
@@ -161,7 +162,7 @@ namespace lights
 
     void checkPointRestored();
 
-    void signalVictim();
+    void turnOnVictimLights();
 
     void indicateFrontSensor();
 
@@ -276,6 +277,8 @@ void updateRobotPose(WallSide wallSide);
 // Updates the robot angles (including the lastwallangle)
 void updateRobotPose();
 
+void printRobotPose();
+
 // Returns the distance left to turn in degrees. When you get closer, it decreases. When you have overshot, it will be negative.
 // Can we omit zerocross, and just give the turn angle instead?
 // zeroCross - if the turn will cross over 0
@@ -287,7 +290,8 @@ double leftToTurn(bool zeroCross, int turningDirection, double tarAng, double cu
 // turnAngle - the angle to turn, in degrees. Should not be greater than 90 (only tested with 90). Positive is counter-clockwise (math angle)
 // stopMoving - Whether or not the robot should stop when the function is done. Set to false when driving continuously.
 // baseSpeed - Optional argument for specifying the speed to move at while turning. cm/s
-void gyroTurn(double turnAngle, bool stopMoving, double baseSpeed = 0);
+// If baseSpeed != 0, the function will update trueDistanceDriven.
+void gyroTurn(double turnAngle, bool stopMoving, bool aware, double baseSpeed = 0);
 
 // GyroTurn but it is updating the robot pose variables accordingly.
 // The code is copied from gyroTurnSteps(), so I should probably make gyroTurnSteps() make use of awareGyroTurn().
@@ -415,7 +419,9 @@ enum StoppingReason
   stop_backWallChangeLeaving,
   stop_deadReckoning,
   stop_floorColour,
-  stop_frontTouchSensor,
+  stop_frontTouchBoth,
+  stop_frontTouchLeft,
+  stop_frontTouchRight
 };
 
 
@@ -429,8 +435,6 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
 
 
 //------------------------- Rescue kits -----------------------------------//
-
-void signalVictim();
 
 void handleVictim(double fromInterrupt);
 

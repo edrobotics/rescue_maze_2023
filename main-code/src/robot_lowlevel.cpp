@@ -438,19 +438,13 @@ void lights::floorIndicator(ColourSensor::FloorColour floorColour)
   }
 }
 
-void lights::signalVictim()
+void lights::turnOnVictimLights()
 {
-  for (int i=0;i<5;++i)
-  {
     setColour(0, colourWhite, false);
     setColour(3, colourRed, false);
     setColour(6, colourRed, false);
     setColour(9, colourRed, false);
     setColour(12, colourRed, true);
-    delay(500);
-    turnOff();
-    delay(500);
-  }
 }
 
 void lights::indicateFrontSensor()
@@ -759,6 +753,14 @@ void updateRobotPose(WallSide wallSide)
   updateRobotPose(wallSide, secondaryWallDistance);
 }
 
+// Prints data relavant for the robot pose. NOT DONE YET.
+void printRobotPose()
+{
+  Serial.print("g_robotAngle:  ");Serial.println(g_robotAngle);
+  Serial.print("g_trueDistanceDriven:  ");Serial.println(g_trueDistanceDriven);
+  // NOT DONE
+}
+
 // Returns the distance left to turn in degrees. When you get closer, it decreases. When you have overshot, it will be negative.
 // zeroCross - if the turn will cross over 0. Should not be needed anymore?
 // turningdirection - which direction you will turn. 1 is counter-clockwise and -1 is clockwise (math angles)
@@ -805,12 +807,13 @@ double leftToTurn(bool zeroCross, int turningDirection, double tarAng, double cu
 }
 
 
-double gyroDriveCorrectionCoeff = 0.1;
+double gyroDriveCorrectionCoeff = 1;
 // Turn using the gyro
 // turnAngle - the angle to turn, in degrees. Should not be greater than 90 (only tested with 90). Positive is counter-clockwise (math angle)
 // stopMoving - Whether or not the robot should stop when the function is done. Set to false when driving continuously.
 // baseSpeed - Optional argument for specifying the speed to move at while turning. cm/s
-void gyroTurn(double turnAngle, bool stopMoving, double baseSpeed = 0)
+// If baseSpeed != 0, the function will update trueDistanceDriven.
+void gyroTurn(double turnAngle, bool stopMoving, bool aware = false, double baseSpeed = 0)
 {
   // Used to determine turning direction of the wheels
     int multiplier = 1; // Positive is ccw
@@ -840,10 +843,19 @@ void gyroTurn(double turnAngle, bool stopMoving, double baseSpeed = 0)
     crossingZero = true;
   }
     //double speedToRun = multiplier*1.5*BASE_SPEED_CMPS*CMPS_TO_RPM;
+    double dumbDistanceDriven = 0; // Only needed if speedToRun != 0
     double speedToRun = multiplier*35/CMPS_TO_RPM;
-    if (baseSpeed != 0) speedToRun = baseSpeed + speedToRun*gyroDriveCorrectionCoeff; // If moving forward while turning
-    runWheelSide(wheels_left, -speedToRun);
-    runWheelSide(wheels_right, speedToRun);
+    if (baseSpeed != 0)
+    {
+      if (aware==true) startDistanceMeasure(); // For aware gyro turn
+      runWheelSide(wheels_left, baseSpeed - speedToRun*gyroDriveCorrectionCoeff);
+      runWheelSide(wheels_right, baseSpeed + speedToRun*gyroDriveCorrectionCoeff);
+    }
+    else
+    {
+      runWheelSide(wheels_left, -speedToRun);
+      runWheelSide(wheels_right, speedToRun);
+    }
 
     double varLeftToTurn = leftToTurn(crossingZero, multiplier, g_targetGyroAngle, g_currentGyroAngle);
 
@@ -852,23 +864,49 @@ void gyroTurn(double turnAngle, bool stopMoving, double baseSpeed = 0)
       g_currentGyroAngle = gyroAngleToMathAngle(gyro.getAngleZ());
       loopEncoders();
       varLeftToTurn = leftToTurn(crossingZero, multiplier, g_targetGyroAngle, g_currentGyroAngle);
+      
+      if (baseSpeed != 0 && aware==true)
+      {
+        // Update truedistancedriven (copied from driveStepDriveLoop and slightly modified)
+        double dumbDistanceIncrement = getDistanceDriven() - dumbDistanceDriven;
+        double trueDistanceIncrement = dumbDistanceIncrement * cos(abs(g_robotAngle*DEG_TO_RAD));
+        g_trueDistanceDriven += trueDistanceIncrement;
+        dumbDistanceDriven = getDistanceDriven();
+      }
     }
 
     // Slowing down in the end of the turn.
     // All of this code could be placed inside of the first while-loop, but then every iteration would take more time because of checks and the gyro would become less accurate due to that.
     speedToRun = multiplier*20/CMPS_TO_RPM;
-    if (baseSpeed != 0) speedToRun = baseSpeed + speedToRun*gyroDriveCorrectionCoeff; // If driving forward, make the correction smaller
-    runWheelSide(wheels_left, -speedToRun);
-    runWheelSide(wheels_right, speedToRun);
+    if (baseSpeed != 0)
+    {
+      runWheelSide(wheels_left, baseSpeed - speedToRun*gyroDriveCorrectionCoeff);
+      runWheelSide(wheels_right, baseSpeed + speedToRun*gyroDriveCorrectionCoeff);
+    }
+    else
+    {
+      runWheelSide(wheels_left, -speedToRun);
+      runWheelSide(wheels_right, speedToRun);
+    }
 
     while (varLeftToTurn > 2) {
       gyro.update();
       g_currentGyroAngle = gyroAngleToMathAngle(gyro.getAngleZ());
       loopEncoders();
       varLeftToTurn = leftToTurn(crossingZero, multiplier, g_targetGyroAngle, g_currentGyroAngle);
+
+      if (baseSpeed != 0 && aware==true)
+      {
+        // Update truedistancedriven (copied from driveStepDriveLoop and slightly modified)
+        double dumbDistanceIncrement = getDistanceDriven() - dumbDistanceDriven;
+        double trueDistanceIncrement = dumbDistanceIncrement * cos(abs(g_robotAngle*DEG_TO_RAD));
+        g_trueDistanceDriven += trueDistanceIncrement;
+        dumbDistanceDriven = getDistanceDriven();
+      }
     }
 
     if (stopMoving==true) stopWheels();
+
 }
 
 // GyroTurn but it is updating the robot pose variables accordingly.
@@ -879,7 +917,7 @@ void awareGyroTurn(double turnAngle, bool stopMoving, double baseSpeed = 0)
   g_startWallAngle = g_lastWallAngle;
 
   double startGyroAngle = gyroAngleToMathAngle(gyro.getAngleZ());
-  gyroTurn(turnAngle, true, baseSpeed);
+  gyroTurn(turnAngle, true, true, baseSpeed);
   gyro.update();
   double endGyroAngle = gyroAngleToMathAngle(gyro.getAngleZ());
   centerAngle180(endGyroAngle, startGyroAngle);
@@ -1824,7 +1862,19 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
   TouchSensorSide touchSensorState = frontSensorActivated();
   if (g_driveBack==false && (touchSensorState != touch_none))
   {
-      stopReason = stop_frontTouchSensor;
+      switch (touchSensorState)
+      {
+        case touch_left:
+          stopReason = stop_frontTouchLeft;
+          break;
+        case touch_right:
+          stopReason = stop_frontTouchRight;
+          break;
+        default:
+          stopReason = stop_frontTouchBoth;
+          break;
+      }
+
       g_lastTouchSensorState = touchSensorState;
       return true; // Exit the loop
   }
@@ -1836,7 +1886,7 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
 }
 
 
-bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, TouchSensorSide& frontSensorDetectionType, double& xDistanceOnRamp, double& yDistanceOnRamp)
+bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, TouchSensorSide& frontSensorDetectionType, double& xDistanceOnRamp, double& yDistanceOnRamp, bool continuing)
 {
   // straighten();
   WallSide wallToUse = wall_none; // Initialize a variable for which wall to follow
@@ -1852,6 +1902,10 @@ bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, To
     // g_targetDistance = 15;
     g_startDistance = g_targetDistance - g_trueDistanceDriven;
     g_targetDistance += 3;
+  }
+  if (continuing == true)
+  {
+    g_startDistance = g_trueDistanceDriven;
   }
   g_trueDistanceDriven = g_startDistance;
   dumbDistanceDriven = 0;
@@ -1978,9 +2032,15 @@ bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, To
       g_driveBack = true;
       lights::floorIndicator(g_floorColour);
       break;
-    case stop_frontTouchSensor:
+    case stop_frontTouchBoth:
       g_driveBack = true;
       lights::indicateFrontSensor();
+      break;
+    case stop_frontTouchLeft:
+      lights::setColour(2, colourRed, true);
+      break;
+    case stop_frontTouchRight:
+      lights::setColour(4, colourRed, true);
       break;
     default:
       lights::setColour(0, colourOrange, true);
@@ -2024,7 +2084,7 @@ bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, To
     lights::turnOff();
   }
 
-  if (stoppingReason == stop_frontTouchSensor)
+  if (stoppingReason == stop_frontTouchBoth || stoppingReason == stop_frontTouchLeft || stoppingReason == stop_frontTouchRight)
   {
     // Determine if the button values are still the same
 
@@ -2070,7 +2130,8 @@ bool driveStep()
   TouchSensorSide throwawayFrontSensorDetectionType = touch_none;
   double throwawayxDistance = 0;
   double throwawayyDistance = 0;
-  return driveStep(throwAwayColour, throwawayRampDriven, throwawayFrontSensorDetectionType, throwawayxDistance, throwawayyDistance);
+  bool continuing = false;
+  return driveStep(throwAwayColour, throwawayRampDriven, throwawayFrontSensorDetectionType, throwawayxDistance, throwawayyDistance, continuing);
 }
 
 // Make a navigation decision.
@@ -2097,10 +2158,14 @@ void makeNavDecision(Command& action)
 
 //------------------------------ Victims and rescue kits ------------------------------//
 
+int servoPos = 10; // Servo position. Here set to starting position
+const int servoLower = 5;
+const int servoUpper = 176;
 
-void signalVictim()
+void servoSetup()
 {
-  lights::signalVictim();
+  servo.attach(4);
+  servo.write(servoPos);
 }
 
 void handleVictim(double fromInterrupt)
@@ -2117,12 +2182,55 @@ void handleVictim(double fromInterrupt)
   // Serial.print(g_dropDirection);
   if (g_kitsToDrop != 0) turnSteps(turnDirection, 1); // Only turn if you have to drop
 
-  signalVictim();
-  for (int i=0; i<g_kitsToDrop; ++i)
+  int blinkCycleTime = 500; // The time for a complete blink cycle in ms
+  int droppedKits = 0;
+
+  // Simultaneous blinking and deployment of rescue kits
+  servoPos = servoLower;
+  long beginTime = millis();
+  long rkTimeFlag = 0;
+  const int rkDelay = 500; // The time between deploying rescue kits in ms.
+  const int minBlinkTime = 6000; // Should be 6000, but I added 1000 (1s) for some margins in the referees perception
+  lights::turnOnVictimLights(); // For the first half blink cycle
+  while (droppedKits<g_kitsToDrop || millis()-beginTime < minBlinkTime)
   {
-    lights::setColour(i+2, colourRed, true);
-    deployRescueKit();
-    delay(500);
+    static long blinkTimerFlag = beginTime;
+    static int direction = 1; // For keeping track of in what direction the servo is moving. 1 is back and -1 is forward
+    static long loopTimeFlag = 0;
+
+    if (millis()-loopTimeFlag > 15) // Delay for the servo movement
+    {
+      loopTimeFlag = millis();
+      
+      // Dropping rescue kits
+      if (millis()-rkTimeFlag > rkDelay && droppedKits < g_kitsToDrop) // If enough time has passed and not all kits have been dropped
+      {
+        servo.write(servoPos); // Write servo position
+        servoPos += direction*2; // Increment/decrement depending on which direction you are moving in.
+        if (direction==1 && servoPos>servoUpper) // When moving back, if reaching endpoint
+        {
+          direction = -1; // Switch direction
+        }
+        else if (direction==-1 && servoPos<servoLower) // If moving forward, if reaching endpoint
+        {
+          direction = 1; // Change direction
+          rkTimeFlag = millis(); // Set timeflag for delay
+          ++droppedKits; // Increment the number of dropped kits
+        }
+      }
+    }
+
+    // Blinking
+    if (millis()-blinkTimerFlag > blinkCycleTime/2 && millis()-beginTime < minBlinkTime) // If we are in the second half of the cycle and we have blinked for less than 6 seconds
+    {
+      lights::turnOff(); // The lights should be off
+      if (millis()-blinkTimerFlag > blinkCycleTime) // When we go beyond the cycle
+      {
+        lights::turnOnVictimLights(); // Turn on the lights for the next half cycle
+        blinkTimerFlag = millis(); // Reset the time flag for the next cycle
+      }
+    }
+
   }
 
   // Return the robot to original orientation
@@ -2136,54 +2244,32 @@ void handleVictim(double fromInterrupt)
   lights::turnOff();
 }
 
-int servoPos = 10; // Servo position. Here set to starting position
-const int servoLower = 5;
-const int servoUpper = 176;
 
-void servoSetup()
-{
-  servo.attach(4);
-  servo.write(servoPos);
-}
+// Deprecated
+// void deployRescueKit()
+// {
 
-void deployRescueKit()
-{
+//   for (servoPos = servoLower; servoPos<=servoUpper; servoPos += 2)
+//   {
+//     servo.write(servoPos);
+//     delay(15);
+//   }
+//   delay(500);
+//   for (servoPos = servoUpper; servoPos >= servoLower; servoPos -= 2)
+//   {
+//     servo.write(servoPos);
+//     delay(15);
+//   }
 
-  for (servoPos = servoLower; servoPos<=servoUpper; servoPos += 2)
-  {
-    servo.write(servoPos);
-    delay(15);
-  }
-  delay(500);
-  for (servoPos = servoUpper; servoPos >= servoLower; servoPos -= 2)
-  {
-    servo.write(servoPos);
-    delay(15);
-  }
-
-  // sounds::tone(440, 200);
-  // sounds::tone(880, 200);
-}
+//   // sounds::tone(440, 200);
+//   // sounds::tone(880, 200);
+// }
 
 
 
 //----------------------------- Buttons and misc. sensors -------------------------//
 
 // Front touch sensor buttons
-class HardwareButton
-{
-public:
-  const int pin; // The pin the switch is on
-  void init()
-  {
-    pinMode(pin, INPUT_PULLUP);
-  }
-
-  bool isPressed()
-  {
-    return (digitalRead(pin) == LOW);
-  }
-};
 
 // Which button is on which side is not checked
 HardwareButton pressPlateLeft {34};

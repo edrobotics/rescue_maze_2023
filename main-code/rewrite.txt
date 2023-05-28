@@ -4,4 +4,10 @@ When detecting wallchanges, maybe indicate directly with lightning instead of do
 
 Add condition that a wallchange distance update cannot be too far from the "real" distance.
 The reason for this is that when the robot drove back, it drove a whole step too far.
+
 With wallchanges, I need to compensate for the robot angle.
+
+När jag backar och snurrar måste jag uppdatera trueDistanceDriven?
+
+Kör färgidentifieringen hela tiden under kalibrering och uppdatera thresholds löpande
+Illustrera hur säker roboten är, kvalitetsmått, hur långt ifrån thresholds 

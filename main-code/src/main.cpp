@@ -35,8 +35,8 @@ void setup()
 // double robotAngle = 0;
 // double wallDistance = 0;
 
-#define PICODE
-// #define TESTING_NAV
+// #define PICODE
+#define TESTING_NAV
 // #define TESTING
 // #define COLSENS_CALIBRATION
 
@@ -78,12 +78,12 @@ void loop()
   // getUltrasonics();
   // checkWallPresence();
   
-  driveStep();
-  Serial.println("");Serial.println("------------------------------------------------------------------------------");Serial.println("");
+  // driveStep();
+  // Serial.println("");Serial.println("------------------------------------------------------------------------------");Serial.println("");
   
-  delay(1500);
-  lights::turnOff();
-  delay(500);
+  // delay(1500);
+  // lights::turnOff();
+  // delay(500);
 
   // IMPORTANT!!! ----------------------------------------------------------------------------------------------------------------------------------------------------------------
   // I tried to change the usmt
@@ -117,6 +117,7 @@ void loop()
     Command command = command_none;
     flushDistanceArrays();
     makeNavDecision(command);
+    // command = command_driveStep; // For debugging
     delay(555);
     lights::turnOff();
     #endif
@@ -136,14 +137,14 @@ void loop()
       {
         serialcomm::returnSuccess(); // For validation and robustness of the communication protocol
         // lights::showDirection(lights::front);
-
+        bool continuing = false;
+        bool rampDriven = false;
+        ColourSensor::FloorColour floorColourAhead = ColourSensor::floor_notUpdated;
+        double xDistanceOnRamp = 0;
+        double yDistanceOnRamp = 0;
         driveStepBegin: // Label to be able to use goto statements
-          ColourSensor::FloorColour floorColourAhead = ColourSensor::floor_notUpdated;
-          bool rampDriven = false;
           TouchSensorSide frontSensorDetectionType = touch_none;
-          double xDistanceOnRamp = 0;
-          double yDistanceOnRamp = 0;
-          bool commandSuccess = driveStep(floorColourAhead, rampDriven, frontSensorDetectionType, xDistanceOnRamp, yDistanceOnRamp);
+          bool commandSuccess = driveStep(floorColourAhead, rampDriven, frontSensorDetectionType, xDistanceOnRamp, yDistanceOnRamp, continuing);
           // bool commandSuccess = true;
           // lights::turnOff();
           if (floorColourAhead == ColourSensor::floor_black || frontSensorDetectionType == touch_both)
@@ -156,14 +157,16 @@ void loop()
           if (frontSensorDetectionType == touch_left)
           {
             // Correct by turning right
-            awareGyroTurn(-10, true, -10);
+            awareGyroTurn(-18, true, -5);
+            continuing = true;
             goto driveStepBegin;
             
           }
           else if (frontSensorDetectionType == touch_right)
           {
             // Correct by turning left
-            awareGyroTurn(10, true, -10);
+            awareGyroTurn(18, true, -5);
+            continuing = true;
             goto driveStepBegin;
           }
 
