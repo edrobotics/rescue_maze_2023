@@ -124,25 +124,39 @@ def identify_victim2(ivictim,victim,n):
     
 
 
-def identify_victimI(victim):
+def identify_victimI(ivictim):
     x = -1
+    identified = False
+    victim = None
+    kits = None
     for sample in And_Victim:
         x = x +1 
-        M_AND = cv2.bitwise_and(sample, victim)
-        C_and = np.count_nonzero(sample)
-        M_OR = cv2.bitwise_and(OR_victim[x], victim)
-        C_or = np.count_nonzero(victim)
-
-        if C_and == M_AND & M_OR == C_or:
-            print("Victim identified ")
-            logging.info(f"identified victim: ")
-        elif C_and == M_AND:
-            print("only and")
-        elif C_or == M_OR:
-            print("only or")
-        else: 
-            print("not identified")
-        
+        for i in range(2):
+            
+            if i == 1: ivictim = cv2.rotate(ivictim,cv2.ROTATE_180)
+            M_AND = cv2.bitwise_and(sample, ivictim)
+            M_AND_C = np.count_nonzero(M_AND)
+            M_OR = cv2.bitwise_and(OR_victim[x], ivictim)
+            M_OR_C = np.count_nonzero(M_OR)
+            MIN_and = np.count_nonzero(sample) -100
+            MIN_or = np.count_nonzero(ivictim) - 100
+            print(f"victim size: {M_AND_C}")
+            if MIN_and < M_AND_C and M_OR_C > MIN_or:
+                if x == 0: 
+                    victim = "H"
+                    kits = 3
+                elif x == 1: 
+                    victim = "S"
+                    kits = 2
+                elif x == 2: 
+                    victim = "U"
+                    kits = 0
+               # if i == 1: side = "left"
+                print(f"identified: {victim}")
+                logging.info(f"identified victim: {victim}")
+                identified = True
+                break
+    return (identified,kits)
 
 
 
@@ -254,6 +268,8 @@ def find_visual_victim(image,framenum):
             dsize = (200,200)
             RImgCnt = cv2.resize(imgCnt, dsize)
             identify_victim(RImgCnt,side,framenum)
+            result = identify_victimI(RImgCnt)
+            if result[0] == True: sendMessage(result[1])
 
 def ColVicP(mask,color,n,image):
     kernel = np.ones((5, 5), np.uint8) 

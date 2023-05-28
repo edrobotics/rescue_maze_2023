@@ -1,10 +1,15 @@
-from processing import *
+from processing2 import *
+from picamera.array import PiRGBArray
+from picamera import PiCamera
+import logging
+import cv2
 
-
-
+ssh = False
 
 if __name__ == '__main__':
     n = 0
+    logging.basicConfig(filename='example.log', encoding='utf-8', level=logging.DEBUG)
+    logging.info("started")
 
 
     #camera starts here
@@ -17,16 +22,18 @@ if __name__ == '__main__':
     for frame in camera.capture_continuous(rawCapture, format="bgr", use_video_port=True):
         image = frame.array
         log(image, "E", n)
-        rawCapture.truncate(0)
         find_colour_victim(image,n)
         find_visual_victim(image,n)
+        rawCapture.truncate(0)
         try:
-            if not ssh: cv2.imshow("frame", image)
-            pass
+            if not ssh: 
+                cv2.imshow("frame", image)
         except:
             ssh = True
             showcolor = False
-        #key = cv2.waitKey(1)
-    #  if key == 27:
-    #     break
+            print("failed showing image")
+        key = cv2.waitKey(1)
+        if key == 27:
+            cv2.destroyAllWindows()
+            break
         n += 1
