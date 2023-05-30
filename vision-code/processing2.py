@@ -6,8 +6,8 @@ import time
 import logging
 
 
-ssh = True
-showcolor = False
+ssh = False
+showcolor = True
 inRobot = True
 connected = False
 ttime = False
@@ -34,12 +34,16 @@ for i in range(1):
 
 
 def log(image, name, frame):
-    path = f'./log/{name}{frame}.png'
-    cv2.imwrite(path,image)
+    try: 
+        path = f'./log/{name}{frame}.png'
+        cv2.imwrite(path,image)
+    except:
+        pass
     
 
 
 def sendMessage(msg):
+    print(f"sending message: {msg}")
     try:
         message = msg.encode(FORMAT)
         msg_length = len(message).to_bytes(HEADER, "big")
@@ -53,7 +57,6 @@ def sendMessage(msg):
 nU = cv2.imread('U1.png')
 rU = cv2.cvtColor(nU,cv2.COLOR_BGR2GRAY)
 lU = cv2.rotate(rU, cv2.ROTATE_180)
-
 
 nH = cv2.imread('H1.png')
 nH = cv2.cvtColor(nH,cv2.COLOR_BGR2GRAY)
@@ -140,7 +143,7 @@ def identify_victimI(ivictim):
             M_OR_C = np.count_nonzero(M_OR)
             MIN_and = np.count_nonzero(sample) -100
             MIN_or = np.count_nonzero(ivictim) - 100
-            print(f"victim size: {M_AND_C}")
+          #  print(f"victim size: {M_AND_C}")
             if MIN_and < M_AND_C and M_OR_C > MIN_or:
                 if x == 0: 
                     victim = "H"
@@ -199,7 +202,7 @@ def identify_victim(victim, side,n):
 
 def find_visual_victim(image,framenum):
     img = image.copy
-    cv2.imshow("test",image)
+    #cv2.imshow("test",image)
     gray = cv2.cvtColor(image,cv2.COLOR_BGR2GRAY)
     blurred = cv2.GaussianBlur(gray, (7, 7), 0)
 #    ret,binary = cv2.threshold(gray,125,255,0, cv2.THRESH_BINARY)
@@ -257,7 +260,7 @@ def find_visual_victim(image,framenum):
             width = maxx - minx
             height = maxy - miny
 #            print(width, height)
-            if maxx > 300: side ="r"
+            if maxx < 300: side ="r"
             else: side = "l"
 
 
@@ -269,19 +272,22 @@ def find_visual_victim(image,framenum):
             RImgCnt = cv2.resize(imgCnt, dsize)
             identify_victim(RImgCnt,side,framenum)
             result = identify_victimI(RImgCnt)
-            if result[0] == True: sendMessage(result[1])
+            if result[0] == True: 
+                sendMessage(f"k{result[1]}{side}")
 
 def ColVicP(mask,color,n,image):
-    kernel = np.ones((5, 5), np.uint8) 
+    kernel = np.ones((9, 9), np.uint8) 
     mask = cv2.erode(mask,kernel, iterations=1)
     mask = cv2.dilate(mask,kernel, iterations=1) 
-    if np.count_nonzero(mask) > 2000 and np.count_nonzero(mask < 20000):
+    if np.count_nonzero(mask) > 5000 and np.count_nonzero(mask < 30000):
+        print(np.count_nonzero(mask))
         ret,thresh = cv2.threshold(mask, 40, 255, 0)
         contours, hierarchy = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
         c = max(contours, key = cv2.contourArea)
-        if cv2.contourArea(c) > 2000:
+        if cv2.contourArea(c) > 5000:
+            print(cv2.contourArea(c))
             x,y,w,h = cv2.boundingRect(c)
-            if x < 300: side = "l"
+            if x > 300: side = "l"
             else: side = "r"
             sendMessage("k1"+side)
             mask = cv2.bitwise_and(image, image, mask=mask)
@@ -301,7 +307,7 @@ def find_colour_victim(image,n):
     red_mask = cv2.inRange(hsv, red_lower_range, red_upper_range)
     ColVicP(red_mask, "RED",n,image)
     green_lower_range = np.array([50,40,40])
-    green_upper_range = np.array([65,255,255])
+    green_upper_range = np.array([80,255,255])
     green_mask = cv2.inRange(hsv, green_lower_range, green_upper_range)
     ColVicP(green_mask, "GREEN",n,image)
     yellow_lower_range = np.array([15,100,100])
