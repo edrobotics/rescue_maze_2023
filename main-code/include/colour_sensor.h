@@ -11,15 +11,45 @@ public:
   bool isPressed();
 };
 
+// MeRGBLed newLed(0, 12);
+namespace newLights
+{
+
+    struct RGBColour
+    {
+        int red;
+        int green;
+        int blue;
+    };
+
+    // Turns all lights off
+    void turnOff();
+
+    void setColour(int index, RGBColour colour, bool showColour);
+
+    void blink(RGBColour colour);
+
+    void errorBlink();
+}
+
 struct ColourSample // Should maybe be inside one of the other classes?
 {
     double r;
     double g;
     double b;
-    double clear;
-    double rg;
-    double rb;
-    double gb;
+    
+    enum Ratios
+    {
+        clear,
+        rg,
+        rb,
+        gb,
+        ratios_num,
+    };
+    double ratios[ratios_num];
+    // double rg;
+    // double rb;
+    // double gb;
 };
 
 struct ColourStorageData
@@ -47,17 +77,23 @@ class ColourSampleCollection
         void write(int address); // Should maybe be done outside of the class
         ColourStorageData read(int address); // Should maybe be done outside of the class
         void resetIndex();
+        int getIndex();
     private:
         ColourSample samples[MAX_COLOUR_SAMPLES]; // Sample values
         
         int sampleIndex = 0; // Keeping track of which sample we are on. Will be equivalent to the number of samples taken
 
+        const double stdDevsToUse = 1; // How many standard deviations that should be used when computing the thresholds
+
         ColourStorageData thresholds {}; // Calculated thresholds
         
         // Functions to aid in computation of the thresholds
         // I want to be able to give rg, rb or gb as an argument (or equivalent) and iterate through an array of colour samples while keeping the ending the same. I do not know how to do this.
-        double averageRatio();
+        double averageRatio(ColourSample::Ratios ratio);
+        double stdDev(ColourSample::Ratios ratio);
+        double stdDev(ColourSample::Ratios ratio, double average);
         double minValue();
+        double maxValue();
 
 };
 

@@ -116,6 +116,8 @@ namespace serialcomm
 // For simple testing without the maze-code present
 void makeNavDecision(Command& action);
 
+
+
 void lightsAndBuzzerInit();
 
 struct RGBColour
