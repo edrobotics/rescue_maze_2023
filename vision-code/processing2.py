@@ -38,8 +38,8 @@ def log(image, name, frame):
         path = f'./log/{name}{frame}.png'
         cv2.imwrite(path,image)
     except:
+        print("could not write log")
         pass
-    
 
 
 def sendMessage(msg):
@@ -57,6 +57,7 @@ def sendMessage(msg):
 nU = cv2.imread('U1.png')
 rU = cv2.cvtColor(nU,cv2.COLOR_BGR2GRAY)
 lU = cv2.rotate(rU, cv2.ROTATE_180)
+
 
 nH = cv2.imread('H1.png')
 nH = cv2.cvtColor(nH,cv2.COLOR_BGR2GRAY)
@@ -260,7 +261,7 @@ def find_visual_victim(image,framenum):
             width = maxx - minx
             height = maxy - miny
 #            print(width, height)
-            if maxx < 300: side ="r"
+            if maxx > 300: side ="r"
             else: side = "l"
 
 
@@ -287,7 +288,7 @@ def ColVicP(mask,color,n,image):
         if cv2.contourArea(c) > 5000:
             print(cv2.contourArea(c))
             x,y,w,h = cv2.boundingRect(c)
-            if x > 300: side = "l"
+            if x < 300: side = "l"
             else: side = "r"
             sendMessage("k1"+side)
             mask = cv2.bitwise_and(image, image, mask=mask)
