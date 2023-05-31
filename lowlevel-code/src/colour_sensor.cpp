@@ -1,5 +1,6 @@
 #include <colour_sensor.h>
 #include <Arduino.h>
+#include <MeRGBLed.h>
 #include <Adafruit_TCS34725.h>
 #include <Wire.h> // Needed for some reason?
 #include <SPI.h> // Needed for some reason?
@@ -9,6 +10,51 @@
 
 Adafruit_TCS34725 colSens = Adafruit_TCS34725(TCS34725_INTEGRATIONTIME_60MS, TCS34725_GAIN_1X);
 bool readState = false; // Keeps track of whether the sensor was read or not
+
+MeRGBLed newLed(0, 12);
+newLights::RGBColour newColourBlack {0, 0, 0};
+newLights::RGBColour newColourWhite {100, 100, 100};
+newLights::RGBColour newColourBase {5, 42, 0};
+newLights::RGBColour newColourOrange {42, 5, 0};
+newLights::RGBColour newColourRed {150, 0, 0};
+newLights::RGBColour newColourBlue {0, 0, 150};
+newLights::RGBColour newColourError {200, 10, 0};
+newLights::RGBColour newColourAffirmative { 20, 150, 0};
+newLights::RGBColour newColourYellow {50, 50, 0};
+newLights::RGBColour newColourPurple {100, 0, 150};
+
+void newLights::turnOff()
+{
+  setColour(0, newColourBlack, true);
+  // ledRing.setColor(colourBlack.red, colourBlack.green, colourBlack.blue);
+  // ledRing.show();
+}
+
+void newLights::setColour(int index, RGBColour colour, bool showColour)
+{
+  newLed.setColor(index, colour.red, colour.green, colour.blue);
+  if (showColour==true) newLed.show();
+}
+
+void newLights::blink(newLights::RGBColour colour)
+{
+  turnOff();
+  for (int i=0;i<3;++i)
+  {
+    delay(200);
+    setColour(0, colour, true);
+    // ledRing.setColor(colourBase.red, colourBase.green, colourBase.blue);
+    // ledRing.show();
+    delay(60);
+    turnOff();
+  }
+}
+
+void newLights::errorBlink()
+{
+    blink(newColourError);
+}
+
 
 
 
@@ -26,6 +72,9 @@ void ColourSensor::init()
     blueButton.init();
     reflectiveButton.init();
     whiteButton.init();
+    newLed.setpin(44);
+    newLed.fillPixelsBak(0, 2, 1);
+    newLights::turnOff();
 
 }
 
@@ -211,10 +260,10 @@ ColourSample ColourSensor::getColourSample()
     returnData.r = sensorRed;
     returnData.g = sensorGreen;
     returnData.b = sensorBlue;
-    returnData.clear = sensorClear;
-    returnData.rg = rgRatio;
-    returnData.rb = rbRatio;
-    returnData.gb = gbRatio;
+    returnData.ratios[ColourSample::clear] = sensorClear;
+    returnData.ratios[ColourSample::rg] = rgRatio;
+    returnData.ratios[ColourSample::rb] = rbRatio;
+    returnData.ratios[ColourSample::gb] = gbRatio;
     
     return returnData;
 }
@@ -238,54 +287,149 @@ void ColourSensor::clearCalibrationData()
 
 void ColourSensor::calibrationRoutineLoop()
 {
+    const int buttonDebounceDelay = 1000;
     // Check for and collect samples
-    if (blackButton.isPressed())
+    bool changeDetected = false;
+    char readChar = ' ';
+    if (Serial.available()>0)
     {
-        blackSamples.enterSample(getColourSample());
+        readChar = Serial.read();
+    }
+    
+    if (readChar == 's') //blackButton.isPressed()
+    {
+        if (blackSamples.enterSample(getColourSample()) == false)
+        {
+            newLights::errorBlink();
+        }
+        else
+        {
         blackSamples.calculate();
         blackSamples.write(0);
+        changeDetected = true;
+        for (int i=0;i<blackSamples.getIndex();++i)
+            {
+                newLights::setColour(i+1, newColourRed, false);
+            }
+        newLed.show();
+        delay(buttonDebounceDelay);
+        newLights::turnOff();
+        }
     }
-    else if (blueButton.isPressed())
+    else if (readChar == 'b') // blueButton.isPressed() || 
     {
-        blueSamples.enterSample(getColourSample());
+        if (blueSamples.enterSample(getColourSample()) == false)
+        {
+            newLights::errorBlink();
+        }
+        else
+        {
         blueSamples.calculate();
         blueSamples.write(sizeof(ColourStorageData));
+        changeDetected = true;
+        for (int i=0;i<blueSamples.getIndex();++i)
+            {
+                newLights::setColour(i+1, newColourBlue, false);
+            }
+        newLed.show();
+        delay(buttonDebounceDelay);
+        newLights::turnOff();
+        }
     }
-    else if (reflectiveButton.isPressed())
+    else if (readChar == 'r') // reflectiveButton.isPressed() || 
     {
-        reflectiveSamples.enterSample(getColourSample());
+        if (reflectiveSamples.enterSample(getColourSample()) == false)
+        {
+            newLights::errorBlink();
+        }
+        else
+        {
         reflectiveSamples.calculate();
         reflectiveSamples.write(sizeof(ColourStorageData)*2);
+        changeDetected = true;
+        for (int i=0;i<reflectiveSamples.getIndex();++i)
+            {
+                newLights::setColour(i+1, newColourPurple, false);
+            }
+        newLed.show();
+        delay(buttonDebounceDelay);
+        newLights::turnOff();
+        }
     }
-    else if (whiteButton.isPressed())
+    else if (readChar == 'v') // whiteButton.isPressed() || 
     {
-        whiteSamples.enterSample(getColourSample());
+        if (whiteSamples.enterSample(getColourSample())==false)
+        {
+            newLights::errorBlink();
+        }
+        else
+        {
         whiteSamples.calculate();
         whiteSamples.write(sizeof(ColourStorageData)*3);
+        changeDetected = true;
+        for (int i=0;i<whiteSamples.getIndex();++i)
+            {
+                newLights::setColour(i+1, newColourWhite, false);
+            }
+        newLed.show();
+        delay(buttonDebounceDelay);
+        newLights::turnOff();
+        }
     }
 
     // Set new thresholds in the identifying code (maybe only if previous step done?)
-    refreshThresholds();
+    if (changeDetected==true)
+    {
+        refreshThresholds();
+        changeDetected = false;
+    }
 
-    // Identify the colour on the ground
-    FloorColour floorColour = checkRawFloorColour();
+    // Identify the colour on the ground and do not accept not updated as an answer
+    FloorColour floorColour = floor_notUpdated;
+    while (floorColour == floor_notUpdated)
+    {
+        floorColour = checkRawFloorColour();
+    }
 
     // Show info about colour on ground (which one, certainty etc.)
     switch (floorColour)
     {
         case floor_black:
+            for (int i=0;i<blackSamples.getIndex();++i)
+            {
+                newLights::setColour(i+1, newColourRed, false);
+            }
+            newLed.show();
             break;
 
         case floor_blue:
+            for (int i=0;i<blueSamples.getIndex();++i)
+            {
+                newLights::setColour(i+1, newColourBlue, false);
+            }
+            newLed.show();
             break;
 
         case floor_reflective:
+            for (int i=0;i<reflectiveSamples.getIndex();++i)
+            {
+                newLights::setColour(i+1, newColourPurple, false);
+            }
+            newLed.show();
             break;
 
         case floor_white:
+            for (int i=0;i<whiteSamples.getIndex();++i)
+            {
+                newLights::setColour(i+1, newColourWhite, false);
+            }
+            newLed.show();
+            break;
+        case floor_notUpdated:
             break;
 
         default:
+            newLights::turnOff();
             break;
     }
     
@@ -296,22 +440,34 @@ void ColourSensor::calibrationRoutineLoop()
 
 
 
-
+void printColourStorageData(ColourStorageData printData)
+{
+    Serial.print("rg: ");Serial.print(printData.rgLower);Serial.print(" - ");Serial.print(printData.rgUpper);Serial.println("");
+    Serial.print("rb: ");Serial.print(printData.rbLower);Serial.print(" - ");Serial.print(printData.rbUpper);Serial.println("");
+    Serial.print("gb: ");Serial.print(printData.gbLower);Serial.print(" - ");Serial.print(printData.gbUpper);Serial.println("");
+    Serial.print("clear: ");Serial.print(printData.clearLower);Serial.print(" - ");Serial.print(printData.clearUpper);Serial.println("");
+}
 
 
 // Write threshold data to the specified address
 void ColourSampleCollection::write(int address)
 {
+    Serial.println("Writing...");
     // I need to be able to set the startic address of writing and also know the total size of what I store in the EEPROM
     ColourStorageData writeData = thresholds; // The data being written
+    printColourStorageData(writeData);
     EEPROM.put(address, writeData);
+    Serial.println("Done");
 }
 
 // Read stored threshold data at from specified address
 ColourStorageData ColourSampleCollection::read(int address)
 {
+    Serial.println("Reading...");
     ColourStorageData readData; // The data beign read
     EEPROM.get(address, readData);
+    printColourStorageData(readData);
+    Serial.println("Done");
     return readData;
 }
 
@@ -332,36 +488,25 @@ void ColourSampleCollection::calculate()
     if (sampleIndex == 0) return; // If no samples have been taken, return to avoid undefined behaviour (like division by 0)
     
     // Average calculation (maybe not necessary?)
-    double rgSum = 0;
-    double rbSum = 0;
-    double gbSum = 0;
-    double clearSum = 0;
-    for (int i=0; i<sampleIndex;++i)
-    {
-        rgSum += samples[i].rg;
-        rbSum += samples[i].rb;
-        gbSum += samples[i].gb;
-        clearSum += samples[i].clear;
-    }
-    double rgAvg = rgSum/(double)sampleIndex;
-    double rbAvg = rbSum/(double)sampleIndex;
-    double gbAvg = gbSum/(double)sampleIndex;
-    double clearAvg = clearSum/(double)sampleIndex;
+    double rgAvg = averageRatio(ColourSample::rg);
+    double rbAvg = averageRatio(ColourSample::rb);
+    double gbAvg = averageRatio(ColourSample::gb);
+    double clearAvg = averageRatio(ColourSample::clear);
 
     // Calculate minimum and maximum values
 
     // Setting the actual values
-    thresholds.rgLower = 0;
-    thresholds.rgUpper = 0;
+    thresholds.rgLower = rgAvg - stdDevsToUse*stdDev(ColourSample::rg, rgAvg);
+    thresholds.rgUpper = rgAvg + stdDevsToUse*stdDev(ColourSample::rg, rgAvg);
 
-    thresholds.rbLower = 0;
-    thresholds.rbUpper = 0;
+    thresholds.rbLower = rbAvg - stdDevsToUse*stdDev(ColourSample::rb, rbAvg);
+    thresholds.rbUpper = rbAvg + stdDevsToUse*stdDev(ColourSample::rb, rbAvg);
 
-    thresholds.gbLower = 0;
-    thresholds.gbUpper = 0;
+    thresholds.gbLower = gbAvg - stdDevsToUse*stdDev(ColourSample::gb, gbAvg);
+    thresholds.gbUpper = gbAvg + stdDevsToUse*stdDev(ColourSample::gb, gbAvg);
 
-    thresholds.clearLower = 0;
-    thresholds.clearUpper = 0;
+    thresholds.clearLower = clearAvg - stdDevsToUse*stdDev(ColourSample::clear, clearAvg);
+    thresholds.clearUpper = clearAvg + stdDevsToUse*stdDev(ColourSample::clear, clearAvg);
 
     // Ideas for threshold calculation:
     //  - Calculate the min and max and set the thresholds a bit outside of that
@@ -377,7 +522,41 @@ void ColourSampleCollection::resetIndex()
     sampleIndex = 0;
 }
 
+int ColourSampleCollection::getIndex()
+{
+    return sampleIndex;
+}
 
+double ColourSampleCollection::averageRatio(ColourSample::Ratios ratio)
+{
+    double sum = 0;
+    for (int i=0;i<sampleIndex;++i)
+    {
+        sum += samples[i].ratios[ratio];
+    }
+    return sum/double(sampleIndex);
+}
+
+double squareCustom(double x)
+{
+    return x*x;
+}
+
+double ColourSampleCollection::stdDev(ColourSample::Ratios ratio, double average)
+{
+    double sum = 0;
+    for (int i=0;i<sampleIndex;++i)
+    {
+        sum += squareCustom(samples[i].ratios[ratio]-average);
+    }
+
+    return sqrt(sum/(sampleIndex-1));
+}
+
+double ColourSampleCollection::stdDev(ColourSample::Ratios ratio)
+{
+    return stdDev(ratio, averageRatio(ratio));
+}
 
 
 

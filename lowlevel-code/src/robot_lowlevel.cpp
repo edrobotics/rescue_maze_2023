@@ -310,7 +310,7 @@ void serialcomm::answerInterrupt()
 
 void lightsAndBuzzerInit()
 {
-  buzzer.setpin(45);
+  // buzzer.setpin(45);
   ledRing.setpin(44);
   ledRing.fillPixelsBak(0, 2, 1);
   lights::turnOff();

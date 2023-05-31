@@ -5,7 +5,7 @@
 #include <Wire.h>
 #include <SPI.h>
 
-ColourSensor colourSensor;
+extern ColourSensor colSensor; // The colSensor object in robot_lowlevel.cpp
 
 void setup()
 {
@@ -27,6 +27,11 @@ void setup()
   // Wait for beginning (to give time to remove hands etc.)
   delay(500);
   lights::activated();
+  colSensor.clearCalibrationData();
+  while(true)
+  {
+    colSensor.calibrationRoutineLoop();
+  }
   delay(100);
   serialcomm::sendLOP();
 }
@@ -35,8 +40,8 @@ void setup()
 // double robotAngle = 0;
 // double wallDistance = 0;
 
-// #define PICODE
-#define TESTING_NAV
+#define PICODE
+// #define TESTING_NAV
 // #define TESTING
 // #define COLSENS_CALIBRATION
 
@@ -62,11 +67,11 @@ void loop()
   // serialcomm::clearBuffer();
 
   #ifdef COLSENS_CALIBRATION
-  ColourSensor::FloorColour identifiedColour = colourSensor.checkFloorColour();
-  colourSensor.printRatios();
-  colourSensor.printClearVal();
-  colourSensor.printColourName(identifiedColour);
-  // colourSensor.printValues();
+  ColourSensor::FloorColour identifiedColour = colSensor.checkFloorColour();
+  colSensor.printRatios();
+  colSensor.printClearVal();
+  colSensor.printColourName(identifiedColour);
+  // colSensor.printValues();
   Serial.println("");
   delay(200);
 
@@ -181,7 +186,7 @@ void loop()
           if (commandSuccess == true || (floorColourAhead == ColourSensor::floor_black)) //  || floorColourAhead == ColourSensor::floor_black || floorColourAhead == ColourSensor::floor_blue // Removed because it would return success every time it saw blue or black, regardless if it had driven a step or not.
           {
             Serial.print("!a,");
-            Serial.print(colourSensor.floorColourAsChar(floorColourAhead)); // If you have not driven back floorColourAhead will actually be the current tile
+            Serial.print(colSensor.floorColourAsChar(floorColourAhead)); // If you have not driven back floorColourAhead will actually be the current tile
             Serial.print(',');
             if (rampDriven == true)
             {
