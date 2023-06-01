@@ -28,7 +28,7 @@ for i in range(1):
 
 
 
-def sendMessage(self, msg):
+def sendMessage(msg):
     print(f"sending message: {msg}")
     try:
         message = msg.encode(FORMAT)
@@ -48,35 +48,44 @@ def sendMessage(self, msg):
 
 
 
-Hand = cv2.imread('./samples/Hsample_and.png')
-Hand = cv2.cvtColor(Hand,cv2.COLOR_BGR2GRAY)
 
-Hor = cv2.imread('./samples/Hsample_or.png')
-Hor = cv2.cvtColor(Hor,cv2.COLOR_BGR2GRAY)
-
-Sand = cv2.imread('./samples/Ssample_and.png')
-Sand = cv2.cvtColor(Sand,cv2.COLOR_BGR2GRAY)
-
-Sor = cv2.imread('./samples/Ssample_or.png')
-Sor = cv2.cvtColor(Sor,cv2.COLOR_BGR2GRAY)
-
-Uand = cv2.imread('./samples/Usample_and.png')
-Uand = cv2.cvtColor(Uand,cv2.COLOR_BGR2GRAY)
-
-Uor = cv2.imread('./samples/Usample_or.png')
-Uor = cv2.cvtColor(Uor,cv2.COLOR_BGR2GRAY)
-
-
-And_Victim = (Hand,Sand,Uand)
-OR_victim = (Hor,Sor,Uor)
 
 
 class imgproc:
-    def __init__(self, image, fnum):
+    Hand = cv2.imread('./samples/Hsample_and.png')
+    Hand = cv2.cvtColor(Hand,cv2.COLOR_BGR2GRAY)
+
+    Hor = cv2.imread('./samples/Hsample_or.png')
+    Hor = cv2.cvtColor(Hor,cv2.COLOR_BGR2GRAY)
+
+    Sand = cv2.imread('./samples/Ssample_and.png')
+    Sand = cv2.cvtColor(Sand,cv2.COLOR_BGR2GRAY)
+
+    Sor = cv2.imread('./samples/Ssample_or.png')
+    Sor = cv2.cvtColor(Sor,cv2.COLOR_BGR2GRAY)
+
+    Uand = cv2.imread('./samples/Usample_and.png')
+    Uand = cv2.cvtColor(Uand,cv2.COLOR_BGR2GRAY)
+
+    Uor = cv2.imread('./samples/Usample_or.png')
+    Uor = cv2.cvtColor(Uor,cv2.COLOR_BGR2GRAY)
+
+    And_Victim = (Hand,Sand,Uand)
+    OR_victim = (Hor,Sor,Uor)
+
+    def __init__(showsource= False,showcolor = False, show_visual = False):
+        self.showsource = showsource
+        self.showcolor = showcolor
+        self.show_visual = show_visual
+
+
+    def do_the_work(self, image, fnum):
         self.image = image
         self.fnum = fnum
         self.find_victim()
         self.Color_victim()
+        self.log("E")
+
 
     def find_victim(self,):
 
@@ -94,6 +103,7 @@ class imgproc:
         binary[:40, :320] = (0)
         binary[470:, :] = (0)
         binary[420:, :320] = (0)
+ 
         contours, hierarchy = cv2.findContours(binary,cv2.RETR_LIST,cv2.CHAIN_APPROX_NONE)
     #    cv2.imshow("binary2", binary)
         cv2.drawContours(img, contours, -1, (0, 255, 0), 3)
@@ -149,24 +159,24 @@ class imgproc:
                 RImgCnt = cv2.resize(imgCnt, dsize)
                 result = self.identify_victim(RImgCnt)
                 if result[0] == True: 
-                    self.sendMessage(f"k{result[1]}{self.side}")
+                    sendMessage(f"k{result[1]}{self.side}")
 
 
 
 
-    def identify_victim(self):
+    def identify_victim(self,ivictim):
         x = -1
         identified = False
         victim = None
         kits = None
-        for sample in And_Victim:
+        for sample in self.And_Victim:
             x = x +1 
             for i in range(2):
                 
                 if i == 1: ivictim = cv2.rotate(ivictim,cv2.ROTATE_180)
                 M_AND = cv2.bitwise_and(sample, ivictim)
                 M_AND_C = np.count_nonzero(M_AND)
-                M_OR = cv2.bitwise_and(OR_victim[x], ivictim)
+                M_OR = cv2.bitwise_and(self.OR_victim[x], ivictim)
                 M_OR_C = np.count_nonzero(M_OR)
                 MIN_and = np.count_nonzero(sample) -100
                 MIN_or = np.count_nonzero(ivictim) - 100
@@ -184,9 +194,10 @@ class imgproc:
                 # if i == 1: side = "left"
                     print(f"identified: {victim}")
                     logging.info(f"identified victim: {victim}")
+                    self.log(victim, img= ivictim)
                     identified = True
                     break
-    #    return (identified,kits)
+        return (identified,kits)
 
 
     def Color_victim(self):
@@ -225,9 +236,11 @@ class imgproc:
                 x,y,w,h = cv2.boundingRect(c)
                 if x > 300: self.side = "l"
             else: self.side = "r"
-            sendMessage("k1"+self.side)
+            if color == "GREEN": k = "k0"
+            else: k = "k1"
+            sendMessage(k+self.side)
             mask = cv2.bitwise_and(self.image, self.image, mask=mask)
-            self.log(color)
+            self.log(color,img = mask)
             logging.info(f"found {color}, image {self.fnum}")
 #    if showcolor: cv2.imshow(color, mask)
 

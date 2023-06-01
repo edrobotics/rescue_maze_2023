@@ -7,13 +7,13 @@ import logging
 
 
 ssh = False
-showcolor = True
+showcolor = False
 inRobot = True
 connected = False
 ttime = False
 
 
-for i in range(1):
+for i in range(100):
     print("connecting...")
     try:
         HEADER = 16
@@ -261,7 +261,7 @@ def find_visual_victim(image,framenum):
             width = maxx - minx
             height = maxy - miny
 #            print(width, height)
-            if maxx > 300: side ="r"
+            if maxx < 300: side ="r"
             else: side = "l"
 
 
@@ -288,7 +288,7 @@ def ColVicP(mask,color,n,image):
         if cv2.contourArea(c) > 5000:
             print(cv2.contourArea(c))
             x,y,w,h = cv2.boundingRect(c)
-            if x < 300: side = "l"
+            if x > 300: side = "l"
             else: side = "r"
             sendMessage("k1"+side)
             mask = cv2.bitwise_and(image, image, mask=mask)
