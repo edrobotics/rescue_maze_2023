@@ -11,3 +11,4 @@
 "wheel_diam"= 2*("width"/2+"ground_clearance")
 "coloursensor_holesize"= 2.65
 "hole_to_edge" = 4
+"M4_insert_diam"= 5.7
