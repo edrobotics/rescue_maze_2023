@@ -11,6 +11,7 @@ if __name__ == '__main__':
     logging.basicConfig(filename='example.log', encoding='utf-8', level=logging.DEBUG)
     logging.info("started")
 
+    imgproc = tc.imgproc()
 
     #camera starts here
     camera = PiCamera()
@@ -21,7 +22,7 @@ if __name__ == '__main__':
     rawCapture = PiRGBArray(camera, size=(640, 480))
     for frame in camera.capture_continuous(rawCapture, format="bgr", use_video_port=True):
         image = frame.array
-        frame = tc.imgproc(image,n)
+        imgproc.do_the_work(image,n)
         rawCapture.truncate(0)
         try:
             if not ssh: 
