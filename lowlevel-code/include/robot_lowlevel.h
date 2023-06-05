@@ -455,9 +455,6 @@ void testWallChanges();
 
 //--------------------------- Switches and misc. sensors -----------------------------//
 
-void initSwitches();
-
-
 
 // Returns true if the front sensor is activated (pressed in)
 TouchSensorSide frontSensorActivated();

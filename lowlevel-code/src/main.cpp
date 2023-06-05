@@ -7,6 +7,8 @@
 
 extern ColourSensor colSensor; // The colSensor object in robot_lowlevel.cpp
 
+HardwareButton colCalButton {32, false};
+
 void setup()
 {
   // Init serial for debugging
@@ -17,7 +19,6 @@ void setup()
   lightsAndBuzzerInit();
   encodersInit();
   initColourSensor();
-  initSwitches();
   servoSetup();
   flushDistanceArrays();
   fillRampArrayFalse();
@@ -27,10 +28,13 @@ void setup()
   // Wait for beginning (to give time to remove hands etc.)
   delay(500);
   lights::activated();
+  if (colCalButton.isPressed())
+  {
   colSensor.clearCalibrationData();
-  while(true)
+  while(colCalButton.isPressed())
   {
     colSensor.calibrationRoutineLoop();
+  }
   }
   delay(100);
   serialcomm::sendLOP();

@@ -6,9 +6,19 @@
 class HardwareButton
 {
 public:
-  const int pin; // The pin the switch is on
-  void init();
-  bool isPressed();
+    // Constructor with initialization
+    HardwareButton(int inputPin, bool buttonReversed=false)
+    {
+        pin = inputPin;
+        reversed = buttonReversed;
+        init();
+    }
+    int pin; // The pin the switch is on
+    bool isPressed();
+private:
+    void init();
+    bool reversed = false;
+
 };
 
 // MeRGBLed newLed(0, 12);
@@ -67,7 +77,7 @@ struct ColourStorageData
     double clearUpper;
 };
 
-const int MAX_COLOUR_SAMPLES = 5; // Outside of class due to error
+const int MAX_COLOUR_SAMPLES = 8; // Outside of class due to error
 
 class ColourSampleCollection
 {
@@ -92,8 +102,8 @@ class ColourSampleCollection
         double averageRatio(ColourSample::Ratios ratio);
         double stdDev(ColourSample::Ratios ratio);
         double stdDev(ColourSample::Ratios ratio, double average);
-        double minValue();
-        double maxValue();
+        double minValue(ColourSample::Ratios ratio);
+        double maxValue(ColourSample::Ratios ratio);
 
 };
 
@@ -125,9 +135,9 @@ class ColourSensor
 
         ColourSample getColourSample();
         
-        void clearCalibrationData(); // Prepares for a new calibration
+        void clearCalibrationData(); // Prepares for a new calibration by resetting indecies
         void calibrationRoutineLoop();
-        void refreshThresholds();
+        void refreshThresholds(); // Read colour samples from EEPROM
 
     private:
         void getRawData(uint16_t *sensorRed, uint16_t *sensorGreen, uint16_t *sensorBlue, uint16_t *sensorClear);
@@ -143,10 +153,10 @@ class ColourSensor
         double rgRatio, rbRatio, gbRatio; // For ratios between colours
 
         // Buttons for calibration routine
-        HardwareButton blackButton {0};
-        HardwareButton blueButton {0};
-        HardwareButton reflectiveButton {0};
-        HardwareButton whiteButton {0};
+        // HardwareButton blackButton {0, false};
+        // HardwareButton blueButton {0, false};
+        // HardwareButton reflectiveButton {0, false};
+        // HardwareButton whiteButton {0, false};
 
         // Colour sample collections for calibration routine
         ColourSampleCollection blackSamples;

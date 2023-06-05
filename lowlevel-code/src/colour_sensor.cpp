@@ -21,7 +21,7 @@ newLights::RGBColour newColourBlue {0, 0, 150};
 newLights::RGBColour newColourError {200, 10, 0};
 newLights::RGBColour newColourAffirmative { 20, 150, 0};
 newLights::RGBColour newColourYellow {50, 50, 0};
-newLights::RGBColour newColourPurple {100, 0, 150};
+newLights::RGBColour newColourPurple {150, 0, 130};
 
 void newLights::turnOff()
 {
@@ -66,12 +66,8 @@ void ColourSensor::init()
     }
     // else Serial.println("Sensor initialized");
     lastReadTime = millis();
+    // refreshThresholds();
 
-    // Init buttons for calibration
-    blackButton.init();
-    blueButton.init();
-    reflectiveButton.init();
-    whiteButton.init();
     newLed.setpin(44);
     newLed.fillPixelsBak(0, 2, 1);
     newLights::turnOff();
@@ -268,6 +264,7 @@ ColourSample ColourSensor::getColourSample()
     return returnData;
 }
 
+// Reads thresholds from EEPROM
 void ColourSensor::refreshThresholds()
 {
     blackThresholds = blackSamples.read(0);
@@ -276,7 +273,7 @@ void ColourSensor::refreshThresholds()
     whiteThresholds = whiteSamples.read(sizeof(ColourStorageData)*3);
 }
 
-
+// Resets the indecies for samples
 void ColourSensor::clearCalibrationData()
 {
     blackSamples.resetIndex();
@@ -442,32 +439,32 @@ void ColourSensor::calibrationRoutineLoop()
 
 void printColourStorageData(ColourStorageData printData)
 {
-    Serial.print("rg: ");Serial.print(printData.rgLower);Serial.print(" - ");Serial.print(printData.rgUpper);Serial.println("");
-    Serial.print("rb: ");Serial.print(printData.rbLower);Serial.print(" - ");Serial.print(printData.rbUpper);Serial.println("");
-    Serial.print("gb: ");Serial.print(printData.gbLower);Serial.print(" - ");Serial.print(printData.gbUpper);Serial.println("");
-    Serial.print("clear: ");Serial.print(printData.clearLower);Serial.print(" - ");Serial.print(printData.clearUpper);Serial.println("");
+    Serial.print("rg: ");Serial.print(printData.rgLower, 4);Serial.print(" - ");Serial.print(printData.rgUpper, 4);Serial.println("");
+    Serial.print("rb: ");Serial.print(printData.rbLower, 4);Serial.print(" - ");Serial.print(printData.rbUpper, 4);Serial.println("");
+    Serial.print("gb: ");Serial.print(printData.gbLower, 4);Serial.print(" - ");Serial.print(printData.gbUpper, 4);Serial.println("");
+    Serial.print("clear: ");Serial.print(printData.clearLower, 4);Serial.print(" - ");Serial.print(printData.clearUpper, 4);Serial.println("");
 }
 
 
 // Write threshold data to the specified address
 void ColourSampleCollection::write(int address)
 {
-    Serial.println("Writing...");
+    // Serial.println("Writing...");
     // I need to be able to set the startic address of writing and also know the total size of what I store in the EEPROM
     ColourStorageData writeData = thresholds; // The data being written
-    printColourStorageData(writeData);
+    // printColourStorageData(writeData);
     EEPROM.put(address, writeData);
-    Serial.println("Done");
+    // Serial.println("Done");
 }
 
 // Read stored threshold data at from specified address
 ColourStorageData ColourSampleCollection::read(int address)
 {
-    Serial.println("Reading...");
+    // Serial.println("Reading...");
     ColourStorageData readData; // The data beign read
     EEPROM.get(address, readData);
-    printColourStorageData(readData);
-    Serial.println("Done");
+    // printColourStorageData(readData); // Does not seem to print the data - just empty. Maybe what I put in is empty? (division by 0?)
+    // Serial.println("Done");
     return readData;
 }
 
@@ -481,39 +478,52 @@ bool ColourSampleCollection::enterSample(ColourSample sample)
     } else return false;
 }
 
+const double THRESHOLD_MINMAX_MARGIN = 0.02;
+
 // Calculates the thresholds based on the samples taken so far
 void ColourSampleCollection::calculate()
 {
     
     if (sampleIndex == 0) return; // If no samples have been taken, return to avoid undefined behaviour (like division by 0)
-    
-    // Average calculation (maybe not necessary?)
+
     double rgAvg = averageRatio(ColourSample::rg);
     double rbAvg = averageRatio(ColourSample::rb);
     double gbAvg = averageRatio(ColourSample::gb);
     double clearAvg = averageRatio(ColourSample::clear);
 
+    // Min max calculation
+    double rgMin = minValue(ColourSample::rg);
+    double rgMax = maxValue(ColourSample::rg);
+
+    double rbMin = minValue(ColourSample::rb);
+    double rbMax = maxValue(ColourSample::rb);
+
+    double gbMin = minValue(ColourSample::gb);
+    double gbMax = maxValue(ColourSample::gb);
+
+    double clearMin = minValue(ColourSample::clear);
+    double clearMax = maxValue(ColourSample::clear);
+
     // Calculate minimum and maximum values
 
     // Setting the actual values
-    thresholds.rgLower = rgAvg - stdDevsToUse*stdDev(ColourSample::rg, rgAvg);
-    thresholds.rgUpper = rgAvg + stdDevsToUse*stdDev(ColourSample::rg, rgAvg);
+    thresholds.rgLower = rgMin - THRESHOLD_MINMAX_MARGIN; // 0.1*(rgAvg-rgMin)
+    thresholds.rgUpper = rgMax + THRESHOLD_MINMAX_MARGIN; // 0.1*(rgMax-rgAvg)
 
-    thresholds.rbLower = rbAvg - stdDevsToUse*stdDev(ColourSample::rb, rbAvg);
-    thresholds.rbUpper = rbAvg + stdDevsToUse*stdDev(ColourSample::rb, rbAvg);
+    thresholds.rbLower = rbMin - THRESHOLD_MINMAX_MARGIN; // 0.1*(rbAvg-rbMin)
+    thresholds.rbUpper = rbMax + THRESHOLD_MINMAX_MARGIN; // 0.1*(rbMax-rbAvg)
 
-    thresholds.gbLower = gbAvg - stdDevsToUse*stdDev(ColourSample::gb, gbAvg);
-    thresholds.gbUpper = gbAvg + stdDevsToUse*stdDev(ColourSample::gb, gbAvg);
+    thresholds.gbLower = gbMin - THRESHOLD_MINMAX_MARGIN; // 0.1*(gbAvg-gbMin)
+    thresholds.gbUpper = gbMax + THRESHOLD_MINMAX_MARGIN; // 0.1*(gbMax-gbAvg)
 
-    thresholds.clearLower = clearAvg - stdDevsToUse*stdDev(ColourSample::clear, clearAvg);
-    thresholds.clearUpper = clearAvg + stdDevsToUse*stdDev(ColourSample::clear, clearAvg);
+    thresholds.clearLower = clearMin - 0.1*(clearAvg-clearMin);
+    thresholds.clearUpper = clearMax + 0.1*(clearMax-clearAvg);
 
     // Ideas for threshold calculation:
     //  - Calculate the min and max and set the thresholds a bit outside of that
     //    Maybe have special cases for certain colour where I know that the threshold can be set loosely (like low down on some ratios on blue)
     //  - Calculate the average and then set the thresholds and standard deviation and set the thresholds some amount of standard deviations outside
     //  - Generally, special cases should be handled where I know that the tolerances are looser so that we don't have thresholds that are stricter than they need to be
-
 
 }
 
@@ -558,6 +568,29 @@ double ColourSampleCollection::stdDev(ColourSample::Ratios ratio)
     return stdDev(ratio, averageRatio(ratio));
 }
 
+double ColourSampleCollection::minValue(ColourSample::Ratios ratio)
+{
+    if (sampleIndex==0) return -1; // Should not need to, but just to be safe (already done in calling function)
+    double minVal = samples[0].ratios[ratio];
+    for (int i=1;i<sampleIndex;++i)
+    {
+        double comparer = samples[i].ratios[ratio];
+        if (comparer < minVal) minVal = comparer;
+    }
+    return minVal;
+}
+
+double ColourSampleCollection::maxValue(ColourSample::Ratios ratio)
+{
+    if (sampleIndex==0) return -1; // Should not need to, but just to be safe (already done in calling function)
+    double maxVal = samples[0].ratios[ratio];
+    for (int i=1;i<sampleIndex;++i)
+    {
+        double comparer = samples[i].ratios[ratio];
+        if (comparer > maxVal) maxVal = comparer;
+    }
+    return maxVal;
+}
 
 
 
@@ -569,5 +602,6 @@ void HardwareButton::init()
 
 bool HardwareButton::isPressed()
 {
-    return (digitalRead(pin) == LOW);
+    if (reversed==false) return (digitalRead(pin) == LOW); // Normal
+    else return (digitalRead(pin) == HIGH); // Reversed
 }

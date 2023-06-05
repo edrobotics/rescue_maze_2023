@@ -48,6 +48,10 @@ MeBuzzer buzzer;
 // RGB ring
 MeRGBLed ledRing(0, 12);
 
+const double MAX_CORRECTION_DISTANCE = 16;
+const double MIN_CORRECTION_ANGLE = 8;
+const double MAX_WALLCHANGE_ANGLE = 25; // Should be changed later to compute the actual distances
+
 
 
 /*
@@ -167,6 +171,7 @@ TouchSensorSide g_lastTouchSensorState = touch_none;
 
 int g_kitsToDrop = 0;
 char g_dropDirection = ' ';
+bool g_returnAfterDrop = false;
 
 
 //------------------ Serial communication -------------------------------//
@@ -234,6 +239,7 @@ Command serialcomm::readCommand(bool waitForSerial)
   }
   char recievedChar = readChar();
   if (recievedChar != '!') return command_invalid;
+
   recievedChar = readChar(); // Read the next byte (the command)
   switch (recievedChar)
   {
@@ -256,22 +262,27 @@ Command serialcomm::readCommand(bool waitForSerial)
       break;
 
     case 'k': // drop rescue kit
-      g_kitsToDrop = 0;
-      // sounds::tone(220, 300);
-      recievedChar = readChar();
-      if (recievedChar != ',' ) return command_invalid; // Invalid because the form was not followed
+    {
+        g_kitsToDrop = 0;
+        // sounds::tone(220, 300);
+        recievedChar = readChar();
+        if (recievedChar != ',' ) return command_invalid; // Invalid because the form was not followed
 
-      while(Serial.available() == 0) {}
-      g_kitsToDrop = Serial.read() - '0';
-      // sounds::tone(440, 300);
-      recievedChar = readChar();
-      if (recievedChar != ',' ) return command_invalid; // Invalid because the form was not followed
-      // sounds::tone(695, 300);
-      g_dropDirection = readChar();
-      // sounds::tone(880, 700);
-      return command_dropKit;
-      break;
+        while(Serial.available() == 0) {}
+        g_kitsToDrop = Serial.read() - '0';
+        // sounds::tone(440, 300);
+        recievedChar = readChar();
+        if (recievedChar != ',' ) return command_invalid; // Invalid because the form was not followed
+        // sounds::tone(695, 300);
+        g_dropDirection = readChar();
+        // sounds::tone(880, 700);
+        char returnBoolChar = readChar();
+        if (returnBoolChar=='0') g_returnAfterDrop = false;
+        else g_returnAfterDrop = true;
 
+        return command_dropKit;
+        break;
+    }
     case 'w': // get wall states
       return command_getWallStates;
       break;
@@ -310,7 +321,7 @@ void serialcomm::answerInterrupt()
 
 void lightsAndBuzzerInit()
 {
-  // buzzer.setpin(45);
+  buzzer.setpin(45);
   ledRing.setpin(44);
   ledRing.fillPixelsBak(0, 2, 1);
   lights::turnOff();
@@ -441,10 +452,11 @@ void lights::floorIndicator(ColourSensor::FloorColour floorColour)
 void lights::turnOnVictimLights()
 {
     setColour(0, colourWhite, false);
-    setColour(3, colourRed, false);
     setColour(6, colourRed, false);
     setColour(9, colourRed, false);
     setColour(12, colourRed, true);
+
+    // 2, 3, 4
 }
 
 void lights::indicateFrontSensor()
@@ -972,7 +984,10 @@ void turnSteps(TurningDirection direction, int steps)
   flushDistanceArrays();
   gyroTurnSteps(direction, steps, true);
   flushDistanceArrays();
+  if (abs(g_robotAngle) > MIN_CORRECTION_ANGLE)
+  {
   straighten();
+  }
   flushDistanceArrays();
 }
 
@@ -995,6 +1010,7 @@ void turnToPIDAngle()
 void initColourSensor()
 {
   colSensor.init();
+  colSensor.refreshThresholds();
 }
 
 // Adds curDistanceData onto the specified array
@@ -1598,16 +1614,24 @@ void checkAndUseWallChange(int sensor, WallChangeType wallChangeToCheck, Stoppin
         
       }
 
+
       if (g_potWallChanges[sensor][wallChangeToCheck].timestamp - millis() < 500) // Time is not tuned!!!
       {
         // Successful detection using potential wallchange
-        g_trueDistanceDriven = g_potWallChanges[sensor][wallChangeToCheck].shadowDistanceDriven + offset;
-        g_potWallChanges[sensor][wallChangeToCheck].timestamp = 0; // Resets the timeflag to prevent double detection
+        double corrected = g_potWallChanges[sensor][wallChangeToCheck].shadowDistanceDriven + offset;
+        if (abs(g_trueDistanceDriven - corrected) <= MAX_CORRECTION_DISTANCE) // Limit correction
+        {
+          g_trueDistanceDriven = corrected;
+        }
+        g_potWallChanges[sensor][wallChangeToCheck].timestamp = 0; // Resets the timeflag to prevent double detection. If correction was too large, also prevents from
       }
       else
       {
         // Normal detection using only smooth wallchange
-        g_trueDistanceDriven = offset;
+        if (abs(g_trueDistanceDriven-offset) <= MAX_CORRECTION_DISTANCE) // Limit correction
+        {
+          g_trueDistanceDriven = offset;
+        }
       }
 
       if (wallChangeToCheck == wallchange_leaving)
@@ -1838,7 +1862,10 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
   } // Only do when not on ramp ends here
 
   // Checking for wallchanges
-  checkWallChanges(stopReason);
+  if (abs(g_robotAngle) < 30) // Only check if the robot angle is small enough (replace with correction for it in the future)
+  {
+    checkWallChanges(stopReason);
+  }
   // printWallchangeData(ultrasonic_RF);
   // Serial.println("");
 
@@ -1849,7 +1876,7 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
     serialcomm::clearBuffer();
     serialcomm::answerInterrupt();
     bool stepDriven = false;
-    if (g_trueDistanceDriven > 15) stepDriven = true;
+    if (g_trueDistanceDriven >= 15) stepDriven = true;
     handleVictim(true);
     serialcomm::returnAnswer(stepDriven);
     delay(100); // To prevent too rapid serial communication
@@ -1901,7 +1928,7 @@ bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, To
     // g_targetDistance = g_trueDistanceDriven + 2;
     // g_targetDistance = 15;
     g_startDistance = g_targetDistance - g_trueDistanceDriven;
-    g_targetDistance += 3;
+    // g_targetDistance += 3;
   }
   if (continuing == true)
   {
@@ -2103,9 +2130,12 @@ bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, To
 
     // Determine which side is affected and relay information to main loop
   }
-  else
+  else // Only straighten when not by obstacle
   {
-    straighten(); // Only straighten when not by obstacle
+    if (abs(g_robotAngle) > MIN_CORRECTION_ANGLE && g_driveBack == false)
+    {
+      straighten();
+    }
   }
 
   xDistanceOnRamp = g_horizontalDistanceDrivenOnRamp;
@@ -2236,7 +2266,7 @@ void handleVictim(double fromInterrupt)
   // Return the robot to original orientation
   if (turnDirection == ccw) turnDirection = cw; // Reverse direction
   else turnDirection = ccw; // Reverse direction
-  if (g_kitsToDrop != 0) turnSteps(turnDirection, 1); // Only turn if you have to drop
+  if (g_kitsToDrop != 0 && g_returnAfterDrop==true) turnSteps(turnDirection, 1); // Only turn if you have to drop
 
   // Reset variables
   g_dropDirection = ' ';
@@ -2271,16 +2301,8 @@ void handleVictim(double fromInterrupt)
 
 // Front touch sensor buttons
 
-// Which button is on which side is not checked
-HardwareButton pressPlateLeft {34};
-HardwareButton pressPlateRight {36};
-
-void initSwitches()
-{
-  pressPlateLeft.init();
-  pressPlateRight.init();
-}
-
+HardwareButton pressPlateLeft {34, false};
+HardwareButton pressPlateRight {36, false};
 
 
 TouchSensorSide frontSensorActivated()
