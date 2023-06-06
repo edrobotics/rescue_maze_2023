@@ -5,6 +5,7 @@ using System.IO.Ports;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
+using EnumCommand;
 
 namespace SerialConsole
 {
@@ -12,17 +13,12 @@ namespace SerialConsole
     {
         //******** Navigation & Localization ********
 
-        static bool exit = false;
         static int highestX = 25;
         static int highestZ = 25;
         static int lowestX = 25;
         static int lowestZ = 25;
-        //static readonly int startPosX = 25;
-        //static readonly int startPosZ = 25;
         static int toPosX;
         static int toPosZ;
-        //static int shortenToX;
-        //static int shortenToZ;
         static int posX = 25;
         static int posZ = 25;
 
@@ -50,13 +46,20 @@ namespace SerialConsole
 
         static readonly Stopwatch timer = new();
 
+        const double SecoundsPerDrive = 4.5;
+        const double SecoundsPerTurn = 2.5;
+        static int distanceToStart = 0;
+        static bool distanceUpdated;
+        static volatile bool exit = false;
+
         //******** Team ********
         //~Köra snabbare till utforskade tiles
         //~if error - send to auriga which turns on lamps to suggest lop?
-        //~Hur ska timern veta om reseten är första inför första körning, eller inte - första reset (rutin)(?) -hur gör vi med kalibrering???
+        //~VIKTIG:Hur ska timern veta om reseten är första inför första körning, eller inte - första reset (rutin)(?) -hur gör vi med kalibrering???
         //Send to auriga or recive from if there is likely an obstacle present?
         //~Edit Baud Rate to read faster, 38,4 k seems good -- does not work??
         //~Always send in beginning like in drive to avoid deadlock
+        //~Resume method?
 
         //******** Tests ********
         //Test (+finish?) sinceCheckpoint??
@@ -69,29 +72,30 @@ namespace SerialConsole
         //Compare map to sensor (+vision?) data?
 
         //******** Solve/look into NOW ********
+        //Make it so that if I cannot find way to start - go down ramp
+        //optimiserad svängning vid kit dropping -------started in DropKits() -- finish asap
+        //Sätt ingen kit check förrän i turnLogic för att optimisera
+        //Fix line ~256 when ramps are fixed
+        //Check that mapping + writing it to file is correct and the search alg.
+        //Fault in left wall backup nav
+        //Fix what to do when driveWay seeking fails
+        //Direction when i drive OUT of checkpoint
+        //Update checkpoint direction of that when it left tile
         //victims are saved until end of drive - problem if identified on first tile in drive -- send message in middle of drive?
-        //Check for driveWay length if drive fails to make sure no failure in driving to tile, since it could be an issue
-        //Black tiles and ramp tiles in search tiles + multiple map support
+
+        //****Little lower, still high****
         //OM VI KAN UPPSKATTA HUR HÖG + LÅNG EN RAMP ÄR - (GENOM GYRO + STRÄCKA KÖRD PÅ RAMP) KAN VI HA EN KARTA FÖR VARJE "NIVÅ", add height to mapinfo and lenth to calc position
         // ------------------ if so -> make sure crossRoads() on two maps on same height but unconnected works when findway fails
         // ------------------ finish ramp distances in Drive()
         // ------------------ Set ramp to actual ramp instead of tile next to ++ put walls for if there is two next to each other - or search algorithm ramps
-        //Make it so that if I cannot find way to start - go down ramp
-        //Search algorithm with ramps?
-        //Count ramp as one tile? --rewrite UpRamp and DownRamp
-        //optimiserad svängning vid kit dropping -------started in DropKits() -- finish asap
-        //Sätt ingen kit check förrän i turnLogic för att optimisera
         //TurnTo(direction - 2); DriveDeaf(); --When we don't want to go up ramp, panic solution
-        //Change map in search algorithm when searching to ramp
+        //Search algorithm with ramps?
+        //--Change map in search algorithm when searching to ramp
         //use GoBackLevel???
-
-        //SEARCH DIRECTLY TO TILE !!!!!!!!!!!!!!!!!
-        //Check that mapping + writing it to file is correct and the search alg.
-        //Fix line ~256 when ramps are fixed
-        //Fault in left wall backup nav
-        //Update checkpoint direction of that when it left tile
-        //Fix what to do when driveWay seeking fails
         //Förbättra felhantering
+        //GOOD IDEA: Own delay method so that i can do work while sleeping, like finding distance to start
+        //Full reset -- if we reset from start tile, also re-startup, but do not add another thread for victim
+
 
         //******** Solve/look into ********
         // TRiple slash /// for summaries above methods - useful, especially if put into classes
@@ -102,6 +106,9 @@ namespace SerialConsole
 
 
         //******** Solved/done? (look into/could be bugs) ********
+        //Black tiles and ramp tiles in search tiles
+        //Count ramp as one tile? --rewrite UpRamp and DownRamp
+        //SEARCH DIRECTLY TO TILE !!!!!!!!!!!!!!!!!
         //Black tiles & ramp in Search Algorithm
         //Search directly to explore tile instead of crossroad
         //Use remaining 4 bits for ramp location?
@@ -111,7 +118,8 @@ namespace SerialConsole
         //Remap on wall "hit" in drive -
         //Check and log ramp data -- seems to be out of bounds??
 
-        // ********************************** Main Navigation Loop & Startup ********************************** 
+        // ********************************** Main Loop & Startup ********************************** 
+        #region Main
 
         static void Main()
         {
@@ -136,7 +144,7 @@ namespace SerialConsole
                     reset = false;
                     //CheckTimer();
                     Turnlogic();
-                    Drive();
+                    Drive(true);
                     Thread.Sleep(10);
                 }
             }
@@ -176,9 +184,9 @@ namespace SerialConsole
                     Log(_port);
                 }
 
-                try
+                foreach (string _port in _ports)
                 {
-                    foreach (string _port in _ports)
+                    try
                     {
                         if (_port.Contains("/dev/ttyUSB") || _port.Contains("COM") || _port.Contains("/dev/ttyS"))
                         {
@@ -186,19 +194,18 @@ namespace SerialConsole
                             serialPort1.Open();
                         }
                     }
-                }
-                catch (Exception ex)
-                {
-                    LogException(ex);
-                    Log("cannot switch to port", true);
-                    if (!serialPort1.IsOpen)
+                    catch (Exception ex)
                     {
-                        serialPort1.PortName = "/dev/ttyUSB0";
+                        LogException(ex);
+                        Log("Cannot open port " + _port);
                     }
                 }
-                Thread.Sleep(200);
                 if (!serialPort1.IsOpen)
+                {
+                    serialPort1.PortName = "/dev/ttyS0";
+                    Thread.Sleep(200);
                     goto OpenPort;
+                }
             }
             Log($"Connected to {serialPort1.PortName}", true);
 
@@ -216,7 +223,7 @@ namespace SerialConsole
                 {
                     Thread.Sleep(20);
                 }
-            } while (!serialPort1.ReadLine().Contains("!l"));
+            } while (!serialPort1.ReadLine().Contains(RecivedCommands.LOP.GetCommand()));
             timer.Start();
 
             Thread.Sleep(200);
@@ -238,13 +245,14 @@ namespace SerialConsole
 
             Log("Done with startup", true);
         }
+        #endregion
+
+        // ********************************** Navigation ********************************** 
+        #region Nav
 
         static void Turnlogic()
         {
             if (reset) return;
-
-            //SensorCheck();
-            CheckAndDropKits();
 
             bool[] _surroundingTiles = {ShouldGoTo(posX, posZ - 1) && !ReadHere(BitLocation.frontWall), //NOT BLACK TILES   ///false,false, false, true
                                         ShouldGoTo(posX - 1, posZ) && !ReadHere(BitLocation.leftWall),
@@ -263,9 +271,13 @@ namespace SerialConsole
             if (reset) return;
             
             Thread.Sleep(20);
-            //***************************************************CHANGE CODE BELOW WHEN RAMP STUFF IS CHANGED
+
+#warning change code below when ramps are done
+            //+ all startpos stuff when ramps are done (or change startpos in map + add parameter in initializer)
+            //CHANGE CODE BELOW WHEN RAMP STUFF IS CHANGED
             if (driveWay.Count == 0 && maps[currentMap].CrossTiles.Count == 0 && _unExpTiles == 0 && posX == maps[currentMap].StartPosX && posZ == maps[currentMap].StartPosZ)
             {
+                CheckAndDropKits(true);
                 if (currentMap == 0)
                 {
                     timer.Stop();
@@ -276,7 +288,8 @@ namespace SerialConsole
                 }
                 else
                 {
-                    TurnTo(TileToDirection(maps[currentMap].GetRampAt((byte)posX, (byte)posZ)));
+                    //We want to go to the first ramp, where this map was first discovered, so that we can go back to start
+                    TurnTo(maps[currentMap].GetFirstRampAt((byte)posX, (byte)posZ)[(int)RampStorage.RampDirection]); //THIS IS STARTPOS
                     return;
                 }
             }
@@ -383,9 +396,8 @@ namespace SerialConsole
                             driveWay = new List<byte[]>(PathTo(maps[currentMap].CrossTiles[i][1], maps[currentMap].CrossTiles[i][1]));
                             if (driveWay.Count > 0) goto NavLogic;
                         }
-                        Log("SOMETHING WRONG WITH RAMP OR MAP", true);
-                        byte[] _ramp = maps[currentMap].GetRampAt((byte)rampCount);
-                        driveWay = new List<byte[]>(PathTo(_ramp[0], _ramp[1]));
+                        Log("SOMETHING PROBABLY WRONG WITH RAMP OR MAP, LIKELY DUAL RAMP, trying to solve", true);
+                        GoToRamp(maps[currentMap].GetRampAt((byte)rampCount));
                     }
                     goto NavLogic;
                 }
@@ -409,85 +421,95 @@ namespace SerialConsole
 
             while (true)
             {
-                SensorCheck();
-                CheckAndDropKits();
-                if (reset)
+                if (reset || exit)
                     return;
 
                 while (true /*!leftPresent || frontPresent || ReadNextTo(posX, posZ, blackTile, Directions.front) || RampCheck(direction)*/)
                 {
-                    if (reset)
+                    SensorCheck();
+                    if (reset || exit)
                         return;
                     if (!leftPresent && !ReadNextTo(BitLocation.blackTile, Directions.left) /*&& !RampCheck(direction + 1)*/)
                     {
                         Turn('l');
                         Thread.Sleep(200);
-                        Drive();
+                        Drive(false);
                     }
                     else if (frontPresent || ReadNextTo(BitLocation.blackTile, Directions.front) /*|| RampCheck(direction)*/)
                     {
+                        Log($"BlackTile to left: {ReadNextTo(BitLocation.blackTile, Directions.left)}; Blacktile in front: {ReadNextTo(BitLocation.blackTile, Directions.front)}", false);
                         Turn('r');
                         Thread.Sleep(100);
                     }
                     else
                     {
+                        CheckAndDropKits(true);
+                        Log($"BlackTile to left: {ReadNextTo(BitLocation.blackTile, Directions.left)}; Blacktile in front: {ReadNextTo(BitLocation.blackTile, Directions.front)}", false);
                         break;
                     }
                     Thread.Sleep(10);
                 }
 
-                Drive();
+                Drive(false); //Do not check for ramps, we want to have 'dumber' code so less can go wrong
             }
         }
 
-        // ********************************** Ramps ********************************** 
+        #endregion
 
+        // ********************************** Ramps ********************************** 
 
         static void RampDriven(int _rampDirection)
         {
-
-            if (!maps[currentMap].FindRamp((byte)posX, (byte)posZ))
+            try
             {
-                //Update and save this map
-                WriteNextTo(BitLocation.ramp, true, Directions.front);
-                WriteNextTo(BitLocation.explored, true, Directions.front);
+                if (!maps[currentMap].FindRamp((byte)posX, (byte)posZ, (byte)direction))
+                {
+                    //Update and save this map
+                    WriteNextTo(BitLocation.ramp, true, Directions.front);
+                    WriteNextTo(BitLocation.explored, true, Directions.front);
 
-                Log("Travelled ramp, was a new ramp _-_-_-_-_-_-_-_-_-_-", true);
+                    Log("Travelled ramp, was a new ramp _-_-_-_-_-_-_-_-_-_-", true);
 
-                byte _fromMap = (byte)currentMap;
-                maps[currentMap].AddRamp((byte)posX, (byte)posZ, (byte)_rampDirection, (byte)rampCount, (byte)(maps.Count - 1));
-                Log($"Saved ramp: x:{posX}, z:{posZ}, dir:{_rampDirection}, rampCount:{rampCount}, map:{maps.Count-1}", false);
+                    byte _fromMap = (byte)currentMap;
+                    maps[currentMap].AddRamp((byte)posX, (byte)posZ, (byte)_rampDirection, (byte)rampCount, (byte)(maps.Count - 1));
+                    Log($"Saved ramp: x:{posX}, z:{posZ}, dir:{_rampDirection}, rampCount:{rampCount}, map:{maps.Count - 1}", false);
 
-                //Setup new map
-                maps.Add(new Map(50));
-                currentMap = maps.Count - 1;
-                posX = maps[currentMap].StartPosX;
-                posZ = maps[currentMap].StartPosZ;
-                maps[currentMap].AddRamp((byte)posX, (byte)posZ, (byte)FixDirection(_rampDirection-2), (byte)rampCount, _fromMap);
+                    //Setup new map
+                    maps.Add(new Map(50));
+                    currentMap = maps.Count - 1;
+                    posX = maps[currentMap].StartPosX;
+                    posZ = maps[currentMap].StartPosZ;
+                    maps[currentMap].AddRamp((byte)posX, (byte)posZ, (byte)FixDirection(_rampDirection - 2), (byte)rampCount, _fromMap);
 
-                maps[currentMap].Clear();
-                locationUpdated = true;
-                rampCount++;
-                Log($"NEW: x:{posX}, z:{posZ}, dir:{direction}, map:{currentMap}", true);
+                    maps[currentMap].Clear();
+                    locationUpdated = true;
+                    rampCount++;
+                    Log($"NEW: x:{posX}, z:{posZ}, dir:{direction}, map:{currentMap}", true);
 
-                WriteNextTo(BitLocation.ramp, true, Directions.back);
+                    WriteNextTo(BitLocation.ramp, true, Directions.back);
+                }
+                else
+                {
+                    Log("Ramp was a previously used ramp _-_-_-_-_-_-_-_-_-_-", true);
+                    WriteNextTo(BitLocation.explored, true, Directions.front);
+
+                    //Update data
+                    byte[] currentRamp = maps[currentMap].GetRampAt((byte)posX, (byte)posZ, (byte)direction);
+                    byte[] newMapInfo = maps[currentRamp[(int)RampStorage.ConnectedMap]].GetRampAt(currentRamp[(int)RampStorage.RampIndex]);
+                    posX = newMapInfo[(int)RampStorage.XCoord];
+                    posZ = newMapInfo[(int)RampStorage.ZCoord];
+                    //direction = newMapInfo[(int)RampStorage.RampDirection];
+                    //UpdateDirection(2);
+                    currentMap = currentRamp[(int)RampStorage.ConnectedMap];
+                    locationUpdated = true;
+
+                    Log($"NEW: x:{posX}, z:{posZ}, dir:{direction}, map:{currentMap}", true);
+                }
             }
-            else
+            catch (Exception e)
             {
-                Log("Ramp was a previously used ramp _-_-_-_-_-_-_-_-_-_-", true);
-                WriteNextTo(BitLocation.explored, true, Directions.front);
-
-                //Update data
-                byte[] currentRamp = maps[currentMap].GetRampAt((byte)posX, (byte)posZ);
-                byte[] newMapInfo = maps[currentRamp[(int)RampStorage.ConnectedMap]].GetRampAt(currentRamp[(int)RampStorage.RampIndex]);
-                posX = newMapInfo[(int)RampStorage.XCoord];
-                posZ = newMapInfo[(int)RampStorage.ZCoord];
-                //direction = newMapInfo[(int)RampStorage.RampDirection];
-                //UpdateDirection(2);
-                currentMap = currentRamp[(int)RampStorage.ConnectedMap];
-                locationUpdated = true;
-
-                Log($"NEW: x:{posX}, z:{posZ}, dir:{direction}, map:{currentMap}", true);
+                LogException(e);
+                throw new Exception("Failed ramp driving", e);
             }
         }
 
@@ -545,6 +567,40 @@ namespace SerialConsole
             }
         }*/
 
+        // ********************************** Helpers/nice to have instead of writing manually ********************************** 
+        #region Helpers
+
+        static void DelayThread(int _millis, bool _doWork)
+        {
+            Stopwatch sw = Stopwatch.StartNew();
+            if (_millis > 10 && _doWork)
+            {
+                if (!distanceUpdated)
+                {
+#warning NOT DONE
+                    //while (currentMap != 0){ } - do smth to check go back
+                    if (currentMap == 0)
+                    {
+                        distanceToStart = PathTo(maps[currentMap].StartPosX, maps[currentMap].StartPosZ).Count;
+                        distanceUpdated = true;
+                    }
+                }
+            }
+
+            if (_millis - (int)sw.ElapsedMilliseconds > 1)
+            {
+                try
+                {
+                    Thread.Sleep(_millis - (int)sw.ElapsedMilliseconds);
+                }
+                catch (Exception e)
+                {
+                    LogException(e);
+                    Log("Could not sleep");
+                }
+            }
+        }
+
         static void Log(string _message)
         {
 #if DEBUG
@@ -593,7 +649,7 @@ namespace SerialConsole
                 }
                 try
                 {
-                    File.AppendAllText("map.txt",$"\nmap {m}\n" + string.Join('\n', mapToText) + '\n');
+                    File.AppendAllText("map.txt",$"map {m}\n" + string.Join('\n', mapToText) + "\n\n");
                     //File.WriteAllText("map.txt", string.Join('\n', mapToText)); // Writes map to text file; previous: /*@"C:\Users\0515frma\Desktop\Test\log.txt"*/
                 }
                 catch (Exception e)
@@ -609,6 +665,6 @@ namespace SerialConsole
             serialPort1.Close();
             //throw new Exception();
         }
-        
+        #endregion
     }
 }

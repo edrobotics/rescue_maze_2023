@@ -15,6 +15,7 @@ namespace SerialConsole
         ConnectedMap
     }
 
+
     enum BitLocation
     {
         frontWall,
@@ -36,6 +37,9 @@ namespace SerialConsole
         //******** Mapping & Checkpoints ********
 
         //static readonly ushort[,] mainMap = new ushort[50, 50]; //W = 0, A = 1, S = 2, D = 3, explored = 4, mapSearched = 5, victim  = 6, ramp = 7, black tile = 8, checkp = 9, blue = 10, crossroad = 11 -more? obstacles?
+        /// <summary>
+        /// 0 = XCoord, 1 = ZCoord, 2 = Map, 3 = direction (on first)
+        /// </summary>
         static readonly List<byte[]> sinceCheckpoint = new();
         static readonly List<Map> maps = new();
         //static readonly List<int[]> mapInfo = new(); //For storing info of where the ramp is
@@ -63,40 +67,70 @@ namespace SerialConsole
             }
         }
 
-        static int FixDirection(int dir)
+        static void KitDirectionUpdate(char _direction)
         {
-            while (dir > 3)
+            if (_direction == 'r')
             {
-                dir -= 4;
+                UpdateDirection(-1);
             }
-            while (dir < 0)
+            else if (_direction == 'l')
             {
-                dir += 4;
+                UpdateDirection(1);
             }
-            return dir;
+            else
+            {
+                Log($"{_direction} is fake (UpdateDirection)", true);
+            }
         }
 
-        static int TileToDirection(byte[] cell)
+        static int FixDirection(int _dir)
         {
-            if (cell[0] == posX && cell[1] == posZ - 1)
+            while (_dir > 3)
+            {
+                _dir -= 4;
+            }
+            while (_dir < 0)
+            {
+                _dir += 4;
+            }
+            return _dir;
+        }
+
+        static int TileToDirection(byte[] _cell)
+        {
+            if (_cell[0] == posX && _cell[1] == posZ - 1)
             {
                 return 0;
             }
-            if (cell[0] == posX - 1 && cell[1] == posZ)
+            if (_cell[0] == posX - 1 && _cell[1] == posZ)
             {
                 return 1;
             }
-            if (cell[0] == posX && cell[1] == posZ + 1)
+            if (_cell[0] == posX && _cell[1] == posZ + 1)
             {
                 return 2;
             }
-            if (cell[0] == posX + 1 && cell[1] == posZ)
+            if (_cell[0] == posX + 1 && _cell[1] == posZ)
             {
                 return 3;
             }
 
-            for (int i = 0; i < 5; i++) Log("********* ACHTUNG ACHTUNG, DAS IST NICHT GUT ************", true);
-            return 0;
+            Log("********* ACHTUNG ACHTUNG, DAS IST NICHT GUT ************", true);
+            Thread.Sleep(10);
+            if (_cell[0] == posX && _cell[1] == posZ)
+            {
+                return direction;
+            }
+
+            if (driveWay.Count > 0)
+            {
+                Log("Finding new path");
+                driveWay = new List<byte[]>(PathTo(driveWay.Last()[0], driveWay.Last()[1]));
+                return TileToDirection(driveWay[0]);
+            }
+
+            Log("DriveWay is finished, but still error, strange", true);
+            return direction;
         }
 
         static byte[] DirToTile(int _globalDir, byte _x, byte _z)
@@ -134,6 +168,7 @@ namespace SerialConsole
             }
             locationUpdated = true;
 
+            UpdateDirection(0);
             if (direction == 0)
             {
                 posZ--;
@@ -161,28 +196,30 @@ namespace SerialConsole
             else
             {
                 for(int i = 0; i < 5; i++) Log("Something wrong with direction in UpdateLocation!!!", true);
+                throw new Exception("HOW IS THIS EVEN POSSIBLE, SOMEHING VERY WRONG WITH UPDATE LOCATION");
             }
 
             if (posX > maps[currentMap].Length)
             {
                 posX = maps[currentMap].Length;
-                Log("Error PosX", true);
+                for (int i = 0; i < 5; i++) Log("!!!Error PosX hi", true);
             }
             if (posX < 0)
             {
                 posX = 0;
-                Log("Error posX", true);
+                for (int i = 0; i < 5; i++) Log("!!!Error posX lo", true);
             }
             if (posZ > maps[currentMap].Length)
             {
                 posZ = maps[currentMap].Length;
-                Log("Error PosZ", true);
+                for (int i = 0; i < 5; i++)  Log("!!!Error PosZ hi", true);
             }
             if (posZ < 0)
             {
                 posZ = 0;
-                Log("Error posZ", true);
+                for (int i = 0; i < 5; i++) Log("!!!Error posZ lo", true);
             }
+            AddSinceCheckPoint();
 
             if (posX == maps[currentMap].StartPosX && posZ == maps[currentMap].StartPosZ && currentMap == 0 && timer.ElapsedMilliseconds > (7 * 60 + 30) * 1000)
             {
@@ -198,6 +235,7 @@ namespace SerialConsole
             bool wallNX;
             bool wallPZ;
             bool wallPX;
+
             if (direction == 0)
             {
                 //SensorCheck();
@@ -232,11 +270,8 @@ namespace SerialConsole
             }
             else
             {
-                wallNZ = false;
-                wallNX = false;
-                wallPZ = false;
-                wallPX = false;
                 Log("ERROR", true);
+                throw new Exception("THIS SHOULD NOT BE POSSIBLE, direction out of bounds");
             }
 
             if (ReadHere(BitLocation.explored))
@@ -296,7 +331,7 @@ namespace SerialConsole
 
         static void Reset()
         {
-            Log("Reset", true);
+            Log("Resetting", true);
             reset = true;
             try
             {
@@ -308,6 +343,7 @@ namespace SerialConsole
                 while (savedMapCount < maps.Count)
                 {
                     maps.RemoveAt(maps.Count - 1);
+                    Log("!!DELETING MAP!!", true);
                 }
                 foreach (Map map in maps)
                 {
@@ -333,16 +369,28 @@ namespace SerialConsole
             }
             catch (Exception e)
             {
-                Log($"Reset error, {e.Message}", true);
+                LogException(e);
+                for (int i = 0; i < 3; i++) Log($"!!Reset error, very bad {e.Message}!!", true);
+                posX = 25;
+                posZ = 25;
+                currentMap = 0;
+                direction = 0;
+                UpdateMapFull();
+                AddSinceCheckPoint();
+                throw new Exception("Reset error", e);
             }
 
-            Thread.Sleep(100);
+            Thread.Sleep(10);
             serialPort1.DiscardInBuffer();
             serialPort1.DiscardOutBuffer();
 
             dropKits = false;
             //SerialComm("!w");
-            Thread.Sleep(100);
+            Thread.Sleep(300);
+
+            UpdateMapFull();
+            AddSinceCheckPoint();
+            Thread.Sleep(10);
         }
 
         static void AddSinceCheckPoint()
@@ -357,7 +405,7 @@ namespace SerialConsole
             }
         }
 
-        static void ResetSinceCheckpoint()
+        static void VisitedCheckpoint()
         {
             sinceCheckpoint.Clear();
             savedMapCount = maps.Count;
@@ -366,6 +414,7 @@ namespace SerialConsole
             {
                 map.SaveInfo();
             }
+            AddSinceCheckPoint();
         }
         
         // ********************************** Read And Write Map ********************************** 
@@ -467,7 +516,7 @@ namespace SerialConsole
     class Map
     {
         // ********************************** Data - Variables And Objects ********************************** 
-        public Map(int _mazeLength)
+        public Map (int _mazeLength)
         {
             Length = _mazeLength;
             map = new ushort[_mazeLength, _mazeLength];
@@ -504,11 +553,12 @@ namespace SerialConsole
             reachedFrom.Add(_info);
         }
 
-        public byte[] GetRampAt(byte _x, byte _z)
+        public byte[] GetRampAt(byte _x, byte _z, byte _direction)
         {
             for (int i = 0; i < reachedFrom.Count; i++)
             {
-                if (reachedFrom[i][0] == _x && reachedFrom[i][1] == _z)
+                if (reachedFrom[i][(int)RampStorage.XCoord] == _x && reachedFrom[i][(int)RampStorage.ZCoord] == _z 
+                    && _direction == reachedFrom[i][(int)RampStorage.RampDirection])
                 {
                     return reachedFrom[i];
                 }
@@ -516,6 +566,21 @@ namespace SerialConsole
             return new byte[] { 250, 250, 250, 250 };
         }
 
+        public byte[] GetFirstRampAt(byte _x, byte _z)
+        {
+            for (int i = 0; i < reachedFrom.Count; i++)
+            {
+                if (reachedFrom[i][(int)RampStorage.XCoord] == _x && reachedFrom[i][(int)RampStorage.ZCoord] == _z)
+                {
+                    return reachedFrom[i];
+                }
+            }
+            return new byte[] { 250, 250, 250, 250 };
+        }
+
+        /// <summary>
+        /// Gets a ramp by index
+        /// </summary>
         public byte[] GetRampAt(byte _index)
         {
             for (int i = 0; i < reachedFrom.Count; i++)
@@ -528,11 +593,16 @@ namespace SerialConsole
             return new byte[] { 250, 250, 250, 250, 250 };
         }
 
-        public bool FindRamp(byte _x, byte _z)
+        /// <summary>
+        /// Tries to find a ramp on certain position
+        /// </summary>
+        /// <returns>true if it finds a ramp</returns>
+        public bool FindRamp(byte _x, byte _z, byte _direction)
         {
             for (int i = 0; i < reachedFrom.Count; i++)
             {
-                if (reachedFrom[i][0] == _x && reachedFrom[i][1] == _z)
+                if (reachedFrom[i][(int)RampStorage.XCoord] == _x && reachedFrom[i][(int)RampStorage.ZCoord] == _z
+                    && _direction == reachedFrom[i][(int)RampStorage.RampDirection])
                 {
                     return true;
                 }
@@ -540,12 +610,18 @@ namespace SerialConsole
             return false;
         }
 
+        /// <summary>
+        /// Save crosstile and ramp data
+        /// </summary>
         public void SaveInfo()
         {
             saveCross = new List<byte[]>(crossTiles);
             saveReached = new List<byte[]>(reachedFrom);
         }
 
+        /// <summary>
+        /// Reset crossTile and ramp data to their saved states
+        /// </summary>
         public void ResetInfo()
         {
             crossTiles = new List<byte[]>(saveCross);
@@ -554,11 +630,18 @@ namespace SerialConsole
 
         // ********************************** Read And Write Map ********************************** 
 
+        /// <summary>
+        /// Checks if a certain bit exists on a certain location
+        /// </summary>
+        /// <returns>true if the bit was there</returns>
         public bool ReadBit(int _x, int _z, BitLocation _read)
         {
             return ((map[_x, _z] >> (int)_read) & 0b1) == 1;
         }
 
+        /// <summary>
+        /// Write one bit on a certain location (x and z) to a certain value
+        /// </summary>
         public void WriteBit(int _x, int _z, BitLocation _write, bool _value)
         {
             ushort _t = (ushort)(0b1 << (int)_write);
@@ -572,6 +655,9 @@ namespace SerialConsole
             }
         }
 
+        /// <summary>
+        /// Wipes map
+        /// </summary>
         public void Clear()
         {
             for (int i = 0; i < Length; i++)
@@ -583,6 +669,9 @@ namespace SerialConsole
             }
         }
 
+        /// <summary>
+        /// Clears one bit from the entire map
+        /// </summary>
         public void ClearBit(BitLocation _bit)
         {
             for (int i = 0; i < Length; i++)
@@ -594,11 +683,17 @@ namespace SerialConsole
             }
         }
 
+        /// <summary>
+        /// Sets a tile's value to 0
+        /// </summary>
         public void ClearTile(int _x, int _z)
         {
             map[_x, _z] = 0;
         }
 
+        /// <summary>
+        /// Sets a tile's value to 0, with the exception of the _exception bit
+        /// </summary>
         public void ClearTile(int _x, int _z, BitLocation _exception)
         {
             if (ReadBit(_x, _z, _exception))

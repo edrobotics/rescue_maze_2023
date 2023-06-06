@@ -41,37 +41,18 @@ namespace SerialConsole
                 }
             }
         }*/
-        /*
-        static void GoBackLevel(int _map) //FIX
+
+        static void GoToRamp(byte[] _ramp) //FIX
         {
-            if (_map != currentMap)
+            driveWay = new List<byte[]>(PathTo(_ramp[(int)RampStorage.XCoord], _ramp[(int)RampStorage.ZCoord])) //Way to tile next to ramp
             {
-                toPosX = 25;
-                toPosZ = 25;
-
-                foundWay = false;
-                FindFrom((byte)posX, (byte)posZ);
-                foundWay = false;
-                foundPath.ForEach(num => Log(num + " , ", false));
-
-                maps[currentMap].ClearBit(BitLocation.mapSearched);
-            }
-
-            while (foundPath.Count > 0)
+                DirToTile(_ramp[(int)RampStorage.RampDirection], _ramp[(int)RampStorage.XCoord], _ramp[(int)RampStorage.ZCoord]) //Driving to the real ramp
+            };
+            if (driveWay.Count <= 1 && _ramp[(int)RampStorage.XCoord] != posX && _ramp[(int)RampStorage.ZCoord] != posZ)
             {
-                TurnTo(TileToDirection(foundPath[0]));
-                foundPath.RemoveAt(0);
-                Drive();
+                for(int i = 0; i < 5; i++) Log("!!Something is wrong in SearchToRamp, possible ramp storage or mapping error!!", true);
             }
-
-            TurnTo(3);
-            Drive();
-
-            if (_map != currentMap)
-            {
-                Log("Cannot find map", true);
-            }
-        }*/
+        }
 
         static List<byte[]> PathTo(int _toX, int _toZ)
         {
@@ -94,8 +75,8 @@ namespace SerialConsole
             }
 
             //driveWay.ForEach(num => Debug.Log(num.X + " , " + num.Z + " ; "));
-            Log($"FINDPATHTO {_toX},{_toZ} from {posX},{posZ} AT {foundPath.Count} LENGTH", true);
-            foundPath.ForEach(tile => Log($"{tile[0]},{tile[1]};", false));
+            Log($"Found PathTo {_toX},{_toZ} from {posX},{posZ} at {foundPath.Count} length", true);
+            foundPath.ForEach(tile => Log($"::{tile[0]},{tile[1]};", false));
 
             maps[currentMap].ClearBit(BitLocation.mapSearched);
             maps[currentMap].ClearBit(BitLocation.inDriveWay);
@@ -103,8 +84,8 @@ namespace SerialConsole
             savedPath.Clear();
             if (foundPath.Count == 0 && _toX != posX && _toZ != posZ)
             {
-                Log("!!!!!!Could not find path!!!!!!!!!!", true);
-                Thread.Sleep(500);
+                Log("!!!!!!!!!Could not find path!!!!!!!!!", true);
+                Thread.Sleep(250); //Don't do work here
                 //return false;
             }
 
@@ -214,16 +195,16 @@ namespace SerialConsole
             {
                 Log("Found " + foundPath.Count + " long", true);
 
-                if ((foundPath.Count < savedPath.Count || savedPath.Count == 0) && foundPath.Count > 0)
+                if (foundPath.Count < savedPath.Count || savedPath.Count == 0) //If we found a better path, save it
                 {
                     savedPath = new List<byte[]>(foundPath);
-                    if (savedPath.Count == Math.Abs(posX - toPosX) + Math.Abs(posZ - toPosZ))
+                    if (savedPath.Count == Math.Abs(posX - toPosX) + Math.Abs(posZ - toPosZ)) //If this is the shortest possible path (manhattan distance), we are done
                     {
                         foundWay = true;
                     }
                 }
-                skipNext = true;
-                returningFromGoal = true;
+                skipNext = true; //We have found optimal way from last tile, so we don't need to explore it more
+                returningFromGoal = true; //We are returning to start again
                 return;
             }
 
@@ -317,6 +298,30 @@ namespace SerialConsole
             }
 
             skipNext = false;
+        }
+
+        static void FindTile(byte _onX, byte _onZ)
+        {
+            if (skipNext || foundWay)
+                return;
+
+            try
+            {
+                if ((maps[currentMap].ReadBit(_onX, _onZ, BitLocation.explored) && !maps[currentMap].ReadBit(_onX, _onZ, BitLocation.mapSearched) && 
+                    !maps[currentMap].ReadBit(_onX, _onZ, BitLocation.inDriveWay) && !maps[currentMap].ReadBit(_onX, _onZ, BitLocation.blackTile) && 
+                    !maps[currentMap].ReadBit(_onX, _onZ, BitLocation.ramp)) || (_onX == toPosX && _onZ == toPosZ))
+                {
+                    foundPath.Add(new byte[] {_onX, _onZ });
+                    SearchCell(_onX, _onZ);
+                    if (!foundWay)
+                        foundPath.RemoveAt(foundPath.Count - 1);
+                }
+            }
+            catch (Exception e)
+            {
+                LogException(e);
+                for (int i = 0; i < 3; i++) Log("!!!!!!FindTile -- index out of bounds(?)!!!!!!", true);
+            }
         }
 
         /*
@@ -433,32 +438,6 @@ namespace SerialConsole
                 }
             }
         }*/
-
-        static void FindTile(byte _onX, byte _onZ)
-        {
-            if (skipNext || foundWay)
-                return;
-
-            /*if (_onX >= 0 && _onZ >= 0 && _onX < maps[currentMap].GetLength(0) && _onZ < maps[currentMap].GetLength(1)) //If there is a position
-            }*/
-            try
-            {
-                if ((maps[currentMap].ReadBit(_onX, _onZ, BitLocation.explored) && !maps[currentMap].ReadBit(_onX, _onZ, BitLocation.mapSearched) && 
-                    !maps[currentMap].ReadBit(_onX, _onZ, BitLocation.inDriveWay) && !maps[currentMap].ReadBit(_onX, _onZ, BitLocation.blackTile) && 
-                    !maps[currentMap].ReadBit(_onX, _onZ, BitLocation.ramp)) || (_onX == toPosX && _onZ == toPosZ))
-                {
-                    foundPath.Add(new byte[] {_onX, _onZ });
-                    SearchCell(_onX, _onZ);
-                    if (!foundWay)
-                        foundPath.RemoveAt(foundPath.Count - 1);
-                }
-            }
-            catch (Exception e)
-            {
-                LogException(e);
-                for (int i = 0; i < 5; i++) Log("!!!!!!FindTile -- index out of bounds!!!!!!", true);
-            }
-        }
         /*
         static void ReturnToStart()
         {
