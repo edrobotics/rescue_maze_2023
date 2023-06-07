@@ -4,6 +4,7 @@
 #include <Arduino.h>
 #include <MeAuriga.h>
 #include <Servo.h>
+#include <FastLED.h> // For the camera light
 // #include <MeEncoderOnBoard.h>
 #include <MeGyro.h>
 #include <Wire.h>
@@ -341,12 +342,25 @@ void serialcomm::answerInterrupt()
 
 //---------------------- Buzzer and lights (for debugging) ------------------//
 
+const int CAMERA_LED_PIN = 30;
+const int CAMERA_LED_NUM = 12;
+CRGB cameraLeds[CAMERA_LED_NUM];
+
 void lightsAndBuzzerInit()
 {
   buzzer.setpin(45);
   ledRing.setpin(44);
   ledRing.fillPixelsBak(0, 2, 1);
   lights::turnOff();
+
+  FastLED.addLeds<NEOPIXEL, CAMERA_LED_PIN>(cameraLeds, CAMERA_LED_NUM);
+  for (int i=0; i<CAMERA_LED_NUM; ++i)
+  {
+    cameraLeds[i].r = 255;
+    cameraLeds[i].g = 255;
+    cameraLeds[i].b = 255;
+  }
+  FastLED.show();
 }
 
 
