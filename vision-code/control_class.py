@@ -1,4 +1,4 @@
-import testclass as tc
+import visionclass as tc
 from picamera.array import PiRGBArray
 from picamera import PiCamera
 import logging
