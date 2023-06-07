@@ -48,9 +48,9 @@ class imgproc:
 #change the following codes to dicts?
 
     cwd = os.getcwd()
-    if cwd == '/Users/lukas/rescue_maze_2023/vision-code':
-        sampledir = "/Users/lukas/rescue_maze_2023/vision-code/samples/"
-       # print("on mac")        
+    if cwd == '/Users/lukas/GitHub/rescue_maze_2023/vision-code':
+        sampledir = "/Users/lukas/GitHub/rescue_maze_2023/vision-code/samples/"
+        print("on mac")        
     else: sampledir = "/home/pi/rescue_maze_2023/vision-code/samples/" #change this absolute on pi
     Dictand = {
         "H": None, 
@@ -85,12 +85,13 @@ class imgproc:
 
 
 
-    def __init__(self, showsource= False,showcolor = False, show_visual = False, logging = True, debugidentification = False):
+    def __init__(self, showsource= False,showcolor = False, show_visual = False, logging = True, debugidentification = False, info = True):
         self.showsource = showsource
         self.showcolor = showcolor
         self.show_visual = show_visual
         self.logging = logging
         self.debugidentification = debugidentification
+        self.info = info
 
 
     def do_the_work(self, image, fnum):
@@ -133,13 +134,10 @@ class imgproc:
  
         contours, hierarchy = cv2.findContours(binary,cv2.RETR_LIST,cv2.CHAIN_APPROX_NONE)
     #    cv2.imshow("binary2", binary)
+
+
         cv2.drawContours(img, contours, -1, (0, 255, 0), 3)
-        imgCnt = self.get_poi(contours)
-        dsize = (200,200)
-        RImgCnt = cv2.resize(imgCnt, dsize)
-        if self.show_visual:
-            cv2.imshow("imgCnt",RImgCnt)
-        result = self.identify_victim(RImgCnt)
+        result = self.get_poi(contours)
         if result[0] == True: 
             sendMessage(f"k{result[1]}{self.side}")
 
@@ -147,10 +145,10 @@ class imgproc:
         for cnt in contours:
             area = cv2.contourArea(cnt)
 #            image2 = self.img.copy
-#            rect = cv2.minAreaRect(cnt)
-#            box = cv2.boxPoints(rect)
-#            box = np.int0(box)
-#            cv2.drawContours(img, [box], 0, (255, 0, 0), 3)
+            rect = cv2.minAreaRect(cnt)
+            box = cv2.boxPoints(rect)
+            box = np.int0(box)
+            cv2.drawContours(self.image, [box], 0, (255, 0, 0), 3)
 #           cv2.imshow("image2", image2)
 #            cv2.waitKey(0)
             if area>200:
@@ -182,11 +180,19 @@ class imgproc:
                 imgCnt = self.binary[miny:maxy, minx:maxx]
                 width = maxx - minx
                 height = maxy - miny
+                dsize = (200,200)
+                RImgCnt = cv2.resize(imgCnt, dsize)
+                if self.show_visual:
+                    cv2.imshow("imgCnt",RImgCnt)
 
                 if maxx < 320: self.side ="r"
                 else: self.side = "l"
 
-        return imgCnt 
+                result = self.identify_victim(RImgCnt)
+                if result[0]:
+                    break
+
+        return result 
 
 
     def identify_victim(self,ivictim): #compares binary poi with binary sample images 
@@ -199,15 +205,14 @@ class imgproc:
             sample = self.Dictand[key]
 
             for i in range(2):
-                sim = 0,95
                 if i == 1: ivictim = cv2.rotate(ivictim,cv2.ROTATE_180)
                 M_AND = cv2.bitwise_and(sample, ivictim)
                 M_AND_C = np.count_nonzero(M_AND)
                 M_OR = cv2.bitwise_and(self.Dictor[key], ivictim)
                 M_OR_C = np.count_nonzero(M_OR)
                 MIN_and = np.count_nonzero(sample)
-                MIN_and = MIN_and * 0.90
-                MIN_or = np.count_nonzero(ivictim) * 0.90
+                MIN_and = MIN_and * 0.99
+                MIN_or = np.count_nonzero(ivictim) * 0.98
                 if self.debugidentification:
                     cv2.imshow("M_AND", M_AND)                
                     cv2.imshow("ivictim",ivictim)                
@@ -232,7 +237,7 @@ class imgproc:
                         victim = "U"
                         kits = 0
                 # if i == 1: side = "left"
-                    print(f"identified: {victim}")
+                    if self.info: print(f"identified: {victim}")
                     logging.info(f"identified victim: {victim}")
                     self.log(victim, img= ivictim)
                     identified = True
@@ -265,7 +270,6 @@ class imgproc:
         #    image = image.copy
         status = 0
         hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-        #    hsv[:, 290:350] = (0,0,0)
 
         lower_range = {
             "red" : np.array([130,100,100]),
