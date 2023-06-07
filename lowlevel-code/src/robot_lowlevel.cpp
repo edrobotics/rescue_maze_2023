@@ -1010,7 +1010,7 @@ void turnToPIDAngle()
 void initColourSensor()
 {
   colSensor.init();
-  colSensor.refreshThresholds();
+  colSensor.refreshReferences();
 }
 
 // Adds curDistanceData onto the specified array

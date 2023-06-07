@@ -66,7 +66,7 @@ void ColourSensor::init()
     }
     // else Serial.println("Sensor initialized");
     lastReadTime = millis();
-    // refreshThresholds();
+    // refreshReferences();
 
     newLed.setpin(44);
     newLed.fillPixelsBak(0, 2, 1);
@@ -156,6 +156,13 @@ void ColourSensor::calcColourRatios(double& rg, double& rb, double& gb)
     gb = double(sensorGreen)/sensorBlue;
 }
 
+// Returns the euclidean distance between two colour samples.
+// Uses only raw sensor data, that is, not ratios
+double ColourSensor::getColDistance(ColourSample ref, ColourSample comp)
+{
+    return sqrt(square(comp.values[ColourSample::r]-ref.values[ColourSample::r]) + square(comp.values[ColourSample::g]-ref.values[ColourSample::g]) + square(comp.values[ColourSample::b]-ref.values[ColourSample::b]) + square(comp.values[ColourSample::clear]-ref.values[ColourSample::clear]));
+}
+
 
 // Reads the sensor data into global variables if new sensor data is present.
 // Returns true if a value was read and false if it was not (too close to last time)
@@ -164,6 +171,10 @@ bool ColourSensor::readSensor()
     if ((millis()-lastReadTime) > INTEGRATION_TIME) // Check if enough time has passed
     {
         getRawData(&sensorRed, &sensorGreen, &sensorBlue, &sensorClear);
+        reading.values[ColourSample::r] = sensorRed;
+        reading.values[ColourSample::g] = sensorGreen;
+        reading.values[ColourSample::b] = sensorBlue;
+        reading.values[ColourSample::clear] = sensorClear;
         lastReadTime = millis(); // Update the timeflag
         return true;
     }
@@ -183,25 +194,48 @@ ColourSensor::FloorColour ColourSensor::identifyColour()
     }
 
     
-    calcColourRatios(rgRatio, rbRatio, gbRatio);
+    // // Calculation using thresholds
 
+    // calcColourRatios(rgRatio, rbRatio, gbRatio);
+    
     
     // For debugging/tuning¨
     // printValues();
     // printRatios();
 
-    int boolSumBlack = lowerUpperEval(rgRatio, blackThresholds.rgLower, blackThresholds.rgUpper) + lowerUpperEval(rbRatio, blackThresholds.rbLower, blackThresholds.rbUpper) + lowerUpperEval(gbRatio, blackThresholds.gbLower, blackThresholds.gbUpper) + (sensorClear < blackThresholds.clearUpper);
-    int boolSumBlue = lowerUpperEval(rgRatio, blueThresholds.rgLower, blueThresholds.rgUpper) + lowerUpperEval(rbRatio, blueThresholds.rbLower, blueThresholds.rbUpper) + lowerUpperEval(gbRatio, blueThresholds.gbLower, blueThresholds.gbUpper);
-    int boolSumReflective = lowerUpperEval(rgRatio, reflectiveThresholds.rgLower, reflectiveThresholds.rgUpper) + lowerUpperEval(rbRatio, reflectiveThresholds.rbLower, reflectiveThresholds.rbUpper) + lowerUpperEval(gbRatio, reflectiveThresholds.gbLower, reflectiveThresholds.gbUpper);
-    int boolSumWhite = lowerUpperEval(rgRatio, whiteThresholds.rgLower, whiteThresholds.rgUpper) + lowerUpperEval(rbRatio, whiteThresholds.rbLower, whiteThresholds.rbUpper) + lowerUpperEval(gbRatio, whiteThresholds.gbLower, whiteThresholds.gbUpper) + (sensorClear > whiteThresholds.clearLower);
-
-    if (boolSumBlack >= 3) return floor_black;
-    else if (boolSumBlue >=3) return floor_blue; // Could be lower (0.85?) for both
-    else if (boolSumReflective >= 3 && (sensorClear > reflectiveThresholds.clearLower && sensorClear < reflectiveThresholds.clearUpper)) return floor_reflective;
-    else if (boolSumWhite >= 3) return floor_white; // reflective falls (partly) into the same span, but because reflective would have returned all that is left in this area should be white
-    else return floor_unknown;
+    // For debugging/tuning¨
+    // printValues();
+    // printRatios();
     
-    // return floor_unknown; // For debugging, disabling colour detection
+    // // For debugging/tuning¨
+    // // printValues();
+    // // printRatios();
+
+    // int boolSumBlack = lowerUpperEval(rgRatio, blackReference.rgLower, blackReference.rgUpper) + lowerUpperEval(rbRatio, blackReference.rbLower, blackReference.rbUpper) + lowerUpperEval(gbRatio, blackReference.gbLower, blackReference.gbUpper) + (sensorClear < blackReference.clearUpper);
+    // int boolSumBlue = lowerUpperEval(rgRatio, blueReference.rgLower, blueReference.rgUpper) + lowerUpperEval(rbRatio, blueReference.rbLower, blueReference.rbUpper) + lowerUpperEval(gbRatio, blueReference.gbLower, blueReference.gbUpper);
+    // int boolSumReflective = lowerUpperEval(rgRatio, reflectiveReference.rgLower, reflectiveReference.rgUpper) + lowerUpperEval(rbRatio, reflectiveReference.rbLower, reflectiveReference.rbUpper) + lowerUpperEval(gbRatio, reflectiveReference.gbLower, reflectiveReference.gbUpper);
+    // int boolSumWhite = lowerUpperEval(rgRatio, whiteReference.rgLower, whiteReference.rgUpper) + lowerUpperEval(rbRatio, whiteReference.rbLower, whiteReference.rbUpper) + lowerUpperEval(gbRatio, whiteReference.gbLower, whiteReference.gbUpper) + (sensorClear > whiteReference.clearLower);
+
+    // if (boolSumBlack >= 3) return floor_black;
+    // else if (boolSumBlue >=3) return floor_blue; // Could be lower (0.85?) for both
+    // else if (boolSumReflective >= 3 && (sensorClear > reflectiveReference.clearLower && sensorClear < reflectiveReference.clearUpper)) return floor_reflective;
+    // else if (boolSumWhite >= 3) return floor_white; // reflective falls (partly) into the same span, but because reflective would have returned all that is left in this area should be white
+    // else return floor_unknown;
+    
+    // // return floor_unknown; // For debugging, disabling colour detection
+
+    // Calculation using colour distances
+
+    // return floor_unknown; // For debugging. Uncomment to disable colour detection
+    
+    if (getColDistance(blackReference.s, reading) <= maxDetectionDistance + blackReference.radius) return floor_black;
+    else if (getColDistance(blueReference.s, reading) <= maxDetectionDistance + blueReference.radius) return floor_blue;
+    else if (getColDistance(reflectiveReference.s, reading) <= maxDetectionDistance + reflectiveReference.radius) return floor_reflective;
+    else if (getColDistance(whiteReference.s, reading) <= maxDetectionDistance + whiteReference.radius) return floor_white;
+    else return floor_unknown;
+
+
+    
 }
 
 ColourSensor::FloorColour ColourSensor::checkRawFloorColour()
@@ -253,24 +287,24 @@ ColourSample ColourSensor::getColourSample()
     while (readSensor() == false) {} // Read the sensor until a new measurement is recieved
     calcColourRatios(rgRatio, rbRatio, gbRatio);
 
-    returnData.r = sensorRed;
-    returnData.g = sensorGreen;
-    returnData.b = sensorBlue;
-    returnData.ratios[ColourSample::clear] = sensorClear;
-    returnData.ratios[ColourSample::rg] = rgRatio;
-    returnData.ratios[ColourSample::rb] = rbRatio;
-    returnData.ratios[ColourSample::gb] = gbRatio;
+    returnData.values[ColourSample::r] = sensorRed;
+    returnData.values[ColourSample::g] = sensorGreen;
+    returnData.values[ColourSample::b] = sensorBlue;
+    returnData.values[ColourSample::clear] = sensorClear;
+    returnData.values[ColourSample::rg] = rgRatio;
+    returnData.values[ColourSample::rb] = rbRatio;
+    returnData.values[ColourSample::gb] = gbRatio;
     
     return returnData;
 }
 
 // Reads thresholds from EEPROM
-void ColourSensor::refreshThresholds()
+void ColourSensor::refreshReferences()
 {
-    blackThresholds = blackSamples.read(0);
-    blueThresholds = blueSamples.read(sizeof(ColourStorageData));
-    reflectiveThresholds = reflectiveSamples.read(sizeof(ColourStorageData)*2);
-    whiteThresholds = whiteSamples.read(sizeof(ColourStorageData)*3);
+    blackReference = blackSamples.read(blackAddr);
+    blueReference = blueSamples.read(blueAddr);
+    reflectiveReference = reflectiveSamples.read(reflectiveAddr);
+    whiteReference = whiteSamples.read(whiteAddr);
 }
 
 // Resets the indecies for samples
@@ -284,7 +318,7 @@ void ColourSensor::clearCalibrationData()
 
 void ColourSensor::calibrationRoutineLoop()
 {
-    const int buttonDebounceDelay = 1000;
+    const int buttonDebounceDelay = 1000; // For button debounce and to give time to see the light indications
     // Check for and collect samples
     bool changeDetected = false;
     char readChar = ' ';
@@ -302,7 +336,7 @@ void ColourSensor::calibrationRoutineLoop()
         else
         {
         blackSamples.calculate();
-        blackSamples.write(0);
+        blackSamples.write(blackAddr);
         changeDetected = true;
         for (int i=0;i<blackSamples.getIndex();++i)
             {
@@ -322,7 +356,7 @@ void ColourSensor::calibrationRoutineLoop()
         else
         {
         blueSamples.calculate();
-        blueSamples.write(sizeof(ColourStorageData));
+        blueSamples.write(blueAddr);
         changeDetected = true;
         for (int i=0;i<blueSamples.getIndex();++i)
             {
@@ -342,7 +376,7 @@ void ColourSensor::calibrationRoutineLoop()
         else
         {
         reflectiveSamples.calculate();
-        reflectiveSamples.write(sizeof(ColourStorageData)*2);
+        reflectiveSamples.write(reflectiveAddr);
         changeDetected = true;
         for (int i=0;i<reflectiveSamples.getIndex();++i)
             {
@@ -362,7 +396,7 @@ void ColourSensor::calibrationRoutineLoop()
         else
         {
         whiteSamples.calculate();
-        whiteSamples.write(sizeof(ColourStorageData)*3);
+        whiteSamples.write(whiteAddr);
         changeDetected = true;
         for (int i=0;i<whiteSamples.getIndex();++i)
             {
@@ -377,7 +411,7 @@ void ColourSensor::calibrationRoutineLoop()
     // Set new thresholds in the identifying code (maybe only if previous step done?)
     if (changeDetected==true)
     {
-        refreshThresholds();
+        refreshReferences();
         changeDetected = false;
     }
 
@@ -437,20 +471,20 @@ void ColourSensor::calibrationRoutineLoop()
 
 
 
-void printColourStorageData(ColourStorageData printData)
-{
-    Serial.print("rg: ");Serial.print(printData.rgLower, 4);Serial.print(" - ");Serial.print(printData.rgUpper, 4);Serial.println("");
-    Serial.print("rb: ");Serial.print(printData.rbLower, 4);Serial.print(" - ");Serial.print(printData.rbUpper, 4);Serial.println("");
-    Serial.print("gb: ");Serial.print(printData.gbLower, 4);Serial.print(" - ");Serial.print(printData.gbUpper, 4);Serial.println("");
-    Serial.print("clear: ");Serial.print(printData.clearLower, 4);Serial.print(" - ");Serial.print(printData.clearUpper, 4);Serial.println("");
-}
+// void printColourStorageData(ColourStorageData printData)
+// {
+//     Serial.print("rg: ");Serial.print(printData.rgLower, 4);Serial.print(" - ");Serial.print(printData.rgUpper, 4);Serial.println("");
+//     Serial.print("rb: ");Serial.print(printData.rbLower, 4);Serial.print(" - ");Serial.print(printData.rbUpper, 4);Serial.println("");
+//     Serial.print("gb: ");Serial.print(printData.gbLower, 4);Serial.print(" - ");Serial.print(printData.gbUpper, 4);Serial.println("");
+//     Serial.print("clear: ");Serial.print(printData.clearLower, 4);Serial.print(" - ");Serial.print(printData.clearUpper, 4);Serial.println("");
+// }
 
 
 // Write threshold data to the specified address
 void ColourSampleCollection::write(int address)
 {
     // Serial.println("Writing...");
-    // I need to be able to set the startic address of writing and also know the total size of what I store in the EEPROM
+    // I need to be able to set the startic address of writing and also know the total of what I store in the EEPROM
     ColourStorageData writeData = thresholds; // The data being written
     // printColourStorageData(writeData);
     EEPROM.put(address, writeData);
@@ -485,45 +519,34 @@ void ColourSampleCollection::calculate()
 {
     
     if (sampleIndex == 0) return; // If no samples have been taken, return to avoid undefined behaviour (like division by 0)
+    
+    // Average calculation (maybe not necessary?)
+    double rAvg = averageValue(ColourSample::r);
+    double gAvg = averageValue(ColourSample::g);
+    double bAvg = averageValue(ColourSample::b);
+    double clearAvg = averageValue(ColourSample::clear);
 
-    double rgAvg = averageRatio(ColourSample::rg);
-    double rbAvg = averageRatio(ColourSample::rb);
-    double gbAvg = averageRatio(ColourSample::gb);
-    double clearAvg = averageRatio(ColourSample::clear);
-
-    // Min max calculation
-    double rgMin = minValue(ColourSample::rg);
-    double rgMax = maxValue(ColourSample::rg);
-
-    double rbMin = minValue(ColourSample::rb);
-    double rbMax = maxValue(ColourSample::rb);
-
-    double gbMin = minValue(ColourSample::gb);
-    double gbMax = maxValue(ColourSample::gb);
-
-    double clearMin = minValue(ColourSample::clear);
-    double clearMax = maxValue(ColourSample::clear);
+    thresholds.s.values[ColourSample::r] = rAvg;
+    thresholds.s.values[ColourSample::g] = gAvg;
+    thresholds.s.values[ColourSample::b] = bAvg;
+    thresholds.s.values[ColourSample::clear] = clearAvg;
+    
+    double rDist = abs(maxValue(ColourSample::r) - minValue(ColourSample::r));
+    double gDist = abs(maxValue(ColourSample::g) - minValue(ColourSample::g));
+    double bDist = abs(maxValue(ColourSample::b) - minValue(ColourSample::b));
+    double clearDist = abs(maxValue(ColourSample::clear) - minValue(ColourSample::clear));
 
     // Calculate minimum and maximum values
 
     // Setting the actual values
-    thresholds.rgLower = rgMin - THRESHOLD_MINMAX_MARGIN; // 0.1*(rgAvg-rgMin)
-    thresholds.rgUpper = rgMax + THRESHOLD_MINMAX_MARGIN; // 0.1*(rgMax-rgAvg)
-
-    thresholds.rbLower = rbMin - THRESHOLD_MINMAX_MARGIN; // 0.1*(rbAvg-rbMin)
-    thresholds.rbUpper = rbMax + THRESHOLD_MINMAX_MARGIN; // 0.1*(rbMax-rbAvg)
-
-    thresholds.gbLower = gbMin - THRESHOLD_MINMAX_MARGIN; // 0.1*(gbAvg-gbMin)
-    thresholds.gbUpper = gbMax + THRESHOLD_MINMAX_MARGIN; // 0.1*(gbMax-gbAvg)
-
-    thresholds.clearLower = clearMin - 0.1*(clearAvg-clearMin);
-    thresholds.clearUpper = clearMax + 0.1*(clearMax-clearAvg);
+    thresholds.radius = (rDist+gDist+bDist+clearDist)/4.0; // Average of half of min-max distances
 
     // Ideas for threshold calculation:
     //  - Calculate the min and max and set the thresholds a bit outside of that
     //    Maybe have special cases for certain colour where I know that the threshold can be set loosely (like low down on some ratios on blue)
     //  - Calculate the average and then set the thresholds and standard deviation and set the thresholds some amount of standard deviations outside
     //  - Generally, special cases should be handled where I know that the tolerances are looser so that we don't have thresholds that are stricter than they need to be
+
 
 }
 
@@ -537,12 +560,12 @@ int ColourSampleCollection::getIndex()
     return sampleIndex;
 }
 
-double ColourSampleCollection::averageRatio(ColourSample::Ratios ratio)
+double ColourSampleCollection::averageValue(ColourSample::Values value)
 {
     double sum = 0;
     for (int i=0;i<sampleIndex;++i)
     {
-        sum += samples[i].ratios[ratio];
+        sum += samples[i].values[value];
     }
     return sum/double(sampleIndex);
 }
@@ -552,41 +575,41 @@ double squareCustom(double x)
     return x*x;
 }
 
-double ColourSampleCollection::stdDev(ColourSample::Ratios ratio, double average)
+double ColourSampleCollection::stdDev(ColourSample::Values value, double average)
 {
     double sum = 0;
     for (int i=0;i<sampleIndex;++i)
     {
-        sum += squareCustom(samples[i].ratios[ratio]-average);
+        sum += squareCustom(samples[i].values[value]-average);
     }
 
     return sqrt(sum/(sampleIndex-1));
 }
 
-double ColourSampleCollection::stdDev(ColourSample::Ratios ratio)
+double ColourSampleCollection::stdDev(ColourSample::Values value)
 {
-    return stdDev(ratio, averageRatio(ratio));
+    return stdDev(value, averageValue(value));
 }
 
-double ColourSampleCollection::minValue(ColourSample::Ratios ratio)
+double ColourSampleCollection::minValue(ColourSample::Values value)
 {
     if (sampleIndex==0) return -1; // Should not need to, but just to be safe (already done in calling function)
-    double minVal = samples[0].ratios[ratio];
+    double minVal = samples[0].values[value];
     for (int i=1;i<sampleIndex;++i)
     {
-        double comparer = samples[i].ratios[ratio];
+        double comparer = samples[i].values[value];
         if (comparer < minVal) minVal = comparer;
     }
     return minVal;
 }
 
-double ColourSampleCollection::maxValue(ColourSample::Ratios ratio)
+double ColourSampleCollection::maxValue(ColourSample::Values value)
 {
     if (sampleIndex==0) return -1; // Should not need to, but just to be safe (already done in calling function)
-    double maxVal = samples[0].ratios[ratio];
+    double maxVal = samples[0].values[value];
     for (int i=1;i<sampleIndex;++i)
     {
-        double comparer = samples[i].ratios[ratio];
+        double comparer = samples[i].values[value];
         if (comparer > maxVal) maxVal = comparer;
     }
     return maxVal;

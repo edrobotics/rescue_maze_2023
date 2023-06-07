@@ -44,19 +44,32 @@ namespace newLights
 
 struct ColourSample // Should maybe be inside one of the other classes?
 {
-    double r;
-    double g;
-    double b;
-    
-    enum Ratios
+
+    ColourSample()
     {
+        values[r] = 0;
+        values[g] = 0;
+        values[b] = 0;
+        values[clear] = 0;
+        values[rg] = 0;
+        values[rb] = 0;
+        values[gb] = 0;
+    }
+
+    double rVar, gVar, bVar, clearVar, rgVar, rbVar, gbVar;
+    
+    enum Values
+    {
+        r,
+        g,
+        b,
         clear,
         rg,
         rb,
         gb,
         ratios_num,
     };
-    double ratios[ratios_num];
+    double values[ratios_num] {};
     // double rg;
     // double rb;
     // double gb;
@@ -64,17 +77,17 @@ struct ColourSample // Should maybe be inside one of the other classes?
 
 struct ColourStorageData
 {
-    double rgLower;
-    double rgUpper;
-
-    double rbLower;
-    double rbUpper;
-
-    double gbLower;
-    double gbUpper;
-
-    double clearLower;
-    double clearUpper;
+    ColourStorageData()
+    {
+        radius = 0;
+        s;
+    }
+    ColourStorageData(double rad)
+    {
+        radius = rad;
+    }
+    ColourSample s; // The sample itself
+    double radius; // Maybe for how close it has to be.
 };
 
 const int MAX_COLOUR_SAMPLES = 8; // Outside of class due to error
@@ -99,11 +112,11 @@ class ColourSampleCollection
         
         // Functions to aid in computation of the thresholds
         // I want to be able to give rg, rb or gb as an argument (or equivalent) and iterate through an array of colour samples while keeping the ending the same. I do not know how to do this.
-        double averageRatio(ColourSample::Ratios ratio);
-        double stdDev(ColourSample::Ratios ratio);
-        double stdDev(ColourSample::Ratios ratio, double average);
-        double minValue(ColourSample::Ratios ratio);
-        double maxValue(ColourSample::Ratios ratio);
+        double averageValue(ColourSample::Values value);
+        double stdDev(ColourSample::Values value);
+        double stdDev(ColourSample::Values value, double average);
+        double minValue(ColourSample::Values value);
+        double maxValue(ColourSample::Values value);
 
 };
 
@@ -137,20 +150,27 @@ class ColourSensor
         
         void clearCalibrationData(); // Prepares for a new calibration by resetting indecies
         void calibrationRoutineLoop();
-        void refreshThresholds(); // Read colour samples from EEPROM
+        void refreshReferences(); // Read colour samples from EEPROM
 
     private:
         void getRawData(uint16_t *sensorRed, uint16_t *sensorGreen, uint16_t *sensorBlue, uint16_t *sensorClear);
         // int calcColourDistance(int sensorRed, int sensorGreen, int sensorBlue, int referenceRed, int referenceGreen, int referenceBlue);
-        bool lowerUpperEval(double val, double lower, double upper);
-        void calcColourRatios(double& rg, double& rb, double& gb);
         bool readSensor();
         FloorColour identifyColour();
+        
+        // Ratios
+        bool lowerUpperEval(double val, double lower, double upper);
+        void calcColourRatios(double& rg, double& rb, double& gb);
+
+        // Colour distances
+        double getColDistance(ColourSample ref, ColourSample compare);
+        double maxDetectionDistance = 50;
 
         unsigned long lastReadTime = 0; // Keep track of the last time you read from the sensor
         int INTEGRATION_TIME = 60; // The integration time in milliseconds
         uint16_t sensorRed, sensorGreen, sensorBlue, sensorClear; // For raw colour values
         double rgRatio, rbRatio, gbRatio; // For ratios between colours
+        ColourSample reading; // For storing the reading of the sensor
 
         // Buttons for calibration routine
         // HardwareButton blackButton {0, false};
@@ -165,10 +185,18 @@ class ColourSensor
         ColourSampleCollection whiteSamples;
 
         // Thresholds for colour recognition
-        ColourStorageData blackThresholds {1.5, 6 , 1.7, 6 , 1.05, 2.0 , 0, 100};
-        ColourStorageData blueThresholds {0, 1.05 , 0, 1 , 0, 0.99 , 0, 2000};
-        ColourStorageData reflectiveThresholds {1.0, 1.4 , 1.1, 1.45 , 1.1, 1.3 , 200, 500};
-        ColourStorageData whiteThresholds {0.9, 1.1 , 1.0, 1.3 , 1.0, 1.2 , 500, 2000};
+        // ColourStorageData blackReference {1.5, 6 , 1.7, 6 , 1.05, 2.0 , 0, 100};
+        // ColourStorageData blueReference {0, 1.05 , 0, 1 , 0, 0.99 , 0, 2000};
+        // ColourStorageData reflectiveReference {1.0, 1.4 , 1.1, 1.45 , 1.1, 1.3 , 200, 500};
+        // ColourStorageData whiteReference {0.9, 1.1 , 1.0, 1.3 , 1.0, 1.2 , 500, 2000};
+        const int blackAddr = 0;
+        const int blueAddr = sizeof(ColourStorageData);
+        const int reflectiveAddr = 2*sizeof(ColourStorageData);
+        const int whiteAddr = 3*sizeof(ColourStorageData);
+        ColourStorageData blackReference;
+        ColourStorageData blueReference;
+        ColourStorageData reflectiveReference;
+        ColourStorageData whiteReference;
 };
 
 
