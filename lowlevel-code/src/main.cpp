@@ -31,6 +31,7 @@ void setup()
   if (colCalButton.isPressed())
   {
   colSensor.clearCalibrationData();
+  serialcomm::sendLOP(); // So that Markus can start the scoring run timer
   while(colCalButton.isPressed())
   {
     colSensor.calibrationRoutineLoop();
@@ -126,6 +127,7 @@ void loop()
     Command command = command_none;
     flushDistanceArrays();
     makeNavDecision(command);
+    printUltrasonics();
     // command = command_driveStep; // For debugging
     delay(555);
     lights::turnOff();

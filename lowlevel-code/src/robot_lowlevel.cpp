@@ -36,6 +36,18 @@ MeUltrasonicSensor ultrasonicSensors[] =
 };
 
 
+RGBColour colourBlack {0, 0, 0};
+RGBColour colourWhite {100, 100, 100};
+RGBColour colourBase {5, 42, 0};
+RGBColour colourOrange {42, 5, 0};
+RGBColour colourRed {150, 0, 0};
+RGBColour colourBlue {0, 0, 150};
+RGBColour colourError {200, 10, 0};
+RGBColour colourAffirmative { 20, 150, 0};
+RGBColour colourYellow {50, 50, 0};
+RGBColour colourPurple {100, 0, 150};
+
+
 // Colour sensor:
 ColourSensor colSensor;
 
@@ -69,7 +81,7 @@ enum WheelSide {
 //---------------------- Variable definitions ----------------------------//
 
 // Wheel and wheelbase dimensions (all in cm)
-const double WHEEL_DIAMETER = 7.3;
+const double WHEEL_DIAMETER = 6.9;
 const double WHEEL_CIRCUMFERENCE = PI*WHEEL_DIAMETER;
 
 // Driving
@@ -276,9 +288,19 @@ Command serialcomm::readCommand(bool waitForSerial)
         // sounds::tone(695, 300);
         g_dropDirection = readChar();
         // sounds::tone(880, 700);
+        recievedChar = readChar();
+        if (recievedChar != ',' ) return command_invalid; // Invalid because the form was not followed
         char returnBoolChar = readChar();
-        if (returnBoolChar=='0') g_returnAfterDrop = false;
-        else g_returnAfterDrop = true;
+        if (returnBoolChar=='0')
+        {
+          g_returnAfterDrop = false;
+          lights::setColour(9, colourBlue, true);
+        }
+        else
+        {
+          g_returnAfterDrop = true;
+          lights::setColour(9, colourRed, true);
+        }
 
         return command_dropKit;
         break;
@@ -328,16 +350,7 @@ void lightsAndBuzzerInit()
 }
 
 
-RGBColour colourBlack {0, 0, 0};
-RGBColour colourWhite {100, 100, 100};
-RGBColour colourBase {5, 42, 0};
-RGBColour colourOrange {42, 5, 0};
-RGBColour colourRed {150, 0, 0};
-RGBColour colourBlue {0, 0, 150};
-RGBColour colourError {200, 10, 0};
-RGBColour colourAffirmative { 20, 150, 0};
-RGBColour colourYellow {50, 50, 0};
-RGBColour colourPurple {100, 0, 150};
+
 
 void lights::turnOff()
 {
@@ -2266,7 +2279,7 @@ void handleVictim(double fromInterrupt)
   // Return the robot to original orientation
   if (turnDirection == ccw) turnDirection = cw; // Reverse direction
   else turnDirection = ccw; // Reverse direction
-  if (g_kitsToDrop != 0 && g_returnAfterDrop==true) turnSteps(turnDirection, 1); // Only turn if you have to drop
+  if (g_kitsToDrop != 0 && g_returnAfterDrop==true) turnSteps(turnDirection, 1); // Only turn if you have to drop and only turn back if necessary
 
   // Reset variables
   g_dropDirection = ' ';
