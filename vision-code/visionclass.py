@@ -29,20 +29,6 @@ for i in range(1):
 
 
 
-def sendMessage(msg):
-    print(f"sending message: {msg}")
-    try:
-        message = msg.encode(FORMAT)
-        msg_length = len(message).to_bytes(HEADER, "big")
-        client.send(msg_length)
-        client.send(message)
-    except:
-        print("failed to send messsage")
-
-
-
-
-
 
 class imgproc:
 #change the following codes to dicts?
@@ -78,20 +64,34 @@ class imgproc:
             Dict[key] = binary
 
 
+    lastdetected = (None, -3)
+
+
+    def sendMessage(self,msg):
+        print(f"sending message: {msg}")
+
+        if self.lastdetected[1] + 2 < self.fnum:
+            try:
+                message = msg.encode(FORMAT)
+                msg_length = len(message).to_bytes(HEADER, "big")
+                client.send(msg_length)
+                client.send(message)
+            except:
+                print("failed to send messsage")
+        else:
+            print("alredy detected")
+        self.lastdetected = (msg, self.fnum)
 
 
 
-
-
-
-
-    def __init__(self, showsource= False,showcolor = False, show_visual = False, logging = True, debugidentification = False, info = True):
+    def __init__(self, showsource= False,showcolor = False, show_visual = False, logging = True, debugidentification = False, info = True, time=False):
         self.showsource = showsource
         self.showcolor = showcolor
         self.show_visual = show_visual
         self.logging = logging
         self.debugidentification = debugidentification
         self.info = info
+        self.time = time
 
 
     def do_the_work(self, image, fnum):
@@ -99,17 +99,22 @@ class imgproc:
         self.fnum = fnum
         self.log("E")
         
+        color_time = time.time()
         self.Color_victim2()
+
+
+
         self.find_victim()
 
 
     def blank_out(self, binary):
         #blanks out pixels that can't be poi but can still make problems
-        binary[:, 280:350] = (0)
-        binary[:10, :] = (0)
-        binary[:40, :320] = (0)
-        binary[470:, :] = (0)
-        binary[420:, :320] = (0)
+        binary[:, 280:360] = (0)
+        binary[:, 590:] = (0)
+        binary[:, :15] = (0)
+
+        binary[:30, :] = (0)
+        binary[450:, :] = (0)
         return binary
 
 
@@ -133,25 +138,23 @@ class imgproc:
         binary = self.preproccesing(img)
  
         contours, hierarchy = cv2.findContours(binary,cv2.RETR_LIST,cv2.CHAIN_APPROX_NONE)
-    #    cv2.imshow("binary2", binary)
 
 
         cv2.drawContours(img, contours, -1, (0, 255, 0), 3)
         result = self.get_poi(contours)
         if result[0] == True: 
-            sendMessage(f"k{result[1]}{self.side}")
+            self.sendMessage(f"k{result[1]}{self.side}")
 
     def get_poi(self, contours): #loops through contours and returns all above a size and appoximation points 
         for cnt in contours:
             area = cv2.contourArea(cnt)
-#            image2 = self.img.copy
-            rect = cv2.minAreaRect(cnt)
-            box = cv2.boxPoints(rect)
-            box = np.int0(box)
-            cv2.drawContours(self.image, [box], 0, (255, 0, 0), 3)
-#           cv2.imshow("image2", image2)
 #            cv2.waitKey(0)
-            if area>200:
+            if area>400:
+                rect = cv2.minAreaRect(cnt)
+                box = cv2.boxPoints(rect)
+                box = np.int0(box)
+                cv2.drawContours(self.image, [box], 0, (255, 0, 0), 3)
+
                 #para = cv2.arcLength(cnt,True)
                 approx = cv2.approxPolyDP(cnt, 0.009 * cv2.arcLength(cnt, True), True)
                 n = approx.ravel()
@@ -190,6 +193,7 @@ class imgproc:
 
                 result = self.identify_victim(RImgCnt)
                 if result[0]:
+                    print(result)
                     break
 
         return result 
@@ -211,7 +215,7 @@ class imgproc:
                 M_OR = cv2.bitwise_and(self.Dictor[key], ivictim)
                 M_OR_C = np.count_nonzero(M_OR)
                 MIN_and = np.count_nonzero(sample)
-                MIN_and = MIN_and * 0.99
+                MIN_and = MIN_and * 0.98
                 MIN_or = np.count_nonzero(ivictim) * 0.98
                 if self.debugidentification:
                     cv2.imshow("M_AND", M_AND)                
@@ -223,6 +227,7 @@ class imgproc:
                     print(M_AND_C)
                     print(MIN_or)
                     print(M_OR_C)
+                    cv2.waitKey(0)
 
 
             #  print(f"victim size: {M_AND_C}")
@@ -272,22 +277,22 @@ class imgproc:
         hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
 
         lower_range = {
-            "red" : np.array([130,100,100]),
+            "red" : np.array([150,69,60]),
             "green": np.array([50,40,40]),
-            "yellow": np.array([15,100,100])
+            "yellow": np.array([15,0,100])
             }
         upper_range = {
             "red" : np.array([180,255,255]),
             "green" : np.array([80,255,255]),
-            "yellow" : np.array([25,255,255])
+            "yellow" : np.array([25,100,255])
             }
         for color in lower_range:
             lower = lower_range[color]
             upper = upper_range[color]
             mask = cv2.inRange(hsv,lower,upper)
             if color == "red":
-                red2_lower =np.array([0,40,40]) 
-                red2_upper =np.array([10,255,255]) 
+                red2_lower =np.array([0,100,100]) 
+                red2_upper =np.array([7,255,255]) 
                 mask2 = cv2.inRange(hsv,red2_lower,red2_upper)
                 mask = np.bitwise_or(mask,mask2)
             mask = self.blank_out(mask)
@@ -305,6 +310,7 @@ class imgproc:
             ret,thresh = cv2.threshold(mask, 40, 255, 0)
             contours, hierarchy = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
             c = max(contours, key = cv2.contourArea)
+            mask = cv2.bitwise_and(self.image, self.image, mask=mask)
             if cv2.contourArea(c) > 5000:
                 print(f"{color}: {cv2.contourArea(c)}")
 
@@ -313,8 +319,7 @@ class imgproc:
                 else: self.side = "r"
                 if color == "GREEN": k = "k0"
                 else: k = "k1"
-                sendMessage(k+self.side)
-                mask = cv2.bitwise_and(self.image, self.image, mask=mask)
+                self.sendMessage(k+self.side)
                 self.log(color,img = mask)
                 logging.info(f"found {color}, image {self.fnum}")
                 print(f"found {color}, image {self.fnum}")
