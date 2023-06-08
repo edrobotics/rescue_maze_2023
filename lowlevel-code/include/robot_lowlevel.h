@@ -154,6 +154,8 @@ namespace lights
 
     void errorBlink();
 
+    void noComm();
+
     void negativeBlink();
     
     void floorIndicator(ColourSensor::FloorColour floorColour);

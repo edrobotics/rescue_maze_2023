@@ -246,8 +246,8 @@ void serialcomm::clearBuffer()
 
 Command serialcomm::readCommand(bool waitForSerial)
 {
-  if (waitForSerial == false && Serial.available() == 0) return command_none; // Return none if Serial was not available and you should not wait
-  if (waitForSerial == true)
+  if (waitForSerial == false && Serial.available() < 1) return command_none; // Return none if Serial was not available and you should not wait
+  else if (waitForSerial == true)
   {
     while (Serial.available() == 0) {} // Wait while no serial is available. When continuing serial will be available
   }
@@ -294,6 +294,7 @@ Command serialcomm::readCommand(bool waitForSerial)
         // sounds::tone(880, 700);
         
         if (readString.charAt(strIdx) != ',' ) return command_invalid; // Invalid because the form was not followed
+        ++strIdx;
         if (readString.charAt(strIdx)=='0')
         {
           g_returnAfterDrop = false;
@@ -321,6 +322,7 @@ Command serialcomm::readCommand(bool waitForSerial)
       return command_invalid;
       // break;
   }
+  clearBuffer();
 }
 
 // Command serialcomm::readCommand()
@@ -426,6 +428,13 @@ void lights::affirmativeBlink()
 void lights::negativeBlink()
 {
   fastBlink(colourError);
+}
+
+void lights::noComm()
+{
+  setColour(0, colourError, true);
+  delay(50);
+  turnOff();
 }
 
 // Plays a light sequence and also plays the buzzer
@@ -1902,15 +1911,11 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
   if (serialcomm::checkInterrupt() == true)
   {
     stopWheels();
-    serialcomm::clearBuffer();
     serialcomm::answerInterrupt();
     bool stepDriven = false;
     if (g_trueDistanceDriven >= 15) stepDriven = true;
     handleVictim(true);
     serialcomm::returnAnswer(stepDriven);
-    delay(100); // To prevent too rapid serial communication
-    // serialcomm::returnSuccess();
-    serialcomm::clearBuffer();
   }
 
 
@@ -2232,7 +2237,6 @@ void handleVictim(double fromInterrupt)
   if (fromInterrupt == true)
   {
   Command command = serialcomm::readCommand(true);
-  serialcomm::clearBuffer();
   if (command != command_dropKit) return;
   }
   // Align the robot for deployment
