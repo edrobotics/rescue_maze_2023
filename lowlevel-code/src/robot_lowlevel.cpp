@@ -228,11 +228,12 @@ void serialcomm::returnFloorColour(ColourSensor::FloorColour floorColour)
   }
 }
 
-char serialcomm::readChar()
-{
-  while (Serial.available() == 0) {}
-  return static_cast<char>(Serial.read());
-}
+// Deprecated
+// char serialcomm::readChar()
+// {
+//   while (Serial.available() == 0) {}
+//   return static_cast<char>(Serial.read());
+// }
 
 void serialcomm::clearBuffer()
 {
@@ -250,11 +251,11 @@ Command serialcomm::readCommand(bool waitForSerial)
   {
     while (Serial.available() == 0) {} // Wait while no serial is available. When continuing serial will be available
   }
-  char recievedChar = readChar();
-  if (recievedChar != '!') return command_invalid;
-
-  recievedChar = readChar(); // Read the next byte (the command)
-  switch (recievedChar)
+  String readString = Serial.readStringUntil('\n');
+  int strIdx = 0;
+  if (readString.charAt(strIdx) != '!') return command_invalid;
+  ++strIdx;
+  switch (readString.charAt(strIdx))
   {
     case 'i': // interrupt the current action
       return command_interrupt;
@@ -265,34 +266,35 @@ Command serialcomm::readCommand(bool waitForSerial)
       break;
 
     case 't': // turn
-      recievedChar = readChar();
-      if (recievedChar != ',' ) return command_invalid; // Invalid because the form was not followed
+      ++strIdx;
+      if ( readString.charAt(strIdx) != ',' ) return command_invalid; // Invalid because the form was not followed
+      ++strIdx;
 
-      recievedChar = readChar();
-      if (recievedChar == 'l') return command_turnLeft;
-      else if (recievedChar == 'r') return command_turnRight;
+      if (readString.charAt(strIdx) == 'l') return command_turnLeft;
+      else if (readString.charAt(strIdx) == 'r') return command_turnRight;
       else return command_invalid;
       break;
 
     case 'k': // drop rescue kit
     {
+        ++strIdx;
         g_kitsToDrop = 0;
         // sounds::tone(220, 300);
-        recievedChar = readChar();
-        if (recievedChar != ',' ) return command_invalid; // Invalid because the form was not followed
-
-        while(Serial.available() == 0) {}
-        g_kitsToDrop = Serial.read() - '0';
+        if (readString.charAt(strIdx) != ',' ) return command_invalid; // Invalid because the form was not followed
+        ++strIdx;
+        g_kitsToDrop = readString.charAt(strIdx) - '0';
+        ++strIdx;
         // sounds::tone(440, 300);
-        recievedChar = readChar();
-        if (recievedChar != ',' ) return command_invalid; // Invalid because the form was not followed
+
+        if (readString.charAt(strIdx) != ',' ) return command_invalid; // Invalid because the form was not followed
+        ++strIdx;
         // sounds::tone(695, 300);
-        g_dropDirection = readChar();
+        g_dropDirection = readString.charAt(strIdx);
+        ++strIdx;
         // sounds::tone(880, 700);
-        recievedChar = readChar();
-        if (recievedChar != ',' ) return command_invalid; // Invalid because the form was not followed
-        char returnBoolChar = readChar();
-        if (returnBoolChar=='0')
+        
+        if (readString.charAt(strIdx) != ',' ) return command_invalid; // Invalid because the form was not followed
+        if (readString.charAt(strIdx)=='0')
         {
           g_returnAfterDrop = false;
           lights::setColour(9, colourBlue, true);
@@ -321,10 +323,10 @@ Command serialcomm::readCommand(bool waitForSerial)
   }
 }
 
-Command serialcomm::readCommand()
-{
-  return serialcomm::readCommand(true);
-}
+// Command serialcomm::readCommand()
+// {
+//   return serialcomm::readCommand(true);
+// }
 
 
 bool serialcomm::checkInterrupt()

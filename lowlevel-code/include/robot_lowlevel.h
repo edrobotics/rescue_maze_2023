@@ -92,10 +92,10 @@ namespace serialcomm
 
     void returnAnswer(int answer);
 
-    char readChar();
+    // char readChar();
     // Read a command following the outlined standard
     // Returns data of type Command.
-    Command readCommand();
+    // Command readCommand();
 
     Command readCommand(bool waitForSerial);
 
