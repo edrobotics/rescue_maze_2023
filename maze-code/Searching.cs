@@ -42,8 +42,9 @@ namespace SerialConsole
             }
         }*/
 
-        static void GoToRamp(byte[] _ramp) //FIX
+        static void GoToRamp(byte[] _ramp) //FIX when ramps done
         {
+            Log($"Going to ramp at {_ramp[(int)RampStorage.XCoord]},{_ramp[(int)RampStorage.ZCoord]}", false);
             driveWay = new List<byte[]>(PathTo(_ramp[(int)RampStorage.XCoord], _ramp[(int)RampStorage.ZCoord])) //Way to tile next to ramp
             {
                 DirToTile(_ramp[(int)RampStorage.RampDirection], _ramp[(int)RampStorage.XCoord], _ramp[(int)RampStorage.ZCoord]) //Driving to the real ramp
@@ -51,6 +52,7 @@ namespace SerialConsole
             if (driveWay.Count <= 1 && _ramp[(int)RampStorage.XCoord] != posX && _ramp[(int)RampStorage.ZCoord] != posZ)
             {
                 for(int i = 0; i < 5; i++) Log("!!Something is wrong in SearchToRamp, possible ramp storage or mapping error!!", true);
+                throw new Exception("Going To Ramp failed");
             }
         }
 
@@ -94,6 +96,7 @@ namespace SerialConsole
 
         static void FindFrom(byte _onX, byte _onZ)
         {
+            Log($"*****{_onX},{_onZ}*****", false);
             maps[currentMap].WriteBit(_onX, _onZ, BitLocation.inDriveWay, true);
             if (Math.Abs(_onZ - toPosZ) >= Math.Abs(_onX - toPosX))
             {
@@ -191,6 +194,7 @@ namespace SerialConsole
 
         static void SearchCell(byte _onX, byte _onZ)
         {
+            Log($"*****{_onX},{_onZ}*****", false);
             if (_onX == toPosX && _onZ == toPosZ)
             {
                 Log("Found " + foundPath.Count + " long", true);
@@ -226,11 +230,11 @@ namespace SerialConsole
 
                 if (_onX <= toPosX)
                 {
-                    if (!maps[currentMap].ReadBit(_onX, _onZ, BitLocation.leftWall)) FindTile((byte)(_onX + 1), _onZ);
+                    if (!maps[currentMap].ReadBit(_onX, _onZ, BitLocation.rightWall)) FindTile((byte)(_onX + 1), _onZ);
                 }
                 else
                 {
-                    if (!maps[currentMap].ReadBit(_onX, _onZ, BitLocation.rightWall)) FindTile((byte)(_onX - 1), _onZ);
+                    if (!maps[currentMap].ReadBit(_onX, _onZ, BitLocation.leftWall)) FindTile((byte)(_onX - 1), _onZ);
                 }
 
                 if (_onZ > toPosZ)
@@ -244,22 +248,22 @@ namespace SerialConsole
 
                 if (_onX > toPosX)
                 {
-                    if (!maps[currentMap].ReadBit(_onX, _onZ, BitLocation.leftWall)) FindTile((byte)(_onX + 1), _onZ);
+                    if (!maps[currentMap].ReadBit(_onX, _onZ, BitLocation.rightWall)) FindTile((byte)(_onX + 1), _onZ);
                 }
                 else
                 {
-                    if (!maps[currentMap].ReadBit(_onX, _onZ, BitLocation.rightWall)) FindTile((byte)(_onX - 1), _onZ);
+                    if (!maps[currentMap].ReadBit(_onX, _onZ, BitLocation.leftWall)) FindTile((byte)(_onX - 1), _onZ);
                 }
             }
             else
             {
                 if (_onX <= toPosX)
                 {
-                    if (!maps[currentMap].ReadBit(_onX, _onZ, BitLocation.leftWall)) FindTile((byte)(_onX + 1), _onZ);
+                    if (!maps[currentMap].ReadBit(_onX, _onZ, BitLocation.rightWall)) FindTile((byte)(_onX + 1), _onZ);
                 }
                 else
                 {
-                    if (!maps[currentMap].ReadBit(_onX, _onZ, BitLocation.rightWall)) FindTile((byte)(_onX - 1), _onZ);
+                    if (!maps[currentMap].ReadBit(_onX, _onZ, BitLocation.leftWall)) FindTile((byte)(_onX - 1), _onZ);
                 }
 
                 if (_onZ <= toPosZ)
@@ -273,11 +277,11 @@ namespace SerialConsole
 
                 if (_onX > toPosX)
                 {
-                    if (!maps[currentMap].ReadBit(_onX, _onZ, BitLocation.leftWall)) FindTile((byte)(_onX + 1), _onZ);
+                    if (!maps[currentMap].ReadBit(_onX, _onZ, BitLocation.rightWall)) FindTile((byte)(_onX + 1), _onZ);
                 }
                 else
                 {
-                    if (!maps[currentMap].ReadBit(_onX, _onZ, BitLocation.rightWall)) FindTile((byte)(_onX - 1), _onZ);
+                    if (!maps[currentMap].ReadBit(_onX, _onZ, BitLocation.leftWall)) FindTile((byte)(_onX - 1), _onZ);
                 }
 
                 if (_onZ > toPosZ)

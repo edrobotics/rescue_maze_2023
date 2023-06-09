@@ -317,19 +317,6 @@ namespace SerialConsole
             }
             else if (_unExpTiles > 0)
             {
-                //if (_unExpTiles != 1)
-                //{
-                //    //foreach (bool _surrTile in _surroundingTiles)
-                //    maps[currentMap].CrossTiles.Add(new byte[] { (byte)posX, (byte)posZ }); //CLEAR SINCECHECKP. FROM COORDS ON RESET ++ ADD CURRENT MAP
-                //}
-                //for (int i = direction + 1; i > direction - 3; i--)
-                //{
-                //    if (_surroundingTiles[FixDirection(i)])
-                //    {
-                //        TurnTo(i);
-                //        break;
-                //    }
-                //}
                 for (int i = direction - 2; i <= direction + 1; i++)
                 {
                     if (_surroundingTiles[FixDirection(i)])
@@ -396,8 +383,8 @@ namespace SerialConsole
                             driveWay = new List<byte[]>(PathTo(maps[currentMap].CrossTiles[i][1], maps[currentMap].CrossTiles[i][1]));
                             if (driveWay.Count > 0) goto NavLogic;
                         }
-                        Log("SOMETHING PROBABLY WRONG WITH RAMP OR MAP, LIKELY DUAL RAMP, trying to solve", true);
-                        GoToRamp(maps[currentMap].GetRampAt((byte)rampCount));
+                        Log("SOMETHING PROBABLY WRONG WITH RAMP OR MAP, MAYBE DUAL RAMP, trying to solve", true);
+                        GoToRamp(maps[currentMap].GetRampAt((byte)(rampCount-1)));
                     }
                     goto NavLogic;
                 }
@@ -618,7 +605,7 @@ namespace SerialConsole
 
         static void LogException(Exception e)
         {
-            Log($"Exception {e.Message} at {e.Source},{e.TargetSite}", false);
+            Log($"Exception: {e.Message} at {e.Source},{e.TargetSite}, data:{e.Data}", false);
             Log($"Exception -- {e.Message}");
         }
 
@@ -626,30 +613,29 @@ namespace SerialConsole
         {
             reset = true;
             exit = true;
-#if DEBUG
             File.WriteAllText("map.txt", "");
-            string[] mapToText = new string[(3 + highestZ - lowestZ)];
-            int loops = 0;
             Log($"Lowest: {lowestX},{lowestZ}; Highest: {highestX},{highestZ}", true);
             for (int m = 0; m < maps.Count; m++)
             {
+                string[] _mapToText = new string[(3 + highestZ - lowestZ)];
                 for (int i = lowestZ - 1; i <= highestZ + 1; i++)
                 {
+                    int _loops = 0;
                     for (int j = lowestX - 1; j <= highestX + 1; j++)
                     {
-                        string bits = $"{j};{i}:";
+                        string _bits = $"{j};{i}:";
                         for (int k = 15; k >= 0; k--)
                         {
-                            bits += maps[m].ReadBit(j, i, (BitLocation)k) ? "1" : "0";
+                            _bits += maps[m].ReadBit(j, i, (BitLocation)k) ? "1" : "0";
                         }
 
-                        mapToText[loops] += bits + ",";
+                        _mapToText[_loops] += _bits + ",";
                     }
-                    loops++;
+                    _loops++;
                 }
                 try
                 {
-                    File.AppendAllText("map.txt",$"map {m}\n" + string.Join('\n', mapToText) + "\n\n");
+                    File.AppendAllText("map.txt",$"map {m}/{maps.Count}\n" + string.Join('\n', _mapToText) + "\n\n");
                     //File.WriteAllText("map.txt", string.Join('\n', mapToText)); // Writes map to text file; previous: /*@"C:\Users\0515frma\Desktop\Test\log.txt"*/
                 }
                 catch (Exception e)
@@ -659,7 +645,6 @@ namespace SerialConsole
                 }
             }
             Log("done with map file", true);
-#endif
             Thread.Sleep(1000);
             listener.Stop();
             serialPort1.Close();

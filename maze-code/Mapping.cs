@@ -15,7 +15,6 @@ namespace SerialConsole
         ConnectedMap
     }
 
-
     enum BitLocation
     {
         frontWall,
@@ -55,6 +54,7 @@ namespace SerialConsole
 
         static void UpdateDirection(int _leftTurns)
         {
+            Log($"change dir from {direction}", false);
             direction += _leftTurns;
 
             while (direction > 3)
@@ -65,17 +65,19 @@ namespace SerialConsole
             {
                 direction += 4;
             }
+            Log($"new dir {direction}", true);
         }
 
         static void KitDirectionUpdate(char _direction)
         {
+#warning Check this
             if (_direction == 'r')
             {
-                UpdateDirection(-1);
+                UpdateDirection(1);
             }
             else if (_direction == 'l')
             {
-                UpdateDirection(1);
+                UpdateDirection(-1);
             }
             else
             {
@@ -83,6 +85,11 @@ namespace SerialConsole
             }
         }
 
+        /// <summary>
+        /// Subtracs or adds 4 until the int is 0<= int <= 3, to make sure that for example adding one to the direction 3 (right) will give the direction 0 (front).
+        /// Can also be used for map bits since I use the same system.
+        /// </summary>
+        /// <returns>An int thats 0,1,2 or 3</returns>
         static int FixDirection(int _dir)
         {
             while (_dir > 3)
@@ -322,7 +329,8 @@ namespace SerialConsole
         {
             UpdateMap();
             Turn('l');
-            maps[0].WriteBit(posX, posZ, BitLocation.backWall, leftPresent);
+            SensorCheck();
+            WriteHere((BitLocation)FixDirection(direction-2), leftPresent); //wall locally behind set
             Turn('r');
         }
 
@@ -547,9 +555,7 @@ namespace SerialConsole
 
         public void AddRamp(byte _x, byte _z, byte _direction, byte _rampIndex, byte _connectedMap)
         {
-            byte[] _info = new byte[5];
-            _info[(int)RampStorage.XCoord] = _x; _info[(int)RampStorage.ZCoord] = _z; _info[(int)RampStorage.RampDirection] = _direction; 
-            _info[(int)RampStorage.RampIndex] = _rampIndex; _info[(int)RampStorage.ConnectedMap] = _connectedMap;
+            byte[] _info = new byte[5] { _x, _z, _direction, _rampIndex, _connectedMap };
             reachedFrom.Add(_info);
         }
 

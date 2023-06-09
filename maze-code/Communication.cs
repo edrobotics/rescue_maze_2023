@@ -59,6 +59,7 @@ namespace SerialConsole
         static volatile int dropAmount = 0;
         static volatile char dropSide = 'l';
         static volatile int kitsLeft = 12;
+        static int lastDropped = 0;
 
         #region VictimComm
         // ********************************** Socket server ********************************** 
@@ -117,11 +118,11 @@ namespace SerialConsole
 
         static void Drive(bool _checkRamps)
         {
-            if (sinceCheckpoint.Count == 1) //Update checkpoint direction upon leaving
+            if (ReadHere(BitLocation.checkPointTile)) //Update checkpoint direction upon leaving
             {
                 try
                 {
-                    Log($"Updating checkpoint direction, this tile is {(ReadHere(BitLocation.checkPointTile) ? "" : "not ")}checkp.", true);
+                    Log($"Updating checkpoint direction", true);
                     sinceCheckpoint[0][3] = (byte)direction; 
                 }
                 catch (Exception e) 
@@ -368,8 +369,9 @@ namespace SerialConsole
             if (dropKits && !ReadHere(BitLocation.victim))
             {
                 if (kitsLeft < dropAmount)
-                    dropAmount = kitsLeft;
+                    lastDropped = kitsLeft;
                 Log($"Dropping {dropAmount} kits {dropSide}", true);
+                lastDropped = dropAmount; //Save just in case vision sends a new
 
                 string _recived = SerialComm(SendCommands.DropKits.GetCommand($"{dropAmount},{dropSide},{(_turnBack ? '1' : '0')}"), false, false);
 
@@ -380,7 +382,10 @@ namespace SerialConsole
                     if (_recived.Contains(RecivedCommands.Success.GetCommand())) //Normal kit dropping
                     {
                         WriteHere(BitLocation.victim, true);
-                        if (!_turnBack) KitDirectionUpdate(dropSide);
+                        if (!_turnBack && lastDropped > 0)
+                        {
+                            KitDirectionUpdate(dropSide);
+                        }
                     }
                     else if (_recived.Contains(RecivedCommands.Answer.GetCommand())) //In interrupt
                     {
@@ -476,6 +481,7 @@ namespace SerialConsole
         static string SerialRaw(string _send, bool _doubleWait, bool _interruptable)
         {
             if (!_send.Contains('!')) return "";
+
             do //if it takes too long, we send again
             {
                 Log($"Sending {_send}", false);
@@ -490,9 +496,7 @@ namespace SerialConsole
                         break;
                     }
                 }
-                Log("iteration done", false);
             } while (serialPort1.BytesToRead == 0);
-
 
             string _recived = serialPort1.ReadLine();
 
@@ -511,16 +515,23 @@ namespace SerialConsole
                     while (serialPort1.BytesToRead == 0)
                     {
                         Thread.Sleep(20);
-                        if (dropKits && !maps[currentMap].ReadBit(posX, posZ, BitLocation.victim))
+                        if (dropKits)
                         {
-                            _interruptRec = Interrupt();
-                            if (_interruptRec.Contains(RecivedCommands.Interrupt.GetCommand()))
+                            if (maps[currentMap].ReadBit(posX, posZ, BitLocation.victim))
                             {
-                                CheckAndDropKits(true);
+                                dropKits = false;
                             }
                             else
                             {
-                                break;
+                                _interruptRec = Interrupt();
+                                if (_interruptRec.Contains(RecivedCommands.Interrupt.GetCommand()))
+                                {
+                                    CheckAndDropKits(true);
+                                }
+                                else
+                                {
+                                    break;
+                                }
                             }
                         }
                     }
@@ -552,7 +563,7 @@ namespace SerialConsole
                 }
             }
 
-            Log(_recived, false);
+            Log($"recived:{_recived}", false);
             return _recived;
         }
         #endregion
