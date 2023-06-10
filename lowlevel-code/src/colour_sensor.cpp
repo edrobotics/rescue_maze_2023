@@ -163,6 +163,46 @@ double ColourSensor::getColDistance(ColourSample ref, ColourSample comp)
     return sqrt(square(comp.values[ColourSample::r]-ref.values[ColourSample::r]) + square(comp.values[ColourSample::g]-ref.values[ColourSample::g]) + square(comp.values[ColourSample::b]-ref.values[ColourSample::b]) + square(comp.values[ColourSample::clear]-ref.values[ColourSample::clear]));
 }
 
+double ColourSensor::getColDistance(FloorColour ref, ColourSample comp)
+{
+    ColourSample refSample;
+
+    switch (ref)
+    {
+        case floor_black:
+            return getColDistance(blackReference.s, comp);
+            break;
+        case floor_blue:
+            return getColDistance(blueReference.s, comp);
+            break;
+        case floor_reflective:
+            return getColDistance(reflectiveReference.s, comp);
+            break;
+        case floor_white:
+            return getColDistance(whiteReference.s, comp);
+            break;
+        default:
+            return 0;
+            break;
+    }
+}
+
+ColourSensor::FloorColour ColourSensor::getClosestColour(ColourSample compare)
+{
+    double distances[4];
+    distances[floor_black] = getColDistance(blackReference.s, compare) - blackReference.radius;
+    distances[floor_blue] = getColDistance(blueReference.s, compare) - blueReference.radius;
+    distances[floor_reflective] = getColDistance(reflectiveReference.s, compare) - reflectiveReference.radius;
+    distances[floor_white] = getColDistance(whiteReference.s, compare) - whiteReference.radius;
+    
+    FloorColour minCol = floor_black;
+    if (distances[floor_blue] < distances[minCol]) minCol = floor_blue;
+    if (distances[floor_reflective] < distances[minCol]) minCol = floor_reflective;
+    if (distances[floor_white] < distances[minCol]) minCol = floor_white;
+
+    return minCol;
+}
+
 
 // Reads the sensor data into global variables if new sensor data is present.
 // Returns true if a value was read and false if it was not (too close to last time)
@@ -227,12 +267,37 @@ ColourSensor::FloorColour ColourSensor::identifyColour()
     // Calculation using colour distances
 
     // return floor_unknown; // For debugging. Uncomment to disable colour detection
-    
-    if (getColDistance(blackReference.s, reading) <= maxDetectionDistance + blackReference.radius) return floor_black;
-    else if (getColDistance(blueReference.s, reading) <= maxDetectionDistance + blueReference.radius) return floor_blue;
-    else if (getColDistance(reflectiveReference.s, reading) <= maxDetectionDistance + reflectiveReference.radius) return floor_reflective;
-    else if (getColDistance(whiteReference.s, reading) <= maxDetectionDistance + whiteReference.radius) return floor_white;
+
+    FloorColour closestCol = getClosestColour(reading);
+    ColourStorageData reference;
+    switch (closestCol)
+    {
+        case floor_black:
+            reference = blackReference;
+            break;
+        case floor_blue:
+            reference = blueReference;
+            break;
+        case floor_reflective:
+            reference = reflectiveReference;
+            break;
+        case floor_white:
+            reference = whiteReference;
+            break;
+        default:
+            reference = blackReference; // Just to have it initialized, but I do not know what to do with it. It should not give problems
+            break;
+    }
+    double colDistance = getColDistance(reference.s, reading);
+    if (colDistance <= maxDetectionDistance + reference.radius) return closestCol;
     else return floor_unknown;
+    
+    // Old colour distance matching
+    // if (getColDistance(blackReference.s, reading) <= maxDetectionDistance + blackReference.radius) return floor_black;
+    // else if (getColDistance(blueReference.s, reading) <= maxDetectionDistance + blueReference.radius) return floor_blue;
+    // else if (getColDistance(reflectiveReference.s, reading) <= maxDetectionDistance + reflectiveReference.radius) return floor_reflective;
+    // else if (getColDistance(whiteReference.s, reading) <= maxDetectionDistance + whiteReference.radius) return floor_white;
+    // else return floor_unknown;
 
 
     

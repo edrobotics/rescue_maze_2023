@@ -78,6 +78,7 @@ enum Command
   command_interrupt,
   command_resume,
   command_dropKit,
+  command_light,
   command_invalid,
   command_none,
 };
@@ -137,7 +138,7 @@ namespace lights
         back = 2,
     };
 
-
+    void execLightCommand();
 
     // Turns all lights off
     void turnOff();

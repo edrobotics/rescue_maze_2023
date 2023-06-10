@@ -253,6 +253,9 @@ void loop()
         serialcomm::returnSuccess();
         break;
 
+      case command_light:
+        lights::execLightCommand();
+
       case command_invalid:
         sounds::errorBeep();
         serialcomm::returnFailure();

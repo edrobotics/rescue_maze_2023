@@ -244,6 +244,8 @@ void serialcomm::clearBuffer()
   }
 }
 
+char lightCommandChar = ' ';
+
 Command serialcomm::readCommand(bool waitForSerial)
 {
   if (waitForSerial == false && Serial.available() < 1) return command_none; // Return none if Serial was not available and you should not wait
@@ -316,6 +318,14 @@ Command serialcomm::readCommand(bool waitForSerial)
 
     case 'r': // resume the action interrupted by interrupt
       break;
+    
+    case 'b':
+      ++strIdx;
+      if (readString.charAt(strIdx) != ',' ) return command_invalid; // Invalid because the form was not followed
+      ++strIdx;
+      lightCommandChar = readString.charAt(strIdx);
+      return command_light;
+      break;
 
     default:
       sounds::errorBeep();
@@ -369,7 +379,6 @@ void lightsAndBuzzerInit()
 
 
 
-
 void lights::turnOff()
 {
   setColour(0, colourBlack, true);
@@ -400,6 +409,17 @@ RGBColour lights::safeMltp(RGBColour base, double multiplier)
 void lights::setColour(int index, RGBColour colour, double intensity, bool showColour)
 {
   setColour(index, safeMltp(colour, intensity), showColour);
+}
+
+void lights::execLightCommand()
+{
+  switch (lightCommandChar)
+  {
+    case 'a':
+      break;
+    case 'b':
+      break;
+  }
 }
 
 void lights::showDirection(lights::LedDirection direction, RGBColour colour)
