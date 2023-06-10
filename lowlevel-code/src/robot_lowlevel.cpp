@@ -383,6 +383,25 @@ void lights::setColour(int index, RGBColour colour, bool showColour)
   if (showColour==true) ledRing.show();
 }
 
+RGBColour lights::safeMltp(RGBColour base, double multiplier)
+{
+  RGBColour returnColour = colourBlack;
+  if (multiplier<0) return returnColour;
+  
+  returnColour.red = base.red * multiplier;
+  if (returnColour.red>255) returnColour.red = 255;
+  returnColour.green = base.green * multiplier;
+  if (returnColour.green>255) returnColour.green = 255;
+  returnColour.blue = base.blue * multiplier;
+  if (returnColour.blue>255) returnColour.blue = 255;
+
+}
+
+void lights::setColour(int index, RGBColour colour, double intensity, bool showColour)
+{
+  setColour(index, safeMltp(colour, intensity), showColour);
+}
+
 void lights::showDirection(lights::LedDirection direction, RGBColour colour)
 {
   turnOff();
@@ -553,6 +572,37 @@ void sounds::errorBeep()
 void sounds::tone(int freq, int duration)
 {
   buzzer.tone(freq, duration);
+}
+
+int lights::safeIndex(int index)
+{
+  while(index<1) {index += 12;}
+  while(index>12) {index -= 12;}
+}
+
+long circleTimeFlag = 0;
+int leadIndex = 3; // Between 1 and 12
+void lights::circleLoop(RGBColour colour, int speed)
+{
+  if (millis()-circleTimeFlag > 1000.0/(12.0*speed)) // Doing it like this instead of with a delay makes it more accurate (can stop more exactly)
+  {
+    setColour(0, colourBlack, false);
+    setColour(safeIndex(leadIndex), colour, false);
+    setColour(safeIndex(leadIndex-1), colour, 0.7, false);
+    setColour(safeIndex(leadIndex-2), colour, 0.4, true);
+    leadIndex = safeIndex(leadIndex+1);
+    circleTimeFlag = millis();
+  }
+}
+
+void lights::circle(RGBColour colour, int speed, int duration)
+{
+  long timeFlag = millis();
+  while (millis()-timeFlag < duration)
+  {
+    circleLoop(colour, speed);
+  }
+  turnOff();
 }
 
 
@@ -2119,7 +2169,7 @@ bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, To
   // }
   if (colSensor.lastKnownFloorColour == ColourSensor::floor_blue)
   {
-    delay(5000);
+    lights::circle(colourBlue, 2, 5500);
   }
 
   // Give back the floor colour

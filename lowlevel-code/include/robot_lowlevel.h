@@ -143,6 +143,8 @@ namespace lights
     void turnOff();
 
     void setColour(int index, RGBColour colour, bool showColour);
+    void setColour(int index, RGBColour colour, double intensity, bool showColour);
+    RGBColour safeMltp(RGBColour base, double multiplier);
 
     // Shows the 3 leds facing in the requested direction
     void showDirection(LedDirection direction);
@@ -177,6 +179,14 @@ namespace lights
     void indicateCheckpoint();
 
     void rampDriven();
+
+    int safeIndex(int index);
+    
+    // Produces a spinning circle animation
+    // colour is RGBColour
+    // speed - the speed at which the ring travels in rounds per second
+    void circleLoop(RGBColour colour, int speed);
+    void circle(RGBColour colour, int speed, int duration);
 
 }
 
