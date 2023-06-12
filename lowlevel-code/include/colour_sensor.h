@@ -101,6 +101,7 @@ class ColourSampleCollection
         ColourStorageData read(int address); // Should maybe be done outside of the class
         void resetIndex();
         int getIndex();
+        ColourStorageData thresholds {}; // Calculated thresholds
     private:
         ColourSample samples[MAX_COLOUR_SAMPLES]; // Sample values
         
@@ -108,7 +109,6 @@ class ColourSampleCollection
 
         const double stdDevsToUse = 1; // How many standard deviations that should be used when computing the thresholds
 
-        ColourStorageData thresholds {}; // Calculated thresholds
         
         // Functions to aid in computation of the thresholds
         // I want to be able to give rg, rb or gb as an argument (or equivalent) and iterate through an array of colour samples while keeping the ending the same. I do not know how to do this.
@@ -167,7 +167,7 @@ class ColourSensor
         double getColDistance(FloorColour ref, ColourSample comp);
         int getMinValIndex(double val1, double val2, double val3, double val4);
         FloorColour getClosestColour(ColourSample compare);
-        double maxDetectionDistance = 200;
+        double maxDetectionDistance = 121;
 
         unsigned long lastReadTime = 0; // Keep track of the last time you read from the sensor
         int INTEGRATION_TIME = 60; // The integration time in milliseconds

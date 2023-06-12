@@ -46,9 +46,9 @@ void setup()
 // double robotAngle = 0;
 // double wallDistance = 0;
 
-#define PICODE
+// #define PICODE
 // #define TESTING_NAV
-// #define TESTING
+#define TESTING
 // #define COLSENS_CALIBRATION
 
 #ifdef COLSENS_CALIBRATION
@@ -99,6 +99,10 @@ void loop()
   // IMPORTANT!!! ----------------------------------------------------------------------------------------------------------------------------------------------------------------
   // I tried to change the usmt
 
+  driveStep();
+  delay(500);
+  lights::turnOff();
+
   #endif
 
   // driveStep();
@@ -126,7 +130,7 @@ void loop()
   Command command = command_none;
   flushDistanceArrays();
   makeNavDecision(command);
-  printUltrasonics();
+  // printUltrasonics();
   // command = command_driveStep; // For debugging
   delay(555);
   lights::turnOff();
@@ -225,6 +229,7 @@ void loop()
         break;
 
       case command_turnLeft: // turn counterclockwise one step
+        serialcomm::returnSuccess();
         // lights::showDirection(lights::left);
         turnSteps(ccw, 1);
         // sounds::tone(440, 100);
@@ -233,6 +238,7 @@ void loop()
         break;
 
       case command_turnRight: // turn clockwise one step
+        serialcomm::returnSuccess();
         // lights::showDirection(lights::right);
         turnSteps(cw, 1);
         // sounds::tone(880, 100);
@@ -249,6 +255,7 @@ void loop()
         }
 
       case command_dropKit:
+        serialcomm::returnSuccess();
         handleVictim(false);
         serialcomm::returnSuccess();
         break;

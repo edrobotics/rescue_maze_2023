@@ -461,6 +461,8 @@ void ColourSensor::calibrationRoutineLoop()
         else
         {
         whiteSamples.calculate();
+        // if (whiteSamples.thresholds.radius < 30) whiteSamples.thresholds.radius = 142;
+        // else whiteSamples.thresholds.radius = 142;
         whiteSamples.write(whiteAddr);
         changeDetected = true;
         for (int i=0;i<whiteSamples.getIndex();++i)

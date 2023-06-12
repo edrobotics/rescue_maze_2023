@@ -99,12 +99,13 @@ namespace serialcomm
     // Command readCommand();
 
     Command readCommand(bool waitForSerial);
+    Command readCommand (bool waitForSerial, int timeout);
 
     void clearBuffer();
 
     bool checkInterrupt();
 
-    void answerInterrupt();
+    void answerInterrupt(int stepDriven);
 
     // Sends data that will be printed to the console / other debugging method
     // Should accept types in the same way that Serial.print() does.
