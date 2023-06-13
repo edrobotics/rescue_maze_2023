@@ -82,7 +82,7 @@ enum WheelSide {
 //---------------------- Variable definitions ----------------------------//
 
 // Wheel and wheelbase dimensions (all in cm)
-const double WHEEL_DIAMETER = 6.9;
+const double WHEEL_DIAMETER = 6.75;
 const double WHEEL_CIRCUMFERENCE = PI*WHEEL_DIAMETER;
 
 // Driving
@@ -310,10 +310,17 @@ Command serialcomm::readCommand(bool waitForSerial, int timeout)
           g_returnAfterDrop = false;
           lights::setColour(9, colourBlue, true);
         }
-        else
+        else if (readString.charAt(strIdx)=='1')
         {
           g_returnAfterDrop = true;
           lights::setColour(9, colourRed, true);
+        }
+        else
+        {
+          g_returnAfterDrop = true;
+          Serial.println("!e");
+          lights::setColour(0, colourError, true);
+          sounds::errorBeep();
         }
 
         return command_dropKit;
@@ -1206,7 +1213,7 @@ void getUltrasonics()
 
 void printUltrasonics()
 {
-
+  
   Serial.print("RAW:    ");
   Serial.print("F:");Serial.print(ultrasonicCurrentDistances[ultrasonic_F][usmt_raw]);
   Serial.print(" LF:");Serial.print(ultrasonicCurrentDistances[ultrasonic_LF][usmt_raw]);
@@ -1782,15 +1789,7 @@ void checkWallChanges(StoppingReason& stopReason)
     {
       if (g_potWallChanges[k][wallChangeToCheck].detected == true)
       {
-        // setShadowDistance(k, wallChangeToCheck, 0); // Begins the shadowdistance
-        if (k==ultrasonic_LF || k==ultrasonic_LB)
-        {
-          setShadowDistance(k, wallChangeToCheck, ultrasonicCurrentDistances[k][usmt_smooth] * sin(DEG_TO_RAD*g_robotAngle)); // Begins the shadowdistance
-        }
-        else
-        {
-          setShadowDistance(k, wallChangeToCheck, -ultrasonicCurrentDistances[k][usmt_smooth] * sin(DEG_TO_RAD*g_robotAngle)); // Begins the shadowdistance
-        }
+        setShadowDistance(k, wallChangeToCheck, 0); // Begins the shadowdistance
       }
     }
   }
@@ -2397,7 +2396,7 @@ void handleVictim(double fromInterrupt)
   // Return the robot to original orientation
   if (turnDirection == ccw) turnDirection = cw; // Reverse direction
   else turnDirection = ccw; // Reverse direction
-  if (g_kitsToDrop != 0 && g_returnAfterDrop==true && fromInterrupt==false) turnSteps(turnDirection, 1); // Only turn if you have to drop and only turn back if necessary
+  if (g_kitsToDrop != 0 && (g_returnAfterDrop==true || fromInterrupt==true)) turnSteps(turnDirection, 1); // Only turn if you have to drop and only turn back if necessary
 
   // Reset variables
   g_dropDirection = ' ';
