@@ -1852,6 +1852,10 @@ void printWallchangeData(UltrasonicSensorEnum sensor)
   Serial.println("");
 }
 
+
+int g_reflectiveIterations = 0; // Iterations on new tile when colour was reflective
+int g_totalIterations = 0; // Total iterations on new tile
+
 // What to run inside of the driveStep loop (the driving forward-portion)
 // Arguments have the same names as the variables they should accept in driveStep.
 // wallToUse - which wall to follow/measure
@@ -1992,9 +1996,21 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
         // stopReason = stop_floorColour;
         // return true; // Exit the loop
         break;
+      case ColourSensor::floor_reflective:
+        // Do nothing here. Is handled below
+        break;
       default:
         // Do nothing (includes silver)
         break; // Potential problem with the last break statement?
+    }
+
+    if (g_trueDistanceDriven > 15 - 4)
+    {
+      ++g_totalIterations;
+      if (g_floorColour==ColourSensor::floor_reflective)
+      {
+        ++g_reflectiveIterations;
+      }
     }
   }
 
@@ -2048,7 +2064,6 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
   return false; // The default return - not finished
 }
 
-
 bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, TouchSensorSide& frontSensorDetectionType, double& xDistanceOnRamp, double& yDistanceOnRamp, bool continuing)
 {
   // straighten();
@@ -2072,6 +2087,10 @@ bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, To
   }
   g_trueDistanceDriven = g_startDistance;
   dumbDistanceDriven = 0;
+
+  // For checking for a reflective tile
+  g_reflectiveIterations = 0;
+  g_totalIterations = 0;
 
   // Get sensor data for initial values
   if (g_driveBack == false) flushDistanceArrays();
@@ -2101,6 +2120,7 @@ bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, To
 
 
   StoppingReason stoppingReason = stop_none;
+  
 
   // Timer stuff
   // unsigned long timerFlag = millis();
@@ -2226,7 +2246,19 @@ bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, To
 
   // Give back the floor colour
   // Should update/double-check this before sending (but not always?)
-  floorColourAhead = g_floorColour; // Or use last known floor colour?
+  if (double(g_reflectiveIterations)/double(g_totalIterations) > 0.7) // If the ground colour is reflective
+  {
+    floorColourAhead = ColourSensor::floor_reflective;
+  }
+  else // When not reflective
+  {
+    floorColourAhead = g_floorColour; // Or use last known floor colour?
+
+    if (floorColourAhead == ColourSensor::floor_reflective) // Not allowed, so set unknown instead
+    {
+      floorColourAhead = ColourSensor::floor_unknown;
+    }
+  }
 
   // Give an accurate angle measurement for the next step
   // This should probably be separated out into its own function
