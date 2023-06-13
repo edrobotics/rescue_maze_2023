@@ -1127,6 +1127,30 @@ void straighten()
   gyroTurnSteps(cw, 0, true);
 }
 
+void sideWiggleCorrection(WallSide direction)
+{
+  
+}
+
+void sideWiggleCorrection()
+{
+  WallSide wallToUse = getWallToUse();
+  double distanceError = 0; // Positive is to the right of the centre of the tile
+  if (wallToUse==wall_both || wall_left)
+  {
+    distanceError = g_wallDistance - ULTRASONIC_DISTANCE_TO_WALL;
+  }
+  else if (wallToUse==wall_right)
+  {
+    distanceError = ULTRASONIC_DISTANCE_TO_WALL - g_wallDistance;
+  }
+
+  if (distanceError < 0) wallToUse = wall_right; // If to the left, go right
+  else wallToUse = wall_left; // If to the right, go left
+
+  sideWiggleCorrection(wallToUse); // Does the wiggling
+}
+
 void turnToPIDAngle()
 {
   // Use gyroturn to do it.
@@ -2298,12 +2322,26 @@ bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, To
 
     // Determine which side is affected and relay information to main loop
   }
-  else // Only straighten when not by obstacle
+  else // Only straighten or wiggle when not by obstacle (will drive back next time)
   {
-    if (abs(g_robotAngle) > MIN_CORRECTION_ANGLE && g_driveBack == false)
+    if (abs(g_wallDistance-ULTRASONIC_DISTANCE_TO_WALL) > 3 && g_driveBack == false)
+    {
+      if (abs(g_robotAngle) > MIN_CORRECTION_ANGLE && g_driveBack == false)
+      {
+        straighten();
+        getUltrasonics();
+        updateRobotPose();
+      }
+      sideWiggleCorrection();
+      getUltrasonics();
+      updateRobotPose();
+      straighten();
+    }
+    else if (abs(g_robotAngle) > MIN_CORRECTION_ANGLE && g_driveBack == false)
     {
       straighten();
     }
+
   }
 
   xDistanceOnRamp = g_horizontalDistanceDrivenOnRamp;

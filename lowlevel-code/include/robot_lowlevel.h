@@ -325,6 +325,12 @@ void gyroTurnSteps(TurningDirection direction, int steps, bool doCorrection);
 // Aligns the robot to the grid (parallel/normal to the walls)
 void straighten();
 
+// Wiggles the robot in a sidesays motion
+void sideWiggleCorrection(WallSide direction);
+
+// Automatically determines the direction of the wiggle
+void sideWiggleCorrection();
+
 //--------------------- Sensors ----------------------------------------//
 
 
