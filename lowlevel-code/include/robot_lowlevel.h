@@ -143,6 +143,7 @@ namespace lights
 
     // Turns all lights off
     void turnOff();
+    void showCustom();
 
     void setColour(int index, RGBColour colour, bool showColour);
     void setColour(int index, RGBColour colour, double intensity, bool showColour);
@@ -170,7 +171,7 @@ namespace lights
 
     void checkPointRestored();
 
-    void turnOnVictimLights();
+    void turnOnVictimLights(bool show);
 
     void indicateFrontSensor();
 

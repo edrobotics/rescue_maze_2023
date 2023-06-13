@@ -402,6 +402,12 @@ void lights::turnOff()
   // ledRing.show();
 }
 
+// Same as show() in library
+void lights::showCustom()
+{
+  ledRing.show();
+}
+
 void lights::setColour(int index, RGBColour colour, bool showColour)
 {
   ledRing.setColor(index, colour.red, colour.green, colour.blue);
@@ -542,12 +548,12 @@ void lights::floorIndicator(ColourSensor::FloorColour floorColour)
   }
 }
 
-void lights::turnOnVictimLights()
+void lights::turnOnVictimLights(bool show)
 {
     setColour(0, colourWhite, false);
     setColour(6, colourRed, false);
     setColour(9, colourRed, false);
-    setColour(12, colourRed, true);
+    setColour(12, colourRed, show);
 
     // 2, 3, 4
 }
@@ -2345,13 +2351,14 @@ void handleVictim(double fromInterrupt)
   int blinkCycleTime = 500; // The time for a complete blink cycle in ms
   int droppedKits = 0;
 
+
   // Simultaneous blinking and deployment of rescue kits
   servoPos = servoLower;
   long beginTime = millis();
   long rkTimeFlag = 0;
   const int rkDelay = 500; // The time between deploying rescue kits in ms.
   const int minBlinkTime = 6000; // Should be 6000, but I added 1000 (1s) for some margins in the referees perception
-  lights::turnOnVictimLights(); // For the first half blink cycle
+  lights::turnOnVictimLights(true); // For the first half blink cycle
   while (droppedKits<g_kitsToDrop || millis()-beginTime < minBlinkTime)
   {
     static long blinkTimerFlag = beginTime;
@@ -2386,11 +2393,18 @@ void handleVictim(double fromInterrupt)
       lights::turnOff(); // The lights should be off
       if (millis()-blinkTimerFlag > blinkCycleTime) // When we go beyond the cycle
       {
-        lights::turnOnVictimLights(); // Turn on the lights for the next half cycle
+        lights::turnOnVictimLights(false); // Turn on the lights for the next half cycle. Show is called last in the loop
         blinkTimerFlag = millis(); // Reset the time flag for the next cycle
       }
     }
 
+    // Displaying the amount of dropped kits
+    for (int i=0;i<droppedKits;++i)
+    {
+      lights::setColour(lights::safeIndex(1+droppedKits), colourRed, false); // Turn on a light to show the number of dropped kits
+    }
+    
+    lights::showCustom();
   }
 
   // Return the robot to original orientation
