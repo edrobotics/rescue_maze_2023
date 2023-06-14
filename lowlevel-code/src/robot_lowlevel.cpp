@@ -1878,6 +1878,7 @@ void printWallchangeData(UltrasonicSensorEnum sensor)
 
 
 int g_reflectiveIterations = 0; // Iterations on new tile when colour was reflective
+int g_blueIterations = 0; // Iterations on new tile when colour was blue
 int g_totalIterations = 0; // Total iterations on new tile
 
 // What to run inside of the driveStep loop (the driving forward-portion)
@@ -2016,9 +2017,7 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
         return true; // Exit the loop
         break;
       case ColourSensor::floor_blue:
-        // Go on driving and tell Marcus that there is a blue tile
-        // stopReason = stop_floorColour;
-        // return true; // Exit the loop
+        // Do nothing here. Is handled below.
         break;
       case ColourSensor::floor_reflective:
         // Do nothing here. Is handled below
@@ -2034,6 +2033,10 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
       if (g_floorColour==ColourSensor::floor_reflective)
       {
         ++g_reflectiveIterations;
+      }
+      if (g_floorColour==ColourSensor::floor_blue)
+      {
+        ++g_blueIterations;
       }
     }
   }
@@ -2270,6 +2273,23 @@ bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, To
 
   // Give back the floor colour
   // Should update/double-check this before sending (but not always?)
+  
+  // Check for blue
+  if (double(g_blueIterations)/double(g_totalIterations) > 0.7) // If the ground colour is blue
+  {
+    floorColourAhead = ColourSensor::floor_blue;
+  }
+  else // When not blue
+  {
+    floorColourAhead = g_floorColour; // Or use last known floor colour?
+
+    if (floorColourAhead == ColourSensor::floor_blue) // Not allowed, so set unknown instead
+    {
+      floorColourAhead = ColourSensor::floor_unknown;
+    }
+  }
+
+  // Check for reflective
   if (double(g_reflectiveIterations)/double(g_totalIterations) > 0.7) // If the ground colour is reflective
   {
     floorColourAhead = ColourSensor::floor_reflective;
