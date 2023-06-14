@@ -143,6 +143,7 @@ namespace lights
 
     // Turns all lights off
     void turnOff();
+    void showCustom();
 
     void setColour(int index, RGBColour colour, bool showColour);
     void setColour(int index, RGBColour colour, double intensity, bool showColour);
@@ -170,7 +171,7 @@ namespace lights
 
     void checkPointRestored();
 
-    void turnOnVictimLights();
+    void turnOnVictimLights(bool show);
 
     void indicateFrontSensor();
 
@@ -323,6 +324,12 @@ void gyroTurnSteps(TurningDirection direction, int steps, bool doCorrection);
 
 // Aligns the robot to the grid (parallel/normal to the walls)
 void straighten();
+
+// Wiggles the robot in a sidesays motion
+void sideWiggleCorrection(WallSide direction);
+
+// Automatically determines the direction of the wiggle
+void sideWiggleCorrection();
 
 //--------------------- Sensors ----------------------------------------//
 

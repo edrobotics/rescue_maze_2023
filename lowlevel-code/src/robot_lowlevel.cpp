@@ -82,7 +82,7 @@ enum WheelSide {
 //---------------------- Variable definitions ----------------------------//
 
 // Wheel and wheelbase dimensions (all in cm)
-const double WHEEL_DIAMETER = 6.9;
+const double WHEEL_DIAMETER = 6.75;
 const double WHEEL_CIRCUMFERENCE = PI*WHEEL_DIAMETER;
 
 // Driving
@@ -310,10 +310,17 @@ Command serialcomm::readCommand(bool waitForSerial, int timeout)
           g_returnAfterDrop = false;
           lights::setColour(9, colourBlue, true);
         }
-        else
+        else if (readString.charAt(strIdx)=='1')
         {
           g_returnAfterDrop = true;
           lights::setColour(9, colourRed, true);
+        }
+        else
+        {
+          g_returnAfterDrop = true;
+          Serial.println("!e");
+          lights::setColour(0, colourError, true);
+          sounds::errorBeep();
         }
 
         return command_dropKit;
@@ -393,6 +400,12 @@ void lights::turnOff()
   setColour(0, colourBlack, true);
   // ledRing.setColor(colourBlack.red, colourBlack.green, colourBlack.blue);
   // ledRing.show();
+}
+
+// Same as show() in library
+void lights::showCustom()
+{
+  ledRing.show();
 }
 
 void lights::setColour(int index, RGBColour colour, bool showColour)
@@ -535,12 +548,12 @@ void lights::floorIndicator(ColourSensor::FloorColour floorColour)
   }
 }
 
-void lights::turnOnVictimLights()
+void lights::turnOnVictimLights(bool show)
 {
     setColour(0, colourWhite, false);
     setColour(6, colourRed, false);
     setColour(9, colourRed, false);
-    setColour(12, colourRed, true);
+    setColour(12, colourRed, show);
 
     // 2, 3, 4
 }
@@ -1114,6 +1127,30 @@ void straighten()
   gyroTurnSteps(cw, 0, true);
 }
 
+void sideWiggleCorrection(WallSide direction)
+{
+  
+}
+
+void sideWiggleCorrection()
+{
+  WallSide wallToUse = getWallToUse();
+  double distanceError = 0; // Positive is to the right of the centre of the tile
+  if (wallToUse==wall_both || wall_left)
+  {
+    distanceError = g_wallDistance - ULTRASONIC_DISTANCE_TO_WALL;
+  }
+  else if (wallToUse==wall_right)
+  {
+    distanceError = ULTRASONIC_DISTANCE_TO_WALL - g_wallDistance;
+  }
+
+  if (distanceError < 0) wallToUse = wall_right; // If to the left, go right
+  else wallToUse = wall_left; // If to the right, go left
+
+  sideWiggleCorrection(wallToUse); // Does the wiggling
+}
+
 void turnToPIDAngle()
 {
   // Use gyroturn to do it.
@@ -1206,7 +1243,7 @@ void getUltrasonics()
 
 void printUltrasonics()
 {
-
+  
   Serial.print("RAW:    ");
   Serial.print("F:");Serial.print(ultrasonicCurrentDistances[ultrasonic_F][usmt_raw]);
   Serial.print(" LF:");Serial.print(ultrasonicCurrentDistances[ultrasonic_LF][usmt_raw]);
@@ -1782,15 +1819,7 @@ void checkWallChanges(StoppingReason& stopReason)
     {
       if (g_potWallChanges[k][wallChangeToCheck].detected == true)
       {
-        // setShadowDistance(k, wallChangeToCheck, 0); // Begins the shadowdistance
-        if (k==ultrasonic_LF || k==ultrasonic_LB)
-        {
-          setShadowDistance(k, wallChangeToCheck, ultrasonicCurrentDistances[k][usmt_smooth] * sin(DEG_TO_RAD*g_robotAngle)); // Begins the shadowdistance
-        }
-        else
-        {
-          setShadowDistance(k, wallChangeToCheck, -ultrasonicCurrentDistances[k][usmt_smooth] * sin(DEG_TO_RAD*g_robotAngle)); // Begins the shadowdistance
-        }
+        setShadowDistance(k, wallChangeToCheck, 0); // Begins the shadowdistance
       }
     }
   }
@@ -1846,6 +1875,10 @@ void printWallchangeData(UltrasonicSensorEnum sensor)
   Serial.print("TIME: ");Serial.print(millis()-g_potWallChanges[sensor][wallchange_leaving].timestamp);Serial.print(" ");
   Serial.println("");
 }
+
+
+int g_reflectiveIterations = 0; // Iterations on new tile when colour was reflective
+int g_totalIterations = 0; // Total iterations on new tile
 
 // What to run inside of the driveStep loop (the driving forward-portion)
 // Arguments have the same names as the variables they should accept in driveStep.
@@ -1987,9 +2020,21 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
         // stopReason = stop_floorColour;
         // return true; // Exit the loop
         break;
+      case ColourSensor::floor_reflective:
+        // Do nothing here. Is handled below
+        break;
       default:
         // Do nothing (includes silver)
         break; // Potential problem with the last break statement?
+    }
+
+    if (g_trueDistanceDriven > 15 - 4)
+    {
+      ++g_totalIterations;
+      if (g_floorColour==ColourSensor::floor_reflective)
+      {
+        ++g_reflectiveIterations;
+      }
     }
   }
 
@@ -2043,7 +2088,6 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
   return false; // The default return - not finished
 }
 
-
 bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, TouchSensorSide& frontSensorDetectionType, double& xDistanceOnRamp, double& yDistanceOnRamp, bool continuing)
 {
   // straighten();
@@ -2067,6 +2111,10 @@ bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, To
   }
   g_trueDistanceDriven = g_startDistance;
   dumbDistanceDriven = 0;
+
+  // For checking for a reflective tile
+  g_reflectiveIterations = 0;
+  g_totalIterations = 0;
 
   // Get sensor data for initial values
   if (g_driveBack == false) flushDistanceArrays();
@@ -2096,6 +2144,7 @@ bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, To
 
 
   StoppingReason stoppingReason = stop_none;
+  
 
   // Timer stuff
   // unsigned long timerFlag = millis();
@@ -2221,7 +2270,19 @@ bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, To
 
   // Give back the floor colour
   // Should update/double-check this before sending (but not always?)
-  floorColourAhead = g_floorColour; // Or use last known floor colour?
+  if (double(g_reflectiveIterations)/double(g_totalIterations) > 0.7) // If the ground colour is reflective
+  {
+    floorColourAhead = ColourSensor::floor_reflective;
+  }
+  else // When not reflective
+  {
+    floorColourAhead = g_floorColour; // Or use last known floor colour?
+
+    if (floorColourAhead == ColourSensor::floor_reflective) // Not allowed, so set unknown instead
+    {
+      floorColourAhead = ColourSensor::floor_unknown;
+    }
+  }
 
   // Give an accurate angle measurement for the next step
   // This should probably be separated out into its own function
@@ -2261,12 +2322,26 @@ bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, To
 
     // Determine which side is affected and relay information to main loop
   }
-  else // Only straighten when not by obstacle
+  else // Only straighten or wiggle when not by obstacle (will drive back next time)
   {
-    if (abs(g_robotAngle) > MIN_CORRECTION_ANGLE && g_driveBack == false)
+    if (abs(g_wallDistance-ULTRASONIC_DISTANCE_TO_WALL) > 3 && g_driveBack == false)
+    {
+      if (abs(g_robotAngle) > MIN_CORRECTION_ANGLE && g_driveBack == false)
+      {
+        straighten();
+        getUltrasonics();
+        updateRobotPose();
+      }
+      sideWiggleCorrection();
+      getUltrasonics();
+      updateRobotPose();
+      straighten();
+    }
+    else if (abs(g_robotAngle) > MIN_CORRECTION_ANGLE && g_driveBack == false)
     {
       straighten();
     }
+
   }
 
   xDistanceOnRamp = g_horizontalDistanceDrivenOnRamp;
@@ -2346,13 +2421,14 @@ void handleVictim(double fromInterrupt)
   int blinkCycleTime = 500; // The time for a complete blink cycle in ms
   int droppedKits = 0;
 
+
   // Simultaneous blinking and deployment of rescue kits
   servoPos = servoLower;
   long beginTime = millis();
   long rkTimeFlag = 0;
   const int rkDelay = 500; // The time between deploying rescue kits in ms.
   const int minBlinkTime = 6000; // Should be 6000, but I added 1000 (1s) for some margins in the referees perception
-  lights::turnOnVictimLights(); // For the first half blink cycle
+  lights::turnOnVictimLights(true); // For the first half blink cycle
   while (droppedKits<g_kitsToDrop || millis()-beginTime < minBlinkTime)
   {
     static long blinkTimerFlag = beginTime;
@@ -2387,17 +2463,24 @@ void handleVictim(double fromInterrupt)
       lights::turnOff(); // The lights should be off
       if (millis()-blinkTimerFlag > blinkCycleTime) // When we go beyond the cycle
       {
-        lights::turnOnVictimLights(); // Turn on the lights for the next half cycle
+        lights::turnOnVictimLights(false); // Turn on the lights for the next half cycle. Show is called last in the loop
         blinkTimerFlag = millis(); // Reset the time flag for the next cycle
       }
     }
 
+    // Displaying the amount of dropped kits
+    for (int i=0;i<droppedKits;++i)
+    {
+      lights::setColour(lights::safeIndex(1+droppedKits), colourRed, false); // Turn on a light to show the number of dropped kits
+    }
+    
+    lights::showCustom();
   }
 
   // Return the robot to original orientation
   if (turnDirection == ccw) turnDirection = cw; // Reverse direction
   else turnDirection = ccw; // Reverse direction
-  if (g_kitsToDrop != 0 && g_returnAfterDrop==true && fromInterrupt==false) turnSteps(turnDirection, 1); // Only turn if you have to drop and only turn back if necessary
+  if (g_kitsToDrop != 0 && (g_returnAfterDrop==true || fromInterrupt==true)) turnSteps(turnDirection, 1); // Only turn if you have to drop and only turn back if necessary
 
   // Reset variables
   g_dropDirection = ' ';

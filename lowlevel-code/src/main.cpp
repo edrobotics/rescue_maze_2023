@@ -46,9 +46,9 @@ void setup()
 // double robotAngle = 0;
 // double wallDistance = 0;
 
-// #define PICODE
+#define PICODE
 // #define TESTING_NAV
-#define TESTING
+// #define TESTING
 // #define COLSENS_CALIBRATION
 
 #ifdef COLSENS_CALIBRATION
@@ -99,9 +99,11 @@ void loop()
   // IMPORTANT!!! ----------------------------------------------------------------------------------------------------------------------------------------------------------------
   // I tried to change the usmt
 
-  driveStep();
-  delay(500);
-  lights::turnOff();
+  // driveStep();
+  // delay(500);
+  // lights::turnOff();
+  getUltrasonics();
+  printUltrasonics();
 
   #endif
 
@@ -206,9 +208,9 @@ void loop()
             if (rampDriven == true)
             {
               Serial.print("1,");
-              Serial.print(xDistanceOnRamp);
+              Serial.print(xDistanceOnRamp, 0);
               Serial.print(',');
-              Serial.print(yDistanceOnRamp);
+              Serial.print(yDistanceOnRamp, 0);
             } 
             else Serial.print("0");
             Serial.println("");
