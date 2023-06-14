@@ -370,6 +370,11 @@ void serialcomm::answerInterrupt(int stepDriven)
   Serial.println("");
 }
 
+void serialcomm::cancelInterrupt()
+{
+  Serial.println("!c,i");
+}
+
 //---------------------- Buzzer and lights (for debugging) ------------------//
 
 const int CAMERA_LED_PIN = 30;
@@ -620,33 +625,41 @@ int lights::safeIndex(int index)
 {
   while(index<1) {index += 12;}
   while(index>12) {index -= 12;}
+  return index;
 }
 
 long circleTimeFlag = 0;
 int leadIndex = 3; // Between 1 and 12
-void lights::circleLoop(RGBColour colour, int speed)
+void lights::circleLoop(RGBColour colour1, RGBColour colour2, double speed)
 {
   if (millis()-circleTimeFlag > 1000.0/(12.0*speed)) // Doing it like this instead of with a delay makes it more accurate (can stop more exactly)
   {
     setColour(0, colourBlack, false);
-    setColour(safeIndex(leadIndex), colour, false);
-    setColour(safeIndex(leadIndex-1), colour, 0.7, false);
-    setColour(safeIndex(leadIndex-2), colour, 0.4, true);
+    for (int i=0;i<12;i+=3)
+    {
+    setColour(safeIndex(leadIndex+i), colour1, false);
+    // setColour(safeIndex(leadIndex+2+i), colour2, false);
+    }
+    showCustom();
     leadIndex = safeIndex(leadIndex+1);
     circleTimeFlag = millis();
   }
 }
 
-void lights::circle(RGBColour colour, int speed, int duration)
+void lights::circle(RGBColour colour1, RGBColour colour2, double speed, int duration)
 {
   long timeFlag = millis();
   while (millis()-timeFlag < duration)
   {
-    circleLoop(colour, speed);
+    circleLoop(colour1, colour2, speed);
   }
   turnOff();
 }
 
+void lights::indicateBlueCircle()
+{
+  lights::circle(colourBlue, colourBlack, 1, 5500);
+}
 
 
 //------------------ Low level encoder functions ---------------------------//
@@ -1994,53 +2007,74 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
       return true;
     }
 
-  // Checking for ground colour (should perhaps only be done when not on ramp?)
-  g_floorColour = colSensor.checkFloorColour();
-  if (g_driveBack == false)
-  {
-    // BASE_SPEED_CMPS = 15;
-    switch (g_floorColour)
+    // Checking for ground colour (should perhaps only be done when not on ramp?)
+    g_floorColour = colSensor.checkFloorColour();
+    if (g_driveBack == false)
     {
-      case ColourSensor::floor_notUpdated:
-        break; // Do nothing
-      case ColourSensor::floor_unknown:
-        // BASE_SPEED_CMPS = 10;
-        // Serial.println("Unknown");
-        break;
-      case ColourSensor::floor_black:
-        // Drive back to last point and exit the loop
-        // Serial.println("Black");
-        // sounds::tone(440, 20);
-        stopWheels();
-        // sounds::tone(440, 20);
-        stopReason = stop_floorColour;
+      // BASE_SPEED_CMPS = 15;
+      switch (g_floorColour)
+      {
+        case ColourSensor::floor_notUpdated:
+          break; // Do nothing
+        case ColourSensor::floor_unknown:
+          // BASE_SPEED_CMPS = 10;
+          // Serial.println("Unknown");
+          break;
+        case ColourSensor::floor_black:
+          // Drive back to last point and exit the loop
+          // Serial.println("Black");
+          // sounds::tone(440, 20);
+          stopWheels();
+          // sounds::tone(440, 20);
+          stopReason = stop_floorColour;
+          return true; // Exit the loop
+          break;
+        case ColourSensor::floor_blue:
+          // Do nothing here. Is handled below.
+          break;
+        case ColourSensor::floor_reflective:
+          // Do nothing here. Is handled below
+          break;
+        default:
+          // Do nothing (includes silver)
+          break; // Potential problem with the last break statement?
+      }
+
+      if (g_trueDistanceDriven > 15 - 4)
+      {
+        ++g_totalIterations;
+        if (g_floorColour==ColourSensor::floor_reflective)
+        {
+          ++g_reflectiveIterations;
+        }
+        if (g_floorColour==ColourSensor::floor_blue)
+        {
+          ++g_blueIterations;
+        }
+      }
+    }
+
+    // Checking the front touch sensor
+    TouchSensorSide touchSensorState = frontSensorActivated();
+    if (g_driveBack==false && (touchSensorState != touch_none))
+    {
+        switch (touchSensorState)
+        {
+          case touch_left:
+            stopReason = stop_frontTouchLeft;
+            break;
+          case touch_right:
+            stopReason = stop_frontTouchRight;
+            break;
+          default:
+            stopReason = stop_frontTouchBoth;
+            break;
+        }
+
+        g_lastTouchSensorState = touchSensorState;
         return true; // Exit the loop
-        break;
-      case ColourSensor::floor_blue:
-        // Do nothing here. Is handled below.
-        break;
-      case ColourSensor::floor_reflective:
-        // Do nothing here. Is handled below
-        break;
-      default:
-        // Do nothing (includes silver)
-        break; // Potential problem with the last break statement?
     }
-
-    if (g_trueDistanceDriven > 15 - 4)
-    {
-      ++g_totalIterations;
-      if (g_floorColour==ColourSensor::floor_reflective)
-      {
-        ++g_reflectiveIterations;
-      }
-      if (g_floorColour==ColourSensor::floor_blue)
-      {
-        ++g_blueIterations;
-      }
-    }
-  }
-
+    
   } // Only do when not on ramp ends here
 
   // Checking for wallchanges
@@ -2054,6 +2088,8 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
   // Checking for interrupts
   if (serialcomm::checkInterrupt() == true)
   {
+    if (onRamp==false)
+    {
     stopWheels();
     bool stepDriven = false;
     if (g_trueDistanceDriven >= 15) stepDriven = true;
@@ -2061,29 +2097,15 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
     Command intrCommand = serialcomm::readCommand(true);
     if (intrCommand == command_dropKit) handleVictim(true);
     else sounds::errorBeep();
+    }
+
+    else // If on a ramp
+    {
+      serialcomm::cancelInterrupt();
+    }
   }
 
 
-  // Checking the front touch sensor
-  TouchSensorSide touchSensorState = frontSensorActivated();
-  if (g_driveBack==false && (touchSensorState != touch_none))
-  {
-      switch (touchSensorState)
-      {
-        case touch_left:
-          stopReason = stop_frontTouchLeft;
-          break;
-        case touch_right:
-          stopReason = stop_frontTouchRight;
-          break;
-        default:
-          stopReason = stop_frontTouchBoth;
-          break;
-      }
-
-      g_lastTouchSensorState = touchSensorState;
-      return true; // Exit the loop
-  }
 
   // Updates for the next loop (may not be all of themo)
   g_previousOnRampState = onRamp;
@@ -2268,7 +2290,7 @@ bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, To
   // }
   if (colSensor.lastKnownFloorColour == ColourSensor::floor_blue)
   {
-    lights::circle(colourBlue, 2, 5500);
+    lights::indicateBlueCircle();
   }
 
   // Give back the floor colour

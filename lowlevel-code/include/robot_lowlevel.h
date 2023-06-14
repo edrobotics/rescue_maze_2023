@@ -107,6 +107,8 @@ namespace serialcomm
 
     void answerInterrupt(int stepDriven);
 
+    void cancelInterrupt();
+
     // Sends data that will be printed to the console / other debugging method
     // Should accept types in the same way that Serial.print() does.
     bool sendDebug();
@@ -188,8 +190,9 @@ namespace lights
     // Produces a spinning circle animation
     // colour is RGBColour
     // speed - the speed at which the ring travels in rounds per second
-    void circleLoop(RGBColour colour, int speed);
-    void circle(RGBColour colour, int speed, int duration);
+    void circleLoop(RGBColour colour1, RGBColour colour2, double speed);
+    void circle(RGBColour colour1, RGBColour colour2, double speed, int duration);
+    void indicateBlueCircle();
 
 }
 

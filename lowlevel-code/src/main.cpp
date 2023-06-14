@@ -46,9 +46,9 @@ void setup()
 // double robotAngle = 0;
 // double wallDistance = 0;
 
-#define PICODE
+// #define PICODE
 // #define TESTING_NAV
-// #define TESTING
+#define TESTING
 // #define COLSENS_CALIBRATION
 
 #ifdef COLSENS_CALIBRATION
@@ -99,26 +99,12 @@ void loop()
   // IMPORTANT!!! ----------------------------------------------------------------------------------------------------------------------------------------------------------------
   // I tried to change the usmt
 
-  // driveStep();
-  // delay(500);
-  // lights::turnOff();
-  getUltrasonics();
-  printUltrasonics();
+  lights::indicateBlueCircle();
+  lights::turnOff();
+  delay(2000);
+
 
   #endif
-
-  // driveStep();
-  // delay(500);
-  // lights::turnOff();
-  // delay(500);
-  // driveStep();
-  // delay(500);
-  // lights::turnOff();
-  // delay(1500);
-  // turnSteps(cw, 1);
-  // delay(500);
-  // turnSteps(ccw, 1);
-  // delay(500);
   
   
 
