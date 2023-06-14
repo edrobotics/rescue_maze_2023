@@ -31,13 +31,13 @@ for i in range(1):
 
 
 class imgproc:
-#change the following codes to dicts?
+    victim_pos = None
 
     cwd = os.getcwd()
     if cwd == '/Users/lukas/GitHub/rescue_maze_2023/vision-code':
         sampledir = "/Users/lukas/GitHub/rescue_maze_2023/vision-code/samples/"
         print("on mac")        
-    else: sampledir = "/home/pi/rescue_maze_2023/vision-code/samples/" #change this absolute on pi
+    else: sampledir = "/home/pi/rescue_maze_2023/vision-code/samples/" 
     Dictand = {
         "H": None, 
         "S": None, 
@@ -64,23 +64,52 @@ class imgproc:
             Dict[key] = binary
 
 
-    lastdetected = (None, -3)
+    #lastdetected = (None, -10, None)
+    lastdetected = {
+        "H": [None, -10, 0],
+        "S": [None, -10, 0],
+        "U": [None, -10, 0],
+        "red": [None, -10, 0],
+        "yellow": [None, -10, 0],
+        "green": [None, -10, 0],
+    }
+
+    blacklist = []
+    def detected(self,msg, victim):
+
+        list = self.lastdetected[victim]
+        for key in self.lastdetected:
+            if self.lastdetected[key][1] == self.fnum:
+                self.blacklist.append(victim)
+
+
+
+
+
+        if list[1] + 2 < self.fnum:
+           self.sendMessage(msg)
+
+        else:
+            print("alredy detected")
+        new_list = (msg, self.fnum, list[2]+ 1)
+        self.lastdetected[victim] = new_list
+
+
+
+
 
 
     def sendMessage(self,msg):
-        print(f"sending message: {msg}")
+        print("sending message", msg)
+        logging.info(f"sending: {msg}")
 
-        if self.lastdetected[1] + 2 < self.fnum:
-            try:
-                message = msg.encode(FORMAT)
-                msg_length = len(message).to_bytes(HEADER, "big")
-                client.send(msg_length)
-                client.send(message)
-            except:
-                print("failed to send messsage")
-        else:
-            print("alredy detected")
-        self.lastdetected = (msg, self.fnum)
+        try:
+            message = msg.encode(FORMAT)
+            msg_length = len(message).to_bytes(HEADER, "big")
+            client.send(msg_length)
+            client.send(message)
+        except:
+            print("failed to send messsage")
 
 
 
@@ -96,15 +125,18 @@ class imgproc:
 
     def do_the_work(self, image, fnum):
         self.image = image
+        self.image_clone = image.copy()
         self.fnum = fnum
         self.log("E")
         
         color_time = time.time()
-        self.Color_victim2()
-
 
 
         self.find_victim()
+        self.Color_victim2()
+        if self.showsource:
+            cv2.imshow("image_clone",self.image_clone)
+
 
 
     def blank_out(self, binary):
@@ -140,12 +172,13 @@ class imgproc:
         contours, hierarchy = cv2.findContours(binary,cv2.RETR_LIST,cv2.CHAIN_APPROX_NONE)
 
 
-        cv2.drawContours(img, contours, -1, (0, 255, 0), 3)
+        cv2.drawContours(self.image_clone, contours, -1, (0, 255, 0), 3)
         result = self.get_poi(contours)
         if result[0] == True: 
-            self.sendMessage(f"k{result[1]}{self.side}")
+            self.detected(f"k{result[1]}{self.side}", result[2])
 
     def get_poi(self, contours): #loops through contours and returns all above a size and appoximation points 
+        result = [None, None, None]
         for cnt in contours:
             area = cv2.contourArea(cnt)
 #            cv2.waitKey(0)
@@ -153,7 +186,7 @@ class imgproc:
                 rect = cv2.minAreaRect(cnt)
                 box = cv2.boxPoints(rect)
                 box = np.int0(box)
-                cv2.drawContours(self.image, [box], 0, (255, 0, 0), 3)
+                cv2.drawContours(self.image_clone, [box], 0, (255, 0, 0), 3)
 
                 #para = cv2.arcLength(cnt,True)
                 approx = cv2.approxPolyDP(cnt, 0.009 * cv2.arcLength(cnt, True), True)
@@ -193,7 +226,6 @@ class imgproc:
 
                 result = self.identify_victim(RImgCnt)
                 if result[0]:
-                    print(result)
                     break
 
         return result 
@@ -229,46 +261,72 @@ class imgproc:
                     print(M_OR_C)
                     cv2.waitKey(0)
 
-
+                
             #  print(f"victim size: {M_AND_C}")
                 if MIN_and < M_AND_C and M_OR_C > MIN_or:
                     if x == 0: 
                         victim = "H"
                         kits = 3
-                    elif x == 1: 
+                    if x == 1: 
                         victim = "S"
                         kits = 2
-                    elif x == 2: 
+                    if x == 2: 
+                        kits = 0 
                         victim = "U"
-                        kits = 0
                 # if i == 1: side = "left"
                     if self.info: print(f"identified: {victim}")
                     logging.info(f"identified victim: {victim}")
                     self.log(victim, img= ivictim)
-                    identified = True
-                    break
-        return (identified,kits)
+        if victim:
+            identified = True
+
+        return (identified,kits, victim)
+
+    def check_position(self, contour):
+        b_position = None
+        (x,y,w,h) = cv2.boundingRect(contour)
+        victimheight = 142
+        victimheight2 = 450
+        if victimheight > x and victimheight - 25 < x + w:
+            b_position = True
+        elif victimheight2 > x and victimheight2 - 25 < x + w:
+            b_position = True
+        return b_position
+ 
+    def check_movement(self,contour,victim):
+        b_movement = None
+        (x,y,w,h) = cv2.boundingRect(contour)
+        same_height = False
+        if self.victim_pos:
+            pos = self.victim_pos
+
+            if self.is_close(x, pos[2]) and self.is_close(w,pos[4]) and self.is_close(h,pos[5]):
+                #same_height = True
+                if y < pos[3]:
+                    b_movement = True
+                    print("moving")
+
+        self.victim_pos = (victim,self.fnum, x,y,w,h)
 
 
-    def Color_victim(self):
-        image = self.image
-#    image = image.copy
-        status = 0
-        hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-    #    hsv[:, 290:350] = (0,0,0)
 
-        red_lower_range = np.array([130,100,100])
-        red_upper_range = np.array([180,255,255])
-        red_mask = cv2.inRange(hsv, red_lower_range, red_upper_range)
-        self.ColVicP(red_mask, "RED")
-        green_lower_range = np.array([50,40,40])
-        green_upper_range = np.array([80,255,255])
-        green_mask = cv2.inRange(hsv, green_lower_range, green_upper_range)
-        self.ColVicP(green_mask, "GREEN")
-        yellow_lower_range = np.array([15,100,100])
-        yellow_upper_range = np.array([25,255,255])
-        yellow_mask = cv2.inRange(hsv, yellow_lower_range, yellow_upper_range)
-        self.ColVicP(yellow_mask, "YELLOW")
+
+    def is_close(self, num1, num2, marginal = 5):
+        print(num1, num2)
+        if num1 - num2 < marginal:
+            close = True
+        elif num2 - num1 < marginal:
+            close = True
+        else: 
+            close = False
+        return close
+
+
+
+        
+
+
+
 
     def Color_victim2(self):
         image = self.image
@@ -277,14 +335,14 @@ class imgproc:
         hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
 
         lower_range = {
-            "red" : np.array([150,69,60]),
-            "green": np.array([50,40,40]),
-            "yellow": np.array([15,0,100])
+            "green": np.array([69,100,69]),
+            "yellow": np.array([10,35,130]),
+            "red" : np.array([130,110,60])
             }
         upper_range = {
-            "red" : np.array([180,255,255]),
-            "green" : np.array([80,255,255]),
-            "yellow" : np.array([25,100,255])
+            "green" : np.array([80,255,150]),
+            "yellow" : np.array([69,100,255]),
+            "red" : np.array([180,255,140])
             }
         for color in lower_range:
             lower = lower_range[color]
@@ -305,24 +363,29 @@ class imgproc:
         mask = cv2.erode(mask,kernel, iterations=1)
         mask = cv2.dilate(mask,kernel, iterations=1) 
 
-        if np.count_nonzero(mask) > 5000 and np.count_nonzero(mask < 30000):
-            print(np.count_nonzero(mask))
+        if np.count_nonzero(mask) > 5000 and np.count_nonzero(mask)< 20000:
+            #print(np.count_nonzero(mask))
             ret,thresh = cv2.threshold(mask, 40, 255, 0)
             contours, hierarchy = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
             c = max(contours, key = cv2.contourArea)
             mask = cv2.bitwise_and(self.image, self.image, mask=mask)
             if cv2.contourArea(c) > 5000:
+                self.check_movement(c,color)
                 print(f"{color}: {cv2.contourArea(c)}")
-
-                x,y,w,h = cv2.boundingRect(c)
-                if x > 300: self.side = "l"
-                else: self.side = "r"
-                if color == "GREEN": k = "k0"
-                else: k = "k1"
-                self.sendMessage(k+self.side)
-                self.log(color,img = mask)
-                logging.info(f"found {color}, image {self.fnum}")
-                print(f"found {color}, image {self.fnum}")
+                if self.check_position(c):
+                    x,y,w,h = cv2.boundingRect(c)
+                    if x > 300: self.side = "l"
+                    else: self.side = "r"
+                    if color == "green": k = "k0"
+                    else: k = "k1"
+                    self.detected(k+self.side,victim=color)
+                    self.log(color,img = mask)
+                    logging.info(f"found {color}, image {self.fnum}")
+                    print(f"found {color}, image {self.fnum}")
+                else: 
+                    print("outside possible frame")
+                    self.log(color,img = mask)
+                    logging.info(f"found {color}, image {self.fnum}, outside possible position")
         if self.showcolor: cv2.imshow(color, mask)
 
 
