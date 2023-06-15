@@ -31,7 +31,7 @@ void setup()
   if (colCalButton.isPressed())
   {
   colSensor.clearCalibrationData();
-  serialcomm::sendLOP(); // So that Markus can start the scoring run timer
+  serialcomm::sendColourCal(); // So that Markus can start the scoring run timer
   while(colCalButton.isPressed())
   {
     colSensor.calibrationRoutineLoop();

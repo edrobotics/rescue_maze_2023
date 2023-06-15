@@ -114,6 +114,8 @@ namespace serialcomm
     bool sendDebug();
 
     void sendLOP();
+
+    void sendColourCal();
 }
 
 // Makes a navigation decision

@@ -2357,10 +2357,7 @@ bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, To
 
   // Give back the floor colour
   // Should update/double-check this before sending (but not always?)
-  if (g_driveBack == false)
-  {
-    
-  }
+
   // Check for blue
   if (double(g_blueIterations)/double(g_totalIterations) > 0.85 && g_driveBack==false) // If the ground colour is blue
   {
@@ -2641,4 +2638,9 @@ TouchSensorSide frontSensorActivated()
 void serialcomm::sendLOP()
 {
   Serial.println("!l");
+}
+
+void serialcomm::sendColourCal()
+{
+  Serial.println("!l,c");
 }
