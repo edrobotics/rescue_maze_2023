@@ -8,655 +8,581 @@ namespace SerialConsole
 {
     internal partial class Program
     {
-        static bool skipNext;
-        static bool returningFromGoal;
-        static bool foundWay;
 
-        static List<byte[]> foundPath = new();
-        static List<byte[]> savedPath = new();
+        //******** Mapping & Checkpoints ********
 
-        // ********************************** Map Navigation ********************************** 
-        /*
-        static void FindPathTo(int _toX, int _toZ, int _map)
+        //static readonly ushort[,] mainMap = new ushort[50, 50]; //W = 0, A = 1, S = 2, D = 3, explored = 4, mapSearched = 5, victim  = 6, ramp = 7, black tile = 8, checkp = 9, blue = 10, crossroad = 11 -more? obstacles?
+        /// <summary>
+        /// 0 = XCoord, 1 = ZCoord, 2 = Map, 3 = direction (on first)
+        /// </summary>
+        static readonly List<byte[]> sinceCheckpoint = new();
+        static readonly List<Map> maps = new();
+        //static readonly List<int[]> mapInfo = new(); //For storing info of where the ramp is
+        static int currentMap = 0;
+        static int currentHeight = 0;
+        static int rampCount = 0;
+        static int savedRampCount = 0;
+
+        static bool reset = false;
+        static int savedMapCount = 1;
+
+
+        // ********************************** Map And Localization Updates ********************************** 
+
+        static void UpdateDirection(int _leftTurns)
         {
-            // Test each cell for options
-            if (_map != currentMap)
+            Log($"change dir from {direction}", false);
+            direction += _leftTurns;
+
+            while (direction > 3)
             {
-                GoBackLevel(_map);
+                direction -= 4;
             }
-
-            toPosX = _toX;
-            toPosZ = _toZ;
-
-            foundWay = false;
-            FindExploredCells(posX, posZ);
-            foundWay = false;
-            driveWay.ForEach(way => Console.WriteLine(way + " , "));
-
-            for (int i = 0; i < maps[currentMap].GetLength(0); i++)
+            while (direction < 0)
             {
-                for (int j = 0; j < maps[currentMap].GetLength(1); j++)
-                {
-                    WriteMapBit(i, j, mapSearched, false);
-                }
+                direction += 4;
             }
-        }*/
-
-        static void GoToRamp(byte[] _ramp) //FIX when ramps done
-        {
-            Log($"Going to ramp at {_ramp[(int)RampStorage.XCoord]},{_ramp[(int)RampStorage.ZCoord]}", false);
-            driveWay = new List<byte[]>(PathTo(_ramp[(int)RampStorage.XCoord], _ramp[(int)RampStorage.ZCoord])) //Way to tile next to ramp
-            {
-                DirToTile(_ramp[(int)RampStorage.RampDirection], _ramp[(int)RampStorage.XCoord], _ramp[(int)RampStorage.ZCoord]) //Driving to the real ramp
-            };
-            if (driveWay.Count <= 1 && _ramp[(int)RampStorage.XCoord] != posX && _ramp[(int)RampStorage.ZCoord] != posZ)
-            {
-                for(int i = 0; i < 5; i++) Log("!!Something is wrong in SearchToRamp, possible ramp storage or mapping error!!", true);
-                throw new Exception("Going To Ramp failed");
-            }
+            Log($"new dir {direction}", true);
         }
 
-        static List<byte[]> PathTo(int _toX, int _toZ)
+        static void KitDirectionUpdate(char _direction)
         {
-            foundPath = new List<byte[]>();
-            if (_toX == posX && _toZ == posZ)
-                return foundPath;
 
-            toPosX = _toX;
-            toPosZ = _toZ;
-
-            foundWay = false;
-            skipNext = false;
-            returningFromGoal = false;
-            //shortenAvailable = false;
-            FindFrom((byte)posX, (byte)posZ);
-
-            if ((foundPath.Count > savedPath.Count || foundPath.Count == 0) && savedPath.Count > 0)
+            if (_direction == 'r')
             {
-                foundPath = new List<byte[]>(savedPath);
+                UpdateDirection(1);
             }
-
-            //driveWay.ForEach(num => Debug.Log(num.X + " , " + num.Z + " ; "));
-            Log($"Found PathTo {_toX},{_toZ} from {posX},{posZ} at {foundPath.Count} length", true);
-            foundPath.ForEach(tile => Log($"::{tile[0]},{tile[1]};", false));
-
-            maps[currentMap].ClearBit(BitLocation.mapSearched);
-            maps[currentMap].ClearBit(BitLocation.inDriveWay);
-
-            savedPath.Clear();
-            if (foundPath.Count == 0 && _toX != posX && _toZ != posZ)
+            else if (_direction == 'l')
             {
-                Log("!!!!!!!!!Could not find path!!!!!!!!!", true);
-                Thread.Sleep(250); //Don't do work here
-                //return false;
-            }
-
-            return foundPath;
-        }
-
-        static void FindFrom(byte _onX, byte _onZ)
-        {
-            Log($"*****{_onX},{_onZ}*****", false);
-            maps[currentMap].WriteBit(_onX, _onZ, BitLocation.inDriveWay, true);
-            if (Math.Abs(_onZ - toPosZ) >= Math.Abs(_onX - toPosX))
-            {
-                if (_onZ <= toPosZ)
-                {
-                    if (!maps[currentMap].ReadBit(_onX, _onZ, BitLocation.backWall)) FindTile(_onX, (byte)(_onZ + 1));
-                    returningFromGoal = false;
-                }
-                else
-                {
-                    if (!maps[currentMap].ReadBit(_onX, _onZ, BitLocation.frontWall)) FindTile(_onX, (byte)(_onZ - 1));
-                    returningFromGoal = false;
-                }
-
-                if (_onX <= toPosX)
-                {
-                    if (!maps[currentMap].ReadBit(_onX, _onZ, BitLocation.leftWall)) FindTile((byte)(_onX + 1), _onZ);
-                    returningFromGoal = false;
-                }
-                else
-                {
-                    if (!maps[currentMap].ReadBit(_onX, _onZ, BitLocation.rightWall)) FindTile((byte)(_onX - 1), _onZ);
-                    returningFromGoal = false;
-                }
-
-                if (_onZ > toPosZ)
-                {
-                    if (!maps[currentMap].ReadBit(_onX, _onZ, BitLocation.backWall)) FindTile(_onX, (byte)(_onZ + 1));
-                    returningFromGoal = false;
-                }
-                else
-                {
-                    if (!maps[currentMap].ReadBit(_onX, _onZ, BitLocation.frontWall)) FindTile(_onX, (byte)(_onZ - 1));
-                    returningFromGoal = false;
-                }
-
-                if (_onX > toPosX)
-                {
-                    if (!maps[currentMap].ReadBit(_onX, _onZ, BitLocation.leftWall)) FindTile((byte)(_onX + 1), _onZ);
-                    returningFromGoal = false;
-                }
-                else
-                {
-                    if (!maps[currentMap].ReadBit(_onX, _onZ, BitLocation.rightWall)) FindTile((byte)(_onX - 1), _onZ);
-                    returningFromGoal = false;
-                }
+                UpdateDirection(-1);
             }
             else
             {
-                if (_onX <= toPosX)
-                {
-                    if (!maps[currentMap].ReadBit(_onX, _onZ, BitLocation.leftWall)) FindTile((byte)(_onX + 1), _onZ);
-                    returningFromGoal = false;
-                }
-                else
-                {
-                    if (!maps[currentMap].ReadBit(_onX, _onZ, BitLocation.rightWall)) FindTile((byte)(_onX - 1), _onZ);
-                    returningFromGoal = false;
-                }
-
-                if (_onZ <= toPosZ)
-                {
-                    if (!maps[currentMap].ReadBit(_onX, _onZ, BitLocation.backWall)) FindTile(_onX, (byte)(_onZ + 1));
-                    returningFromGoal = false;
-                }
-                else
-                {
-                    if (!maps[currentMap].ReadBit(_onX, _onZ, BitLocation.frontWall)) FindTile(_onX, (byte)(_onZ - 1));
-                    returningFromGoal = false;
-                }
-
-                if (_onX > toPosX)
-                {
-                    if (!maps[currentMap].ReadBit(_onX, _onZ, BitLocation.leftWall)) FindTile((byte)(_onX + 1), _onZ);
-                    returningFromGoal = false;
-                }
-                else
-                {
-                    if (!maps[currentMap].ReadBit(_onX, _onZ, BitLocation.rightWall)) FindTile((byte)(_onX - 1), _onZ);
-                    returningFromGoal = false;
-                }
-
-                if (_onZ > toPosZ)
-                {
-                    if (!maps[currentMap].ReadBit(_onX, _onZ, BitLocation.backWall)) FindTile(_onX, (byte)(_onZ + 1));
-                    returningFromGoal = false;
-                }
-                else
-                {
-                    if (!maps[currentMap].ReadBit(_onX, _onZ, BitLocation.frontWall)) FindTile(_onX, (byte)(_onZ - 1));
-                    returningFromGoal = false;
-                }
+                Log($"Dir {_direction} is fake (UpdateDirection)", true);
             }
         }
 
-        static void SearchCell(byte _onX, byte _onZ)
+        static int CharToDirection(char _kitDirection)
         {
-            Log($"*****{_onX},{_onZ}*****", false);
-            if (_onX == toPosX && _onZ == toPosZ)
+            switch (_kitDirection)
             {
-                Log("Found " + foundPath.Count + " long", true);
+                case 'l': //The kit is on the left
+                    return FixDirection(direction + 1);
+                case 'r': //The kit is on the right
+                    return FixDirection(direction - 1);
+                default:
+                    Log(_kitDirection + ": error with kit direction");
+                    dropKits = false;
+                    return 0;
+            }
+        }
 
-                if (foundPath.Count < savedPath.Count || savedPath.Count == 0) //If we found a better path, save it
-                {
-                    savedPath = new List<byte[]>(foundPath);
-                    if (savedPath.Count == Math.Abs(posX - toPosX) + Math.Abs(posZ - toPosZ)) //If this is the shortest possible path (manhattan distance), we are done
-                    {
-                        foundWay = true;
-                    }
-                }
-                skipNext = true; //We have found optimal way from last tile, so we don't need to explore it more
-                returningFromGoal = true; //We are returning to start again
-                return;
+        static bool CheckKitSide(char _side)
+        {
+            Log("Victim here was " + (ReadHere((BitLocation)CharToDirection(_side)) ? "real" : "fake"));
+            return ReadHere((BitLocation)CharToDirection(_side));
+        }
+
+        /// <summary>
+        /// Subtracs or adds 4 until the int is 0<= int <= 3, to make sure that for example adding one to the direction 3 (right) will give the direction 0 (front).
+        /// Can also be used for map bits since I use the same system.
+        /// </summary>
+        /// <returns>An int thats 0,1,2 or 3</returns>
+        static int FixDirection(int _dir)
+        {
+            while (_dir > 3)
+            {
+                _dir -= 4;
+            }
+            while (_dir < 0)
+            {
+                _dir += 4;
+            }
+            return _dir;
+        }
+
+        static int TileToDirection(byte[] _cell)
+        {
+            if (_cell[0] == posX && _cell[1] == posZ - 1)
+            {
+                return 0;
+            }
+            if (_cell[0] == posX - 1 && _cell[1] == posZ)
+            {
+                return 1;
+            }
+            if (_cell[0] == posX && _cell[1] == posZ + 1)
+            {
+                return 2;
+            }
+            if (_cell[0] == posX + 1 && _cell[1] == posZ)
+            {
+                return 3;
             }
 
-            bool returning = returningFromGoal;
-            returningFromGoal = false;
-
-            maps[currentMap].WriteBit(_onX, _onZ, BitLocation.inDriveWay, true);
-            //Better way when these are equal?
-            if (Math.Abs(_onZ - toPosZ) >= Math.Abs(_onX - toPosX))
+            Log("********* ACHTUNG ACHTUNG, DAS IST NICHT GUT ************", true);
+            errors++;
+            Thread.Sleep(10);
+            if (_cell[0] == posX && _cell[1] == posZ)
             {
-                if (_onZ <= toPosZ)
-                {
-                    if (!maps[currentMap].ReadBit(_onX, _onZ, BitLocation.backWall)) FindTile(_onX, (byte)(_onZ + 1));
-                }
-                else
-                {
-                    if (!maps[currentMap].ReadBit(_onX, _onZ, BitLocation.frontWall)) FindTile(_onX, (byte)(_onZ - 1));
-                }
+                return direction;
+            }
+            errors += 2;
 
-                if (_onX <= toPosX)
-                {
-                    if (!maps[currentMap].ReadBit(_onX, _onZ, BitLocation.rightWall)) FindTile((byte)(_onX + 1), _onZ);
-                }
-                else
-                {
-                    if (!maps[currentMap].ReadBit(_onX, _onZ, BitLocation.leftWall)) FindTile((byte)(_onX - 1), _onZ);
-                }
+            if (driveWay.Count > 0)
+            {
+                Log("Finding new path");
+                FindPathHere(driveWay.Last()[0], driveWay.Last()[1]);
+                return TileToDirection(driveWay[0]);
+            }
 
-                if (_onZ > toPosZ)
-                {
-                    if (!maps[currentMap].ReadBit(_onX, _onZ, BitLocation.backWall)) FindTile(_onX, (byte)(_onZ + 1));
-                }
-                else
-                {
-                    if (!maps[currentMap].ReadBit(_onX, _onZ, BitLocation.frontWall)) FindTile(_onX, (byte)(_onZ - 1));
-                }
+            Log("DriveWay is finished, but still error, strange", true);
+            return direction;
+        }
 
-                if (_onX > toPosX)
-                {
-                    if (!maps[currentMap].ReadBit(_onX, _onZ, BitLocation.rightWall)) FindTile((byte)(_onX + 1), _onZ);
-                }
-                else
-                {
-                    if (!maps[currentMap].ReadBit(_onX, _onZ, BitLocation.leftWall)) FindTile((byte)(_onX - 1), _onZ);
-                }
+        static byte[] DirToTile(int _globalDir, byte _x, byte _z)
+        {
+            _globalDir = FixDirection(_globalDir);
+            if (_globalDir == 0)
+            {
+                _z -= 1;
+            }
+            if (_globalDir == 1)
+            {
+                _x -= 1;
+            }
+            if (_globalDir == 2)
+            {
+                _z += 1;
+            }
+            if (_globalDir == 3)
+            {
+                _x += 1;
+            }
+            return new byte[] { _x, _z };
+        }
+
+        static bool ShouldGoTo(int _posX, int _posZ)
+        {
+            return !maps[currentMap].ReadBit(_posX, _posZ, BitLocation.explored) && !maps[currentMap].ReadBit(_posX, _posZ, BitLocation.blackTile);
+        }
+
+        static void UpdateLocation() //ONLY USE AFTER YOU KNOW THERE IS A NEW CELL
+        {
+            if (locationUpdated)
+            {
+                return;
+            }
+            locationUpdated = true;
+
+            UpdateDirection(0);
+            if (direction == 0)
+            {
+                posZ--;
+                if (posZ < lowestZ)
+                    lowestZ = posZ;
+            }
+            else if (direction == 1)
+            {
+                posX--;
+                if (posX < lowestX)
+                    lowestX = posX;
+            }
+            else if (direction == 2)
+            {
+                posZ++;
+                if (posZ > highestZ)
+                    highestZ = posZ;
+            }
+            else if (direction == 3)
+            {
+                posX++;
+                if (posX > highestX)
+                    highestX = posX;
             }
             else
             {
-                if (_onX <= toPosX)
-                {
-                    if (!maps[currentMap].ReadBit(_onX, _onZ, BitLocation.rightWall)) FindTile((byte)(_onX + 1), _onZ);
-                }
-                else
-                {
-                    if (!maps[currentMap].ReadBit(_onX, _onZ, BitLocation.leftWall)) FindTile((byte)(_onX - 1), _onZ);
-                }
-
-                if (_onZ <= toPosZ)
-                {
-                    if (!maps[currentMap].ReadBit(_onX, _onZ, BitLocation.backWall)) FindTile(_onX, (byte)(_onZ + 1));
-                }
-                else
-                {
-                    if (!maps[currentMap].ReadBit(_onX, _onZ, BitLocation.frontWall)) FindTile(_onX, (byte)(_onZ - 1));
-                }
-
-                if (_onX > toPosX)
-                {
-                    if (!maps[currentMap].ReadBit(_onX, _onZ, BitLocation.rightWall)) FindTile((byte)(_onX + 1), _onZ);
-                }
-                else
-                {
-                    if (!maps[currentMap].ReadBit(_onX, _onZ, BitLocation.leftWall)) FindTile((byte)(_onX - 1), _onZ);
-                }
-
-                if (_onZ > toPosZ)
-                {
-                    if (!maps[currentMap].ReadBit(_onX, _onZ, BitLocation.backWall)) FindTile(_onX, (byte)(_onZ + 1));
-                }
-                else
-                {
-                    if (!maps[currentMap].ReadBit(_onX, _onZ, BitLocation.frontWall)) FindTile(_onX, (byte)(_onZ - 1));
-                }
+                errors++;
+                for (int i = 0; i < 5; i++) Log("Something wrong with direction in UpdateLocation!!!", true);
+                throw new Exception("HOW IS THIS EVEN POSSIBLE, SOMEHING VERY WRONG WITH UPDATE LOCATION");
             }
 
-            maps[currentMap].WriteBit(_onX, _onZ, BitLocation.inDriveWay, false);
-            returningFromGoal = returning || returningFromGoal;
-            if (!returningFromGoal)
+            if (posX > maps[currentMap].Length)
             {
-                maps[currentMap].WriteBit(_onX, _onZ, BitLocation.mapSearched, true);
+                posX = maps[currentMap].Length;
+                for (int i = 0; i < 5; i++) Log("!!!Error PosX hi", true);
+                errors += 2;
             }
+            if (posX < 0)
+            {
+                posX = 0;
+                for (int i = 0; i < 5; i++) Log("!!!Error posX lo", true);
+                errors += 2;
+            }
+            if (posZ > maps[currentMap].Length)
+            {
+                posZ = maps[currentMap].Length;
+                for (int i = 0; i < 5; i++) Log("!!!Error PosZ hi", true);
+                errors += 2;
+            }
+            if (posZ < 0)
+            {
+                posZ = 0;
+                for (int i = 0; i < 5; i++) Log("!!!Error posZ lo", true);
+                errors += 2;
+            }
+            AddSinceCheckPoint();
 
-            skipNext = false;
+            if (posX == maps[currentMap].StartPosX && posZ == maps[currentMap].StartPosZ && currentMap == 0 && timer.ElapsedMilliseconds > (7 * 60 + 30) * 1000)
+            {
+                Thread.Sleep(30_000);
+            }
         }
 
-        static void FindTile(byte _onX, byte _onZ)
+        static void UpdateMap()//Behind - Always false when driving normally
         {
-            if (skipNext || foundWay)
-                return;
+            SensorCheck();
 
+            bool wallNZ;
+            bool wallNX;
+            bool wallPZ;
+            bool wallPX;
+
+            if (direction == 0)
+            {
+                //SensorCheck();
+                wallNZ = frontPresent; //front is front
+                wallNX = leftPresent;
+                wallPZ = false;
+                wallPX = rightPresent;
+            }
+            else if (direction == 1)
+            {
+                //SensorCheck();
+                wallNZ = rightPresent; //right is front
+                wallNX = frontPresent;
+                wallPZ = leftPresent;
+                wallPX = false;
+            }
+            else if (direction == 2)
+            {
+                //SensorCheck();
+                wallNZ = false; //back is front
+                wallNX = rightPresent;
+                wallPZ = frontPresent;
+                wallPX = leftPresent;
+            }
+            else if (direction == 3)
+            {
+                //SensorCheck();
+                wallNZ = leftPresent; //left is front
+                wallNX = false;
+                wallPZ = rightPresent;
+                wallPX = frontPresent;
+            }
+            else
+            {
+                Log("ERROR", true);
+                throw new Exception("THIS SHOULD NOT BE POSSIBLE, direction out of bounds");
+            }
+
+            //Double check
+            if (ReadHere(BitLocation.explored))
+            {
+                if (!(wallNZ == ReadHere(BitLocation.frontWall) &&
+                    wallNX == ReadHere(BitLocation.leftWall) &&
+                    wallPZ == ReadHere(BitLocation.backWall) &&
+                    wallPX == ReadHere(BitLocation.rightWall)))
+                {
+                    for (int i = 0; i < 5; i++) Log("!!! Error in mapping, probably !!!", true);
+                    errors += 4;
+                }
+            }
+
+            WriteHere(BitLocation.frontWall, wallNZ);
+            WriteHere(BitLocation.leftWall, wallNX);
+            WriteHere(BitLocation.backWall, wallPZ);
+            WriteHere(BitLocation.rightWall, wallPX);
+            WriteHere(BitLocation.explored, true);
+
+            /*if (posZ - 1 >= 0 && !ReadMapBit(posX, posZ - 1, explored)) //If there is an unexplored position one +Z
+            {
+                SetMapBit(posX, posZ - 1, 0b00000100, wallPZ);
+            }
+            if (posX - 1 >= 0 && !ReadMapBit(posX - 1, posZ, explored)) //If there is an unexplored position one step -X
+            {
+                SetMapBit(posX - 1, posZ, 0b00001000, wallNX);
+            }
+            if (posZ + 1 < byteMap.GetLength(1) && !ReadMapBit(posX, posZ + 1, explored)) //If there is an unexplored position one step -Z
+            {
+                SetMapBit(posX, posZ + 1, 0b00000001, wallNZ);
+            }
+            if (posX + 1 < byteMap.GetLength(0) && !ReadMapBit(posX + 1, posZ, explored)) //If there is an unexplored position one step forward
+            {
+                SetMapBit(posX + 1, posZ, 0b00000010, wallPX);
+            }*/
+
+            Log("-----" + posX + " , " + posZ + "-----" + " : ", true);
+
+            string _log = "";
+            for (int i = 15; i >= 0; i--)
+            {
+                _log += ReadHere((BitLocation)i) ? "1" : "0";
+            }
+            Log(_log, false);
+        }
+
+        static void UpdateMapFull(bool _turnBack)
+        {
+            UpdateMap();
+            Turn('l');
+            SensorCheck();
+            WriteHere((BitLocation)FixDirection(direction + 1), leftPresent); //wall locally behind set'
+            if (_turnBack)
+                Turn('r');
+        }
+
+
+        // ********************************** Checkpoints ********************************** 
+
+        static void Reset()
+        {
+            Log("Resetting", true);
+            reset = true;
             try
             {
-                if ((maps[currentMap].ReadBit(_onX, _onZ, BitLocation.explored) && !maps[currentMap].ReadBit(_onX, _onZ, BitLocation.mapSearched) && 
-                    !maps[currentMap].ReadBit(_onX, _onZ, BitLocation.inDriveWay) && !maps[currentMap].ReadBit(_onX, _onZ, BitLocation.blackTile) && 
-                    !maps[currentMap].ReadBit(_onX, _onZ, BitLocation.ramp)) || (_onX == toPosX && _onZ == toPosZ))
+                serialPort1.DiscardInBuffer();
+                serialPort1.DiscardOutBuffer();
+                driveWay.Clear();
+
+                rampCount = savedRampCount;
+                while (savedMapCount < maps.Count)
                 {
-                    foundPath.Add(new byte[] {_onX, _onZ });
-                    SearchCell(_onX, _onZ);
-                    if (!foundWay)
-                        foundPath.RemoveAt(foundPath.Count - 1);
+                    maps.RemoveAt(maps.Count - 1);
+                    Log("!!!! DELETING MAP BC RESET !!!!", true);
+                }
+                foreach (Map map in maps)
+                {
+                    map.ResetInfo();
+                }
+
+                if (sinceCheckpoint.Count > 0)
+                {
+                    byte[] _checkpointXZ = sinceCheckpoint[0];
+                    posX = _checkpointXZ[0];
+                    posZ = _checkpointXZ[1];
+                    currentMap = _checkpointXZ[2];
+                    direction = _checkpointXZ[3];
+
+                    Log("Started reset", true);
+                    for (int i = sinceCheckpoint.Count - 1; i >= 0; i--)
+                    {
+                        byte[] _coords = sinceCheckpoint[i];
+                        maps[_coords[2]].ClearTile(_coords[0], _coords[1], BitLocation.victim);
+                        sinceCheckpoint.RemoveAt(i);
+                    }
                 }
             }
             catch (Exception e)
             {
                 LogException(e);
-                for (int i = 0; i < 3; i++) Log("!!!!!!FindTile -- index out of bounds(?)!!!!!!", true);
+                for (int i = 0; i < 3; i++) Log($"!!Reset error, very bad:!!", true);
+                posX = 25;
+                posZ = 25;
+                currentMap = 0;
+                direction = 0;
+                UpdateMapFull(false);
+                AddSinceCheckPoint();
+                throw new Exception("Reset error", e);
+            }
+
+            Thread.Sleep(10);
+            serialPort1.DiscardInBuffer();
+            serialPort1.DiscardOutBuffer();
+
+            dropKits = false;
+            //SerialComm("!w");
+            Thread.Sleep(300);
+
+            UpdateMapFull(true);
+            AddSinceCheckPoint();
+            Thread.Sleep(10);
+        }
+
+        static void AddSinceCheckPoint()
+        {
+            if (sinceCheckpoint.Count == 0)
+            {
+                sinceCheckpoint.Add(new byte[] { (byte)posX, (byte)posZ, (byte)currentMap, (byte)direction });
+            }
+            else if (!ReadHere(BitLocation.explored))
+            {
+                sinceCheckpoint.Add(new byte[] { (byte)posX, (byte)posZ, (byte)currentMap });
             }
         }
 
-        /*
-        static void FindNZ(byte _onX, byte _onZ)
+        static void VisitedCheckpoint()
         {
-            if (skipNext)
+            sinceCheckpoint.Clear();
+            savedMapCount = maps.Count;
+            savedRampCount = rampCount;
+            foreach (Map map in maps)
             {
-                return;
+                map.SaveInfo();
             }
-            //if (shortenAvailable)
-            //{
-            //    if (shortenToX == _onX && shortenToZ == _onZ)
-            //    {
-            //        shortenAvailable = false;
-            //    }
-            //    else
-            //    {
-            //        return;
-            //    }
-            //}
-            if (!foundWay && _onZ - 1 >= 0 /*&& !ReadMapBit(_onX, _onZ, shortestPath)) //If there is a position one step +Z
-            {
-                if (ReadMapBit(_onX, _onZ - 1, BitLocation.explored) && !ReadMapBit(_onX, _onZ - 1, BitLocation.mapSearched) && !ReadMapBit(_onX, _onZ, BitLocation.frontWall) && !ReadMapBit(_onX, _onZ - 1, BitLocation.inDriveWay))
-                {
-                    driveWay.Add(new byte[] { _onX, (byte)(_onZ - 1) });
-                    SearchCell(_onX, (byte)(_onZ - 1));
-                    if (!foundWay)
-                        driveWay.RemoveAt(driveWay.Count - 1);
-                }
-            }
+            AddSinceCheckPoint();
         }
-        static void FindPZ(byte _onX, byte _onZ)
+
+        // ********************************** Read And Write Map ********************************** 
+
+        static void WriteNextTo(BitLocation _write, bool value, Directions _toDirection)
         {
-            if (skipNext)
+            switch (FixDirection(direction + (int)_toDirection))
             {
-                return;
-            }
-            //if (shortenAvailable)
-            //{
-            //    if (shortenToX == _onX && shortenToZ == _onZ)
-            //    {
-            //        shortenAvailable = false;
-            //    }
-            //    else
-            //    {
-            //        return;
-            //    }
-            //}
-            if (!foundWay && _onZ + 1 < maps[currentMap].GetLength(1)) //If there is a position one step -Z
-            {
-                if (ReadMapBit(_onX, _onZ + 1, BitLocation.explored) && !ReadMapBit(_onX, _onZ + 1, BitLocation.mapSearched) && !ReadMapBit(_onX, _onZ, BitLocation.backWall) && !ReadMapBit(_onX, _onZ + 1, BitLocation.inDriveWay))
-                {
-                    driveWay.Add(new byte[] { _onX, (byte)(_onZ + 1) });
-                    SearchCell(_onX, (byte)(_onZ + 1));
-                    if (!foundWay)
-                        driveWay.RemoveAt(driveWay.Count - 1);
-                }
-            }
-        }
-        static void FindPX(byte _onX, byte _onZ)
-        {
-            if (skipNext)
-            {
-                return;
-            }
-            //if (shortenAvailable)
-            //{
-            //    if (shortenToX == _onX && shortenToZ == _onZ)
-            //    {
-            //        shortenAvailable = false;
-            //    }
-            //    else
-            //    {
-            //        return;
-            //    }
-            //}
-            if (!foundWay && _onX + 1 < maps[currentMap].GetLength(1)) //If there is a position one step +X
-            {
-                if (ReadMapBit(_onX + 1, _onZ, BitLocation.explored) && !ReadMapBit(_onX + 1, _onZ, BitLocation.mapSearched) && !ReadMapBit(_onX, _onZ, BitLocation.rightWall) && !ReadMapBit(_onX + 1, _onZ, BitLocation.inDriveWay))
-                {
-                    driveWay.Add(new byte[] { (byte)(_onX + 1), _onZ });
-                    SearchCell((byte)(_onX + 1), _onZ);
-                    if (!foundWay)
-                        driveWay.RemoveAt(driveWay.Count - 1);
-                }
-            }
-        }
-        static void FindNX(byte _onX, byte _onZ)
-        {
-            if (skipNext)
-            {
-                return;
-            }
-            //if (shortenAvailable)
-            //{
-            //    if (shortenToX == _onX && shortenToZ == _onZ)
-            //    {
-            //        shortenAvailable = false;
-            //    }
-            //    else
-            //    {
-            //        return;
-            //    }
-            //}
-
-            if (!foundWay && _onX - 1 >= 0) //If there is a position one step -X
-            {
-                if (ReadMapBit(_onX - 1, _onZ, BitLocation.explored) && !ReadMapBit(_onX - 1, _onZ, BitLocation.mapSearched) && !ReadMapBit(_onX, _onZ, BitLocation.leftWall) && !ReadMapBit(_onX - 1, _onZ, BitLocation.inDriveWay))
-                {
-                    driveWay.Add(new byte[] { (byte)(_onX - 1), _onZ });
-                    SearchCell((byte)(_onX - 1), _onZ);
-                    if (!foundWay)
-                        driveWay.RemoveAt(driveWay.Count - 1);
-                }
-            }
-        }*/
-        /*
-        static void ReturnToStart()
-        {
-            FindPathTo(startPosX, startPosZ, 0);
-            Thread.Sleep(100);
-
-            while (driveWay.Count > 0)
-            {
-                TurnTo(driveWay[0]);
-                driveWay.RemoveAt(0);
-                Drive();
-            }
-
-            Thread.Sleep(30000);
-        }
-        
-        static void FindExploredCells(int _onX, int _onZ)
-        {
-            if (_onX == toPosX && _onZ == toPosZ)
-            {
-                foundWay = true;
-            }
-
-            if (!foundWay && !ReadMapBit(_onX, _onZ, 5) && !ShortenPath(_onX, _onZ))
-            {
-                WriteMapBit(_onX, _onZ, mapSearched, true);
-
-                if (_onZ > toPosZ)
-                {
-                    if (!foundWay && _onZ - 1 >= 0) //If there is a position one step +Z
-                    {
-                        if (ReadMapBit(_onX, _onZ - 1, explored) && !ReadMapBit(_onX, _onZ - 1, mapSearched) && !ReadMapBit(_onX, _onZ, 0) && !ReadMapBit(_onX, _onZ - 1, blackTile))
-                        {
-                            driveWay.Add(0);
-                            FindExploredCells(_onX, _onZ - 1);
-                            if (!foundWay)
-                                driveWay.RemoveAt(driveWay.Count - 1);
-                        }
-                    }
-                }
-                else
-                {
-                    if (!foundWay && _onZ + 1 < maps[currentMap].GetLength(1)) //If there is a position one step -Z
-                    {
-                        if (ReadMapBit(_onX, _onZ + 1, explored) && !ReadMapBit(_onX, _onZ + 1, mapSearched) && !ReadMapBit(_onX, _onZ, 2) && !ReadMapBit(_onX, _onZ + 1, blackTile))
-                        {
-                            driveWay.Add(2);
-                            FindExploredCells(_onX, _onZ + 1);
-                            if (!foundWay)
-                                driveWay.RemoveAt(driveWay.Count - 1);
-                        }
-                    }
-                }
-
-                if (_onX > toPosX)
-                {
-                    if (!foundWay && _onX + 1 < maps[currentMap].GetLength(0)) //If there is a position one step +X
-                    {
-                        if (ReadMapBit(_onX + 1, _onZ, explored) && !ReadMapBit(_onX + 1, _onZ, mapSearched) && !ReadMapBit(_onX, _onZ, 3) && !ReadMapBit(_onX + 1, _onZ, blackTile))
-                        {
-                            driveWay.Add(3);
-                            FindExploredCells(_onX + 1, _onZ);
-                            if (!foundWay)
-                                driveWay.RemoveAt(driveWay.Count - 1);
-                        }
-                    }
-
-                }
-                else
-                {
-                    if (!foundWay && _onX - 1 >= 0) //If there is a position one step -X
-                    {
-                        if (ReadMapBit(_onX - 1, _onZ, explored) && !ReadMapBit(_onX - 1, _onZ, mapSearched) && !ReadMapBit(_onX, _onZ, 1) && !ReadMapBit(_onX - 1, _onZ, blackTile))
-                        {
-                            driveWay.Add(1);
-                            FindExploredCells(_onX - 1, _onZ);
-                            if (!foundWay)
-                                driveWay.RemoveAt(driveWay.Count - 1);
-                        }
-                    }
-                }
-
-                if (_onZ <= toPosZ)
-                {
-                    if (!foundWay && _onZ - 1 >= 0) //If there is a position one step +Z
-                    {
-                        if (ReadMapBit(_onX, _onZ - 1, explored) && !ReadMapBit(_onX, _onZ - 1, mapSearched) && !ReadMapBit(_onX, _onZ, 0) && !ReadMapBit(_onX, _onZ - 1, blackTile))
-                        {
-                            driveWay.Add(0);
-                            FindExploredCells(_onX, _onZ - 1);
-                            if (!foundWay)
-                                driveWay.RemoveAt(driveWay.Count - 1);
-                        }
-                    }
-                }
-                else
-                {
-                    if (!foundWay && _onZ + 1 < maps[currentMap].GetLength(1)) //If there is a position one step -Z
-                    {
-                        if (ReadMapBit(_onX, _onZ + 1, explored) && !ReadMapBit(_onX, _onZ + 1, mapSearched) && !ReadMapBit(_onX, _onZ, 2) && !ReadMapBit(_onX, _onZ + 1, blackTile))
-                        {
-                            driveWay.Add(2);
-                            FindExploredCells(_onX, _onZ + 1);
-                            if (!foundWay)
-                                driveWay.RemoveAt(driveWay.Count - 1);
-                        }
-                    }
-                }
-
-                if (_onX <= toPosX)
-                {
-                    if (!foundWay && _onX + 1 < maps[currentMap].GetLength(0)) //If there is a position one step +X
-                    {
-                        if (ReadMapBit(_onX + 1, _onZ, explored) && !ReadMapBit(_onX + 1, _onZ, mapSearched) && !ReadMapBit(_onX, _onZ, 3) && !ReadMapBit(_onX + 1, _onZ, blackTile))
-                        {
-                            driveWay.Add(3);
-                            FindExploredCells(_onX + 1, _onZ);
-                            if (!foundWay)
-                                driveWay.RemoveAt(driveWay.Count - 1);
-                        }
-                    }
-                }
-                else
-                {
-                    if (!foundWay && _onX - 1 >= 0) //If there is a position one step -X
-                    {
-                        if (ReadMapBit(_onX - 1, _onZ, explored) && !ReadMapBit(_onX - 1, _onZ, mapSearched) && !ReadMapBit(_onX, _onZ, 1) && !ReadMapBit(_onX - 1, _onZ, blackTile))
-                        {
-                            driveWay.Add(1);
-                            FindExploredCells(_onX - 1, _onZ);
-                            if (!foundWay)
-                                driveWay.RemoveAt(driveWay.Count - 1);
-                        }
-                    }
-                }
+                case 0:
+                    maps[currentMap].WriteBit(posX, posZ - 1, _write, value);
+                    break;
+                case 1:
+                    maps[currentMap].WriteBit(posX - 1, posZ, _write, value);
+                    break;
+                case 2:
+                    maps[currentMap].WriteBit(posX, posZ + 1, _write, value);
+                    break;
+                case 3:
+                    maps[currentMap].WriteBit(posX + 1, posZ, _write, value);
+                    break;
+                default:
+                    Log("WriteNextTo Direction error ", true);
+                    break;
             }
         }
 
-        
-        static bool ShortenPath(int _onX, int _onZ)
+        static bool ReadNextTo(BitLocation _read, Directions _toDirection)
         {
-            if (shortenAvailable)
+            switch (FixDirection(direction + (int)_toDirection))
             {
-                if (shortenToX == _onX && shortenToZ == _onZ)
-                {
-                    shortenAvailable = false;
-                }
-                else
-                {
-                    WriteMapBit(_onX, _onZ, mapSearched, false);
-                    return true;
-                }
+                case 0:
+                    return maps[currentMap].ReadBit(posX, posZ - 1, _read);
+                case 1:
+                    return maps[currentMap].ReadBit(posX - 1, posZ, _read);
+                case 2:
+                    return maps[currentMap].ReadBit(posX, posZ + 1, _read);
+                case 3:
+                    return maps[currentMap].ReadBit(posX + 1, posZ, _read);
+                default:
+                    Log("ReadNextTo Direction error ", true);
+                    return false;
             }
-
-            if (!foundWay && !ReadMapBit(_onX, _onZ, mapSearched))
-            {
-                if (_onZ - 1 >= 0) //If there is a position one +Z, direction is W
-                {
-                    if (ReadMapBit(_onX, _onZ - 1, explored) && !ReadMapBit(_onX, _onZ, 0))
-                    {
-                        if (ReadMapBit(_onX, _onZ - 1, mapSearched) && driveWay.Last() != 2)
-                        {
-                            shortenToX = _onX;
-                            shortenToZ = _onZ - 1;
-                            shortenAvailable = true;
-                            return true;
-                        }
-                    }
-                }
-
-                if (_onX - 1 >= 0) //If there is a position one step -X
-                {
-                    if (ReadMapBit(_onX - 1, _onZ, explored) && !ReadMapBit(_onX, _onZ, 1))
-                    {
-                        if (ReadMapBit(_onX - 1, _onZ, mapSearched) && driveWay.Last() != 3)
-                        {
-                            shortenToX = _onX - 1;
-                            shortenToZ = _onZ;
-                            shortenAvailable = true;
-                            return true;
-                        }
-                    }
-                }
-
-                if (_onZ + 1 < maps[currentMap].GetLength(1)) //If there is a position one step -Z
-                {
-                    if (ReadMapBit(_onX, _onZ + 1, explored) && !ReadMapBit(_onX, _onZ, 2))
-                    {
-                        if (ReadMapBit(_onX, _onZ + 1, mapSearched) && driveWay.Last() != 0)
-                        {
-                            shortenToX = _onX;
-                            shortenToZ = _onZ + 1;
-                            shortenAvailable = true;
-                            return true;
-                        }
-                    }
-                }
-
-                if (_onX + 1 < maps[currentMap].GetLength(0)) //If there is a position one step +X
-                {
-                    if (ReadMapBit(_onX + 1, _onZ, explored) && !ReadMapBit(_onX, _onZ, 3))
-                    {
-                        if (ReadMapBit(_onX + 1, _onZ, mapSearched) && driveWay.Last() != 1)
-                        {
-                            shortenToX = _onX + 1;
-                            shortenToZ = _onZ;
-                            shortenAvailable = true;
-                            return true;
-                        }
-                    }
-                }
-            }
-
-            return false;
         }
-        */
+
+        /// <summary>Writes a bit on the current map and current position </summary>
+        static void WriteHere(BitLocation _write, bool _value)
+        {
+            maps[currentMap].WriteBit(posX, posZ, _write, _value);
+        }
+
+        /// <summary>Reads a bit on the current map and current position </summary>
+        static bool ReadHere(BitLocation _read)
+        {
+            return maps[currentMap].ReadBit(posX, posZ, _read);
+        }
+
+
+        /// <summary>Searches from this tile to another tile</summary><returns>The path to the tile</returns>
+        static void FindPathHere(int _toX, int _toZ)
+        {
+            driveWay = new List<byte[]>(maps[currentMap].PathTo(_toX, _toZ, posX, posZ));
+        }
+
+        static List<byte[]> PathToStart()
+        {
+            List<byte[]> fullPath = new();
+            List<byte[]> path;
+            byte _simMap = (byte)currentMap;
+            byte _simX = (byte)posX;
+            byte _simZ = (byte)posZ;
+
+            byte[] _ramp;
+            byte[] _tile2;
+            byte[] _newInfo;
+
+            while (!(_simMap != 0 && _simX == maps[0].StartPosX && _simZ == maps[0].StartPosZ))
+            {
+                Log("(Re?)started path finding to start", true);
+                while (_simMap != 0)
+                {
+                    Log($"On map {_simMap}", true);
+                    //The first ramp to the level, will lead us back to the first map
+                    _ramp = maps[currentMap].Ramps[0];
+
+                    //The tile we are searching to, to be able to go down the ramp
+                    _tile2 = DirToTile(_ramp[(int)RampStorage.RampDirection], _ramp[(int)RampStorage.XCoord], _ramp[(int)RampStorage.ZCoord]);
+
+                    path = new List<byte[]>(maps[_simMap].PathTo(_tile2[0], _tile2[1], _simX, _simZ));
+
+                    //If we cannot find a path to the ramp, try other maps
+                    for (int i = 0; path.Count == 0; i++)
+                    {
+                        //New ramp in acsending order, we want the first possible
+                        _ramp = maps[currentMap].Ramps[i];
+
+                        //The tile we are searching to, to be able to go down the ramp
+                        _tile2 = DirToTile(_ramp[(int)RampStorage.RampDirection], _ramp[(int)RampStorage.XCoord], _ramp[(int)RampStorage.ZCoord]);
+
+                        path = new List<byte[]>(maps[_simMap].PathTo(_tile2[0], _tile2[1], _simX, _simZ));
+                    }
+
+                    fullPath.AddRange(path);
+                    _newInfo = maps[_ramp[(int)RampStorage.ConnectedMap]].GetRampAt(_ramp[(int)RampStorage.RampIndex]);
+                    _simMap = _ramp[(int)RampStorage.ConnectedMap];
+                    _simX = _newInfo[(int)RampStorage.XCoord];
+                    _simZ = _newInfo[(int)RampStorage.ZCoord];
+                }
+
+                //When we are on the first map, find our way to the start
+                path = new List<byte[]>(maps[_simMap].PathTo((byte)maps[0].StartPosX, (byte)maps[0].StartPosZ, _simX, _simZ));
+                if (path.Count != 0 || (_simX != maps[0].StartPosX && _simZ != maps[0].StartPosZ))
+                {
+                    fullPath.AddRange(path);
+                    Log("Found path to start", true);
+                    return fullPath;
+                }
+
+                //If we did not find a path to start, there might be
+                for (int i = 0; path.Count == 0; i++)
+                {
+                    //Path down ramp will be path to ramp 1 + going the ramp
+                    _ramp = maps[currentMap].Ramps[i];
+
+                    //The tile we are searching to, to be able to go down the ramp
+                    _tile2 = DirToTile(_ramp[(int)RampStorage.RampDirection], _ramp[(int)RampStorage.XCoord], _ramp[(int)RampStorage.ZCoord]);
+
+                    path = new List<byte[]>(maps[_simMap].PathTo(_tile2[0], _tile2[1], _simX, _simZ));
+
+                    _newInfo = maps[_ramp[(int)RampStorage.ConnectedMap]].GetRampAt(_ramp[(int)RampStorage.RampIndex]);
+                    _simMap = _ramp[(int)RampStorage.ConnectedMap];
+                    _simX = _newInfo[(int)RampStorage.XCoord];
+                    _simZ = _newInfo[(int)RampStorage.ZCoord];
+                }
+
+                fullPath.AddRange(path);
+            }
+
+            return fullPath;
+        }
+
+        static void GoToRamp(byte[] _ramp)
+        {
+            Log($"Going to ramp at {_ramp[(int)RampStorage.XCoord]},{_ramp[(int)RampStorage.ZCoord]}", false);
+            driveWay = new List<byte[]>(maps[currentMap].PathTo(_ramp[(int)RampStorage.XCoord], _ramp[(int)RampStorage.ZCoord], posX, posZ)) //Way to tile next to ramp
+            {
+                DirToTile(_ramp[(int)RampStorage.RampDirection], _ramp[(int)RampStorage.XCoord], _ramp[(int)RampStorage.ZCoord]) //Driving through the real ramp
+            };
+            if (driveWay.Count <= 1 && _ramp[(int)RampStorage.XCoord] != posX && _ramp[(int)RampStorage.ZCoord] != posZ)
+            {
+                for (int i = 0; i < 5; i++) Log("!!Something is wrong in SearchToRamp, possible ramp storage or mapping error!!", true);
+                throw new Exception("Going To Ramp failed");
+            }
+        }
     }
 }

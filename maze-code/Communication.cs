@@ -43,8 +43,12 @@ namespace SerialConsole
             Success,
             [Command("!l")]
             LOP,
-            [Command("i")]
-            Interrupt
+            [Command(",i")]
+            Interrupt,
+            [Command("!c")]
+            Cancelled,
+            [Command("!f")]
+            Failed
         }
 
         //******** Communication ********
@@ -74,6 +78,12 @@ namespace SerialConsole
                 Thread.Sleep(10);
                 try
                 {
+                    if (!client.Connected)
+                    {
+                        client = listener.AcceptTcpClient();
+                        stream = client.GetStream();
+                    }
+
                     byte[] _buffer = new byte[128];
                     stream.Read(_buffer, 0, _buffer.Length);
                     int _recv = 0;
@@ -105,7 +115,8 @@ namespace SerialConsole
                     Log("_server_: Client failure, retrying...", true);
                     if (!client.Connected)
                     {
-                        stream = listener.AcceptTcpClient().GetStream();
+                        client = listener.AcceptTcpClient();
+                        stream = client.GetStream();
                     }
                 }
                 //listener.Stop();
@@ -123,11 +134,11 @@ namespace SerialConsole
                 try
                 {
                     Log($"Updating checkpoint direction", true);
-                    sinceCheckpoint[0][3] = (byte)direction; 
+                    sinceCheckpoint[0][3] = (byte)direction;
                 }
-                catch (Exception e) 
+                catch (Exception e)
                 {
-                    LogException(e); 
+                    LogException(e);
                     Log("-Could not update checkpoint direction", true);
                 }
             }
@@ -143,6 +154,9 @@ namespace SerialConsole
             //Raw, as drive has higher risk of failure and failures need to be handled differently to avoid getting stuck
             string _recived = SerialRaw(SendCommands.Drive.GetCommand(), true, true);
 
+            if (reset)
+                return;
+
             //*** Interpret data ***
 
             try
@@ -156,15 +170,19 @@ namespace SerialConsole
                 {
                     throw new Exception("Wrong answer format - no a ");
                 }
+
+                errors--; //If it works, decrease errors
             }
             catch (Exception e) //Something is wrong, check sensors and try again or update map
             {
+                if (_recived.Contains(RecivedCommands.LOP.GetCommand()))
+                    return;
                 Log($"{_recived}; Something went wrong", true);
                 LogException(e);
-                
+
                 SensorCheck();
                 Log("There is " + (frontPresent ? "" : "not ") + "a wall in front", true);
-                Log($"(;frontPresent = {frontPresent})", true);
+                Log($"(frontPresent = {frontPresent})", true);
                 if (!frontPresent && !ReadNextTo(BitLocation.blackTile, Directions.front))
                 {
                     Log("Retrying", true);
@@ -174,12 +192,12 @@ namespace SerialConsole
                 else
                 {
                     Log("Updating map", true);
-                    UpdateMapFull();
+                    UpdateMapFull(true);
                     if (driveWay.Count > 0)
                     {
                         Log("Nav via driveWay failed");
                         byte[] toPos = driveWay.Last();
-                        driveWay = new List<byte[]>(PathTo(toPos[0], toPos[1]));
+                        FindPathHere(toPos[0], toPos[1]);
                     }
                     return;
                 }
@@ -205,7 +223,16 @@ namespace SerialConsole
                 if (_driveInfo[2].Contains((char)TileFloors.Ramp) && _checkRamps && !_driveInfo[1].Contains((char)TileFloors.Black)) //Went up a ramp
                 {
                     Log($"recived ramp: {_recived}", true);//,horisontell,vertikal
-                    RampDriven(direction);
+                    try
+                    {
+                        RampDriven(direction, int.Parse(_driveInfo[3]), int.Parse(_driveInfo[4])); //Handles the ramp, creates a new map and recalculates position and height
+                    }
+                    catch (Exception e)
+                    {
+                        LogException(e);
+                        Log("!!! Very bad, ramp floor handling failed !!!");
+                        throw new Exception("Floor handling ramp failed, which is very bad", e);
+                    }
 
                     if (_driveInfo[1].Contains((char)TileFloors.CheckPoint))
                     {
@@ -217,6 +244,7 @@ namespace SerialConsole
                     {
                         WriteHere(BitLocation.blueTile, true);
                     }
+                    UpdateMap();
                 }
                 else
                 {
@@ -273,13 +301,13 @@ namespace SerialConsole
             if (_direction == 'l')
             {
                 Log("Turning left", true);
-                SerialComm(SendCommands.Turn.GetCommand("l"), false, false); //turn left
+                SerialComm(SendCommands.Turn.GetCommand("l"), true, false); //turn left
                 UpdateDirection(1);
             }
             else if (_direction == 'r')
             {
                 Log("Turning right", true);
-                SerialComm(SendCommands.Turn.GetCommand("r"), false, false); //turn right
+                SerialComm(SendCommands.Turn.GetCommand("r"), true, false); //turn right
                 UpdateDirection(-1);
             }
             else
@@ -319,7 +347,7 @@ namespace SerialConsole
         }
 
 
-        // ********************************** Serial Communication ********************************** 
+        // ********************************** Other Serial Commands ********************************** 
 
         static void SensorCheck()
         {
@@ -361,6 +389,10 @@ namespace SerialConsole
             Log($"left:{leftPresent}, front:{frontPresent}, right:{rightPresent}", true);
         }
 
+        /// <summary>
+        /// Checks if there are kits to drop, and if so, it drops kits
+        /// </summary>
+        /// <param name="_turnBack">Whether we should turn back again</param>
         static void CheckAndDropKits(bool _turnBack)
         {
             if (reset)
@@ -368,18 +400,24 @@ namespace SerialConsole
 
             if (dropKits && !ReadHere(BitLocation.victim))
             {
+                if (!CheckKitSide(dropSide)) //If there is not a wall on the kit side
+                {
+                    dropKits = false;
+                    return;
+                }
+
                 if (kitsLeft < dropAmount)
-                    lastDropped = kitsLeft;
-                Log($"Dropping {dropAmount} kits {dropSide}", true);
+                    dropAmount = kitsLeft;
                 lastDropped = dropAmount; //Save just in case vision sends a new
+                Log($"Dropping {dropAmount} kits {dropSide}", true);
 
-                string _recived = SerialComm(SendCommands.DropKits.GetCommand($"{dropAmount},{dropSide},{(_turnBack ? '1' : '0')}"), false, false);
+                string _recived = SerialComm(SendCommands.DropKits.GetCommand($"{dropAmount},{dropSide},{(_turnBack ? '1' : '0')}"), true, false);
 
-                kitsLeft -= dropAmount;
+                kitsLeft -= lastDropped;
                 Log($"Recived: {_recived}", false);
                 try
                 {
-                    if (_recived.Contains(RecivedCommands.Success.GetCommand())) //Normal kit dropping
+                    if (_recived.Contains(RecivedCommands.Success.GetCommand()))
                     {
                         WriteHere(BitLocation.victim, true);
                         if (!_turnBack && lastDropped > 0)
@@ -387,34 +425,19 @@ namespace SerialConsole
                             KitDirectionUpdate(dropSide);
                         }
                     }
-                    else if (_recived.Contains(RecivedCommands.Answer.GetCommand())) //In interrupt
+                    else
                     {
-                        if (_recived.Split(',')[1].Contains('0')) //Did not drive step
-                        {
-                            WriteHere(BitLocation.victim, true);
-                        }
-                        else if (_recived.Split(',')[1].Contains('1'))//Drove step
-                        {
-                            if (!locationUpdated)
-                            {
-                                UpdateLocation();
-                                locationUpdated = true;
-                            }
-                            WriteHere(BitLocation.victim, true);
-                        }
-                        else
-                        {
-                            Log($"{_recived} -problem with kit step", true);
-                        }
+                        throw new Exception("No success sent");
                     }
                 }
                 catch (Exception e)
                 {
-                    LogException(e);
                     if (_recived.Contains(RecivedCommands.LOP.GetCommand()))
                     {
+                        Log("reset: " + e.Message, true);
                         return;
                     }
+                    LogException(e);
                     Log($"{_recived} --WRONG", true);
                 }
                 Thread.Sleep(20);
@@ -426,15 +449,64 @@ namespace SerialConsole
             }
         }
 
+        static void DropInterrupt()
+        {
+            if (reset)
+                return;
+
+            if (dropKits && !ReadHere(BitLocation.victim))
+            {
+                if (!CheckKitSide(dropSide)) //If there is not a wall on the kit side
+                {
+                    dropKits = false;
+                    return;
+                }
+
+                if (kitsLeft < dropAmount)
+                    dropAmount = kitsLeft;
+                Log($"Dropping {dropAmount} kits {dropSide} from interrupt", true);
+                lastDropped = dropAmount; //Save just in case vision sends a new
+
+                try
+                {
+                    serialPort1.WriteLine(SendCommands.DropKits.GetCommand($"{dropAmount},{dropSide},1"));
+                    Log("Sending: " + SendCommands.DropKits.GetCommand($"{dropAmount},{dropSide},1"), false);
+                    kitsLeft -= lastDropped;
+                    WriteHere(BitLocation.victim, true);
+
+                    Thread.Sleep(5);
+                    dropKits = false;
+                }
+                catch (Exception e)
+                {
+                    if (reset) return;
+                    LogException(e);
+                }
+            }
+            else if (dropKits)
+            {
+                Log("Already discovered victim here", false);
+                dropKits = false;
+            }
+            else
+            {
+                Log("NO DROPKIT IN DROP INTERRUPT", false);
+                errors++;
+            }
+        }
+
         static string Interrupt()
         {
             if (reset)
                 return RecivedCommands.LOP.GetCommand();
             Log("interrupting", true);
             string _recived = SerialComm(SendCommands.Interrupt.GetCommand(), false, false);
+            Log("interrupted", false);
             Thread.Sleep(100);
             return _recived;
         }
+
+        // ********************************** Serial Communication ********************************** 
 
         /// <summary>
         /// Sends a command serially and handles errors in answer
@@ -446,12 +518,12 @@ namespace SerialConsole
         static string SerialComm(string _send, bool _doubleWait, bool _interruptable)
         {
             if (!_send.Contains('!')) return "";
-        StartComm:
-            if (reset)
-                return RecivedCommands.LOP.GetCommand();
+            StartComm:
+            if (reset) return RecivedCommands.LOP.GetCommand();
 
             string _recived = SerialRaw(_send, _doubleWait, _interruptable);
-            
+            if (reset) return RecivedCommands.LOP.GetCommand();
+
             try
             {
                 if (_recived[0] != '!')
@@ -478,6 +550,13 @@ namespace SerialConsole
             return _recived;
         }
 
+        /// <summary>
+        /// Sends a command serially and returns answer without modifications or checks except reset check
+        /// </summary>
+        /// <param name="_send"></param>
+        /// <param name="_doubleWait"></param>
+        /// <param name="_interruptable"></param>
+        /// <returns></returns>
         static string SerialRaw(string _send, bool _doubleWait, bool _interruptable)
         {
             if (!_send.Contains('!')) return "";
@@ -488,7 +567,7 @@ namespace SerialConsole
                 serialPort1.WriteLine(_send);
                 Thread.Sleep(10);
 
-                for (int i = 0; i < 500; i++)//50 iterations gives ~1 s.
+                for (int i = 0; i < 250; i++)//50 iterations gives ~1 s.
                 {
                     Thread.Sleep(20);
                     if (serialPort1.BytesToRead != 0)
@@ -506,6 +585,7 @@ namespace SerialConsole
                 return _recived;
             }
 
+            bool _checkDropAgain = false;
             //If the double wait, we wait again but with no time limit since we know we were heard.
             if (_doubleWait)
             {
@@ -517,22 +597,76 @@ namespace SerialConsole
                         Thread.Sleep(20);
                         if (dropKits)
                         {
-                            if (maps[currentMap].ReadBit(posX, posZ, BitLocation.victim))
+                            #region InterruptHandling
+                            if (!maps[currentMap].ReadBit(posX, posZ, BitLocation.victim) && !_checkDropAgain)
                             {
-                                dropKits = false;
-                            }
-                            else
-                            {
-                                _interruptRec = Interrupt();
-                                if (_interruptRec.Contains(RecivedCommands.Interrupt.GetCommand()))
+                                if (CheckKitSide(dropSide)) //Wall on the kit side, we have not already tried
                                 {
-                                    CheckAndDropKits(true);
+                                    _interruptRec = Interrupt();
+                                    if (_interruptRec.Contains(RecivedCommands.Interrupt.GetCommand()) && !_interruptRec.Contains(RecivedCommands.Cancelled.GetCommand()) && !_interruptRec.Contains(RecivedCommands.Failed.GetCommand()))
+                                    {
+                                        try
+                                        {
+                                            if (_interruptRec.Split(',')[2].Contains('1'))//Drove step
+                                            {
+                                                if (!locationUpdated)
+                                                {
+                                                    UpdateLocation();
+                                                    locationUpdated = true;
+                                                }
+
+                                                if (ReadHere(BitLocation.victim))
+                                                {
+                                                    Log("Returning from kit dropping, sending !w", false);
+                                                    serialPort1.WriteLine("!w"); //Any command returns to drive
+                                                }
+                                                else
+                                                {
+                                                    if (ReadHere(BitLocation.explored) && CheckKitSide(dropSide))
+                                                    {
+                                                        DropInterrupt();
+                                                        Log("Kit drop, moved step", false);
+                                                    }
+                                                    else
+                                                    {
+                                                        Log("Try kit dropping later", false);
+                                                        _checkDropAgain = true;
+                                                    }
+                                                }
+                                            }
+                                            else if (_interruptRec.Split(',')[2].Contains('0'))//Did not drive step
+                                            {
+                                                DropInterrupt();
+                                                Log("Kit drop, did not move step", false);
+                                            }
+                                            else
+                                            {
+                                                throw new Exception("No interrupt 1 or 0");
+                                            }
+
+                                            Thread.Sleep(20);
+                                        }
+                                        catch (Exception e)
+                                        {
+                                            LogException(e);
+                                        }
+                                    }
+                                    else
+                                    {
+                                        if (!_interruptRec.Contains(RecivedCommands.Failed.GetCommand()) && !_interruptRec.Contains(RecivedCommands.Cancelled.GetCommand()))
+                                            break;
+                                    }
                                 }
-                                else
+                                else //No wall, but we might be on the next tile or something so we should check again when we are done
                                 {
-                                    break;
+                                    _checkDropAgain = true;
                                 }
+
+                                if (_checkDropAgain)
+                                    serialPort1.WriteLine("!w"); //Any command returns to drive
                             }
+                            dropKits = false;
+                            #endregion Interrupthandling
                         }
                     }
 
@@ -554,6 +688,31 @@ namespace SerialConsole
                     }
 
                     _recived = serialPort1.ReadLine();
+                    if (dropKits) Log("! _ ! _ ! _ FORGOT A KIT _ ! _ ! _ !", true);
+                    dropKits = false;
+                }
+
+                if (_checkDropAgain)
+                {
+                    SensorCheck();
+
+                    dropKits = true;
+                    Log("Checking kit again, dropside checking", true);
+                    switch (dropSide) //If there is a wall to where the kits are, drop kits
+                    {
+                        case 'l':
+                            if (leftPresent)
+                                CheckAndDropKits(true);
+                            break;
+                        case 'r':
+                            if (rightPresent)
+                                CheckAndDropKits(true);
+                            break;
+                        default:
+                            Log("Error kit dir drop side");
+                            break;
+                    }
+                    dropKits = false;
                 }
 
                 if (_recived.Contains(RecivedCommands.LOP.GetCommand()))
