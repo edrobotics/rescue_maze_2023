@@ -134,6 +134,7 @@ class imgproc:
 
         self.find_victim()
         self.Color_victim2()
+        #self.Color_victim3()
         if self.showsource:
             cv2.imshow("image_clone",self.image_clone)
 
@@ -231,7 +232,9 @@ class imgproc:
         return result 
 
 
+
     def identify_victim(self,ivictim): #compares binary poi with binary sample images 
+
         x = -1
         identified = False
         victim = None
@@ -282,9 +285,24 @@ class imgproc:
 
         return (identified,kits, victim)
 
-    def check_position(self, contour):
-        b_position = None
+    
+    def safeguards_color(self, contour, victim,mask):
+        correct = False
         (x,y,w,h) = cv2.boundingRect(contour)
+        if x > 300: self.side = "l"
+        else: self.side = "r"
+
+        if self.find_edges(contour, mask, x,y,w,h):
+            if self.check_position(x,y,w,h):
+                if self.check_movement(victim,x,y,w,h) or True: # debug remove
+                    correct = True
+        
+        return correct
+
+
+
+    def check_position(self, x,y,w,h):
+        b_position = None
         victimheight = 142
         victimheight2 = 450
         if victimheight > x and victimheight - 25 < x + w:
@@ -293,10 +311,8 @@ class imgproc:
             b_position = True
         return b_position
  
-    def check_movement(self,contour,victim):
+    def check_movement(self,victim,x,y,w,h):
         b_movement = None
-        (x,y,w,h) = cv2.boundingRect(contour)
-        same_height = False
         if self.victim_pos:
             pos = self.victim_pos
 
@@ -305,26 +321,111 @@ class imgproc:
                 if y < pos[3]:
                     b_movement = True
                     print("moving")
+                else: print("not moving ;)")
+            else: 
+                print("change in position/shape")
+
 
         self.victim_pos = (victim,self.fnum, x,y,w,h)
 
+        return b_movement
 
 
 
-    def is_close(self, num1, num2, marginal = 5):
-        print(num1, num2)
-        if num1 - num2 < marginal:
-            close = True
-        elif num2 - num1 < marginal:
-            close = True
+
+    def is_close(self, num1, num2, marginal = 3):
+        close = False
+        if num1 > num2:
+           if num1 - num2 < marginal:
+                close = True
+            
+        elif num2 > num1:
+            if num2 - num1 < marginal:
+                close = True
         else: 
-            close = False
+            close = True
         return close
-
 
 
         
 
+    def find_edges(self,contour,mask, x,y,w,h):
+        contours_match = False
+        image = np.copy(self.image)
+        #blankout
+        aoi = image[y -20 : y+h+20 ,x-20: x+w+ 20]
+        aoi2 = np.copy(aoi)
+        aoi3 = np.copy(aoi)
+        binary = mask[y -20 : y+h+20 ,x-20: x+w+ 20]
+        kernel =np.ones((9,9),np.uint8)
+        img_gray = cv2.cvtColor(aoi, cv2.COLOR_BGR2GRAY)
+        img_blur = cv2.GaussianBlur(img_gray, (7,7), 1) 
+        img_blur = cv2.morphologyEx(img_blur, cv2.MORPH_CLOSE, kernel)
+        edges = cv2.Canny(image=img_blur, threshold1=10, threshold2=20)
+        edges = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel)
+
+        contours, hierarchy = cv2.findContours(edges,cv2.RETR_LIST,cv2.CHAIN_APPROX_SIMPLE)
+        contours2, hierarchy = cv2.findContours(binary,cv2.RETR_LIST,cv2.CHAIN_APPROX_SIMPLE)
+        for cnt in contours2: #loops trough all contours on the mask (should only be one)
+
+
+            #gets approximation points 
+            epsilon = 0.05*cv2.arcLength(cnt,True)
+            approx = cv2.approxPolyDP(cnt,epsilon,True)
+            points = len(approx)
+            cv2.drawContours(aoi2, [approx], -1, (0,0,255), 3)
+
+            for cnt in contours :
+
+                epsilon = 0.05*cv2.arcLength(cnt,True)
+                approx2 = cv2.approxPolyDP(cnt,epsilon,True)
+                cv2.drawContours(aoi3, [approx2], -1, (0,0,255), 3)
+
+                #compares approximation points with canny image
+                ct = 0 
+                for point in approx:
+                    print("point: ",point)
+
+                    for point2 in approx2:
+                        print(point2)
+                        if self.is_close(point[0][0], point2[0][0], marginal=20) and self.is_close(point[0][1], point2[0][1], marginal=20):
+                            print(point[0][0], point2[0][0])
+
+                            ct += 1
+                            break
+                print("ct: ", ct)
+                if ct > points -2:
+                    print("should be victim")
+                    contours_match = True
+
+
+
+        cv2.drawContours(aoi, contours2, -1, (0, 255, 0), 3)
+        cv2.drawContours(aoi, contours, -1, (255, 0, 0), 3)
+        cv2.drawContours(aoi3, contour, 0, (255, 255, 0), 3)
+        
+        epsilon = 0.1*cv2.arcLength(contour,True)
+        approx = cv2.approxPolyDP(contour,epsilon,True)
+#        print(len(approx))
+#        print(f"approx binary: {approx} ")
+        cv2.drawContours(aoi3, [approx], -1, (0,0,255), 3)
+
+        if self.showcolor:
+            cv2.imshow("binary",binary)
+            cv2.imshow("aoi",aoi)
+            cv2.imshow("aoi2",aoi2)
+            cv2.imshow("maskcnt",aoi3)
+            cv2.imshow('Canny Edge Detection', edges)
+
+        return contours_match
+
+
+
+
+
+
+
+        
 
 
 
@@ -362,31 +463,34 @@ class imgproc:
         kernel = np.ones((9, 9), np.uint8) 
         mask = cv2.erode(mask,kernel, iterations=1)
         mask = cv2.dilate(mask,kernel, iterations=1) 
+        log_mask = cv2.bitwise_and(self.image, self.image, mask=mask)
 
         if np.count_nonzero(mask) > 5000 and np.count_nonzero(mask)< 20000:
             #print(np.count_nonzero(mask))
-            ret,thresh = cv2.threshold(mask, 40, 255, 0)
+            ret,thresh = cv2.threshold(mask, 40, 255, 0)# is this necessary?
             contours, hierarchy = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
             c = max(contours, key = cv2.contourArea)
-            mask = cv2.bitwise_and(self.image, self.image, mask=mask)
             if cv2.contourArea(c) > 5000:
-                self.check_movement(c,color)
-                print(f"{color}: {cv2.contourArea(c)}")
-                if self.check_position(c):
-                    x,y,w,h = cv2.boundingRect(c)
-                    if x > 300: self.side = "l"
-                    else: self.side = "r"
+
+                if self.safeguards_color(c, color, mask):
+
+
+                    print(f"{color}: {cv2.contourArea(c)}")
                     if color == "green": k = "k0"
                     else: k = "k1"
                     self.detected(k+self.side,victim=color)
-                    self.log(color,img = mask)
+                    self.log(color,img = log_mask)
                     logging.info(f"found {color}, image {self.fnum}")
                     print(f"found {color}, image {self.fnum}")
                 else: 
-                    print("outside possible frame")
-                    self.log(color,img = mask)
-                    logging.info(f"found {color}, image {self.fnum}, outside possible position")
-        if self.showcolor: cv2.imshow(color, mask)
+                    print("stoped by safeguard")
+                    self.log(color,img = log_mask)
+                    logging.info(f"found {color}, image {self.fnum}, but was stopped by safeguards")
+
+
+
+
+        if self.showcolor: cv2.imshow(color, log_mask)
 
 
 
