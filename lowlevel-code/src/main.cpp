@@ -179,7 +179,11 @@ void loop()
             goto driveStepBegin;
           }
 
-          if (floorColourAhead == ColourSensor::floor_reflective)
+          if (floorColourAhead == ColourSensor::floor_blue)
+          {
+            lights::indicateBlueCircle();
+          }
+          else if (floorColourAhead == ColourSensor::floor_reflective)
           {
             lights::indicateCheckpoint();
             

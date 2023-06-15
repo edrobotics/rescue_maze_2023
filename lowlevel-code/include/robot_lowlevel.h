@@ -371,6 +371,8 @@ void checkWallPresence();
 
 void printWallPresence();
 
+void updateLastKnownDistances();
+
 
 // Update the "true" distance to the wall and the angle from upright
 // Other code should call the getUltrasonics() beforehand

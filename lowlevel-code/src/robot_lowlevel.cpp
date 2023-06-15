@@ -150,6 +150,7 @@ int ultrasonicRawDistancesPointer[ULTRASONIC_NUM] {};
 // First dimension: Which sensor to use
 // Second dimension: Which data type to use (usmt_raw or usmt_smooth)
 double ultrasonicCurrentDistances[ULTRASONIC_NUM][USMT_NUM] {};
+double ultrasonicLastKnownDistances[ULTRASONIC_NUM][USMT_NUM] {};
 
 // Whether or not a wall is present at the currenct execution of checkSmoothWallChanges
 // First dimension: Which sensor to use
@@ -282,12 +283,12 @@ Command serialcomm::readCommand(bool waitForSerial, int timeout)
       break;
 
     case 'd': // driveStep
-      ++strIdx;
-      if (readString.charAt(strIdx) != ',') return command_invalid;
-      ++strIdx;
+      // ++strIdx;
+      // if (readString.charAt(strIdx) != ',') return command_invalid;
+      // ++strIdx;
 
-      if (readString.charAt(strIdx) == '1') g_turboSpeed = true;
-      else g_turboSpeed = false;
+      // if (readString.charAt(strIdx) == '1') g_turboSpeed = true;
+      // else g_turboSpeed = false;
       return command_driveStep;
       break;
 
@@ -1426,6 +1427,27 @@ void setPreviousSensorWallStates()
   setSinglePreviousSensorWallState(ultrasonic_F);
 }
 
+void updateLastKnownDistance(UltrasonicSensorEnum sensor)
+{
+  if (currentSensorWallStates[sensor][usmt_raw] == true)
+  {
+    ultrasonicLastKnownDistances[sensor][usmt_raw] = currentSensorWallStates[sensor][usmt_raw];
+  }
+  if (currentSensorWallStates[sensor][usmt_smooth] == true)
+  {
+    ultrasonicLastKnownDistances[sensor][usmt_smooth] = currentSensorWallStates[sensor][usmt_smooth];
+  }
+
+}
+
+void updateLastKnownDistances()
+{
+  updateLastKnownDistance(ultrasonic_LF);
+  updateLastKnownDistance(ultrasonic_LB);
+  updateLastKnownDistance(ultrasonic_RF);
+  updateLastKnownDistance(ultrasonic_RB);
+}
+
 
 // Update the "true" distance to the wall and the angle from upright
 // Other code should call the getUltrasonics() beforehand
@@ -1783,7 +1805,7 @@ void checkAndUseWallChange(int sensor, WallChangeType wallChangeToCheck, Stoppin
 
   if (g_smoothWallChanges[sensor] == wallChangeToCheck)
     {
-      double offset = 0;
+      double offset = 0; // If no potential wallchanges have been detected
       // Front wallchange
       if ((g_driveBack==false && ultrasonicGroup==ultrasonics_front) || (g_driveBack==true && ultrasonicGroup==ultrasonics_back))
       {
@@ -1795,7 +1817,6 @@ void checkAndUseWallChange(int sensor, WallChangeType wallChangeToCheck, Stoppin
       {
         if (wallChangeToCheck == wallchange_approaching) offset = BACK_WALLCHANGE_DISTANCE + wallChangeOffsets[wcoff_backApproaching];
         else offset = BACK_WALLCHANGE_DISTANCE + wallChangeOffsets[wcoff_backLeaving];
-
       }
 
 
@@ -1812,6 +1833,20 @@ void checkAndUseWallChange(int sensor, WallChangeType wallChangeToCheck, Stoppin
       else
       {
         // Normal detection using only smooth wallchange
+        #warning code also used elsewhere
+        double angleCorrDistance = 0;
+        if (abs(g_robotAngle) <= MAX_WALLCHANGE_ANGLE)
+        {
+          angleCorrDistance = ultrasonicLastKnownDistances[sensor][usmt_smooth]*sin(DEG_TO_RAD*g_robotAngle); // Left side
+          if (sensor==ultrasonic_RF || sensor==ultrasonic_RB) // Right side
+          {
+            angleCorrDistance *= -1;
+          }
+
+          offset+=angleCorrDistance; // Set the distance to write to trueDistanceDriven
+        }
+        
+        // Actually executing the wallchange
         if (abs(g_trueDistanceDriven-offset) <= MAX_CORRECTION_DISTANCE) // Limit correction
         {
           g_trueDistanceDriven = offset;
@@ -1849,7 +1884,17 @@ void checkWallChanges(StoppingReason& stopReason)
     {
       if (g_potWallChanges[k][wallChangeToCheck].detected == true)
       {
-        setShadowDistance(k, wallChangeToCheck, 0); // Begins the shadowdistance
+        #warning code also used elsewhere
+        double corrDistance = 0; // Default
+        if (abs(g_robotAngle) <= MAX_WALLCHANGE_ANGLE)
+        {
+          corrDistance = ultrasonicLastKnownDistances[k][usmt_smooth]*sin(DEG_TO_RAD*g_robotAngle); // Left side
+          if (k==ultrasonic_RF || k==ultrasonic_RB) // Right side
+          {
+            corrDistance *= -1;
+          }
+        }
+        setShadowDistance(k, wallChangeToCheck, corrDistance); // Begins the shadowdistance
       }
     }
   }
@@ -2309,20 +2354,24 @@ bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, To
   //   delay(100);
   //   lights::turnOff();
   // }
-  if (colSensor.lastKnownFloorColour == ColourSensor::floor_blue)
-  {
-    lights::indicateBlueCircle();
-  }
 
   // Give back the floor colour
   // Should update/double-check this before sending (but not always?)
-  
+  if (g_driveBack == false)
+  {
+    
+  }
   // Check for blue
-  if (double(g_blueIterations)/double(g_totalIterations) > 0.85) // If the ground colour is blue
+  if (double(g_blueIterations)/double(g_totalIterations) > 0.85 && g_driveBack==false) // If the ground colour is blue
   {
     floorColourAhead = ColourSensor::floor_blue;
   }
-  else // When not blue
+  // Check for reflective
+  else if (double(g_reflectiveIterations)/double(g_totalIterations) > 0.85 && g_driveBack==false) // If the ground colour is reflective
+  {
+    floorColourAhead = ColourSensor::floor_reflective;
+  }
+  else // When not blue or reflective or if driving back
   {
     floorColourAhead = g_floorColour; // Or use last known floor colour?
 
@@ -2330,22 +2379,12 @@ bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, To
     {
       floorColourAhead = ColourSensor::floor_unknown;
     }
-  }
-
-  // Check for reflective
-  if (double(g_reflectiveIterations)/double(g_totalIterations) > 0.85) // If the ground colour is reflective
-  {
-    floorColourAhead = ColourSensor::floor_reflective;
-  }
-  else // When not reflective
-  {
-    floorColourAhead = g_floorColour; // Or use last known floor colour?
-
-    if (floorColourAhead == ColourSensor::floor_reflective) // Not allowed, so set unknown instead
+    else if (floorColourAhead == ColourSensor::floor_reflective) // Not allowed, so set unknown instead
     {
       floorColourAhead = ColourSensor::floor_unknown;
     }
   }
+  
 
   // Give an accurate angle measurement for the next step
   // This should probably be separated out into its own function
