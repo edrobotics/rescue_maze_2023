@@ -31,7 +31,7 @@ void setup()
   if (colCalButton.isPressed())
   {
   colSensor.clearCalibrationData();
-  serialcomm::sendLOP(); // So that Markus can start the scoring run timer
+  serialcomm::sendColourCal(); // So that Markus can start the scoring run timer
   while(colCalButton.isPressed())
   {
     colSensor.calibrationRoutineLoop();
@@ -46,9 +46,9 @@ void setup()
 // double robotAngle = 0;
 // double wallDistance = 0;
 
-#define PICODE
+// #define PICODE
 // #define TESTING_NAV
-// #define TESTING
+#define TESTING
 // #define COLSENS_CALIBRATION
 
 #ifdef COLSENS_CALIBRATION
@@ -103,6 +103,7 @@ void loop()
   // lights::turnOff();
   driveStep();
   delay(2000);
+  lights::turnOff();
 
 
   #endif
@@ -179,7 +180,11 @@ void loop()
             goto driveStepBegin;
           }
 
-          if (floorColourAhead == ColourSensor::floor_reflective)
+          if (floorColourAhead == ColourSensor::floor_blue)
+          {
+            lights::indicateBlueCircle();
+          }
+          else if (floorColourAhead == ColourSensor::floor_reflective)
           {
             lights::indicateCheckpoint();
             

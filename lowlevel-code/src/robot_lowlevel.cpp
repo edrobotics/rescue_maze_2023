@@ -103,7 +103,10 @@ WallChangeType g_smoothWallChanges[ULTRASONIC_NUM] {};
 // The offset from what should be correct when correcting with wallchanges
 
 // Sensor constants
-const double ULTRASONIC_SPACING = 14.6; // The distance between the centers two ultrasonic sensors.
+const double ULTRASONIC_FORWARDOFFSET = 7.3;
+const double ULTRASONIC_SPACING = ULTRASONIC_FORWARDOFFSET*2; // The distance between the centers two ultrasonic sensors.
+#warning uncalibrated constants
+const double ULTRASONIC_SIDEOFFSET = 7;
 const double ULTRASONIC_FRONT_OFFSET = 9.5; // The distance from the front sensor to the center of the robot
 const double ULTRASONIC_DISTANCE_TO_WALL = 7.1; // The distance between the ultrasonic sensor (edge of the robot) and the wall when the robot is centered.
 const double WALL_PRESENCE_TRESHOLD = 20; // Not calibrated !!!!!!!!!!!!!!!!!!!!!!!! Just a guess!!!!!!!!!!!!!!!!!!!!!!!
@@ -124,8 +127,9 @@ double wallChangeOffsets[wcoff_num] =
   2.3,  // frontLeaving
   -1.2, // frontApproaching
   2,    // backLeaving
-  -1     // backApproaching
+  -0.5     // backApproaching
 };
+
 const double BACK_WALLCHANGE_DISTANCE = 15 + ULTRASONIC_SPACING/2.0;
 const double FRONT_WALLCHANGE_DISTANCE = 15 - ULTRASONIC_SPACING/2.0;
 
@@ -150,6 +154,8 @@ int ultrasonicRawDistancesPointer[ULTRASONIC_NUM] {};
 // First dimension: Which sensor to use
 // Second dimension: Which data type to use (usmt_raw or usmt_smooth)
 double ultrasonicCurrentDistances[ULTRASONIC_NUM][USMT_NUM] {};
+double ultrasonicLastKnownDistances[ULTRASONIC_NUM][USMT_NUM] {};
+double ultrasonicTheoreticalDistances[ULTRASONIC_NUM] {};
 
 // Whether or not a wall is present at the currenct execution of checkSmoothWallChanges
 // First dimension: Which sensor to use
@@ -282,12 +288,12 @@ Command serialcomm::readCommand(bool waitForSerial, int timeout)
       break;
 
     case 'd': // driveStep
-      ++strIdx;
-      if (readString.charAt(strIdx) != ',') return command_invalid;
-      ++strIdx;
+      // ++strIdx;
+      // if (readString.charAt(strIdx) != ',') return command_invalid;
+      // ++strIdx;
 
-      if (readString.charAt(strIdx) == '1') g_turboSpeed = true;
-      else g_turboSpeed = false;
+      // if (readString.charAt(strIdx) == '1') g_turboSpeed = true;
+      // else g_turboSpeed = false;
       return command_driveStep;
       break;
 
@@ -1426,6 +1432,31 @@ void setPreviousSensorWallStates()
   setSinglePreviousSensorWallState(ultrasonic_F);
 }
 
+void updateLastKnownDistance(UltrasonicSensorEnum sensor)
+{
+  if (currentSensorWallStates[sensor][usmt_raw] == true)
+  {
+    ultrasonicLastKnownDistances[sensor][usmt_raw] = ultrasonicCurrentDistances[sensor][usmt_raw];
+  }
+  if (currentSensorWallStates[sensor][usmt_smooth] == true)
+  {
+    ultrasonicLastKnownDistances[sensor][usmt_smooth] = ultrasonicCurrentDistances[sensor][usmt_smooth];
+  }
+
+}
+
+void updateLastKnownDistances()
+{
+  updateLastKnownDistance(ultrasonic_LF);
+  updateLastKnownDistance(ultrasonic_LB);
+  updateLastKnownDistance(ultrasonic_RF);
+  updateLastKnownDistance(ultrasonic_RB);
+}
+
+void updateTheoreticalDistance(UltrasonicSensorEnum sensor)
+{
+}
+
 
 // Update the "true" distance to the wall and the angle from upright
 // Other code should call the getUltrasonics() beforehand
@@ -1782,53 +1813,65 @@ void checkAndUseWallChange(int sensor, WallChangeType wallChangeToCheck, Stoppin
   if (sensor == ultrasonic_LB || sensor == ultrasonic_RB) ultrasonicGroup = ultrasonics_back;
 
   if (g_smoothWallChanges[sensor] == wallChangeToCheck)
+  {
+    double offset = 0;
+    // Front wallchange
+    if ((g_driveBack==false && ultrasonicGroup==ultrasonics_front) || (g_driveBack==true && ultrasonicGroup==ultrasonics_back))
     {
-      double offset = 0;
-      // Front wallchange
-      if ((g_driveBack==false && ultrasonicGroup==ultrasonics_front) || (g_driveBack==true && ultrasonicGroup==ultrasonics_back))
+      if (wallChangeToCheck == wallchange_approaching) offset = FRONT_WALLCHANGE_DISTANCE + wallChangeOffsets[wcoff_frontApproaching];
+      else offset = FRONT_WALLCHANGE_DISTANCE + wallChangeOffsets[wcoff_frontLeaving];
+    }
+    // Back wallchange
+    else
+    {
+      if (wallChangeToCheck == wallchange_approaching) offset = BACK_WALLCHANGE_DISTANCE + wallChangeOffsets[wcoff_backApproaching];
+      else offset = BACK_WALLCHANGE_DISTANCE + wallChangeOffsets[wcoff_backLeaving];
+    }
+
+    if (millis() - g_potWallChanges[sensor][wallChangeToCheck].timestamp < 500) // Time is not tuned!!!
+    {
+      // Successful detection using potential wallchange
+      double corrected = g_potWallChanges[sensor][wallChangeToCheck].shadowDistanceDriven + offset;
+      if (abs(g_trueDistanceDriven - corrected) <= MAX_CORRECTION_DISTANCE) // Limit correction
       {
-        if (wallChangeToCheck == wallchange_approaching) offset = FRONT_WALLCHANGE_DISTANCE + wallChangeOffsets[wcoff_frontApproaching];
-        else offset = FRONT_WALLCHANGE_DISTANCE + wallChangeOffsets[wcoff_frontLeaving];
+        g_trueDistanceDriven = corrected;
       }
-      // Back wallchange
-      else
+      g_potWallChanges[sensor][wallChangeToCheck].timestamp = 0; // Resets the timeflag to prevent double detection. If correction was too large, also prevents from
+    }
+    else
+    {
+      // Normal detection using only smooth wallchange
+      #warning code also used elsewhere
+      double angleCorrDistance = 0;
+      if (abs(g_robotAngle) <= MAX_WALLCHANGE_ANGLE)
       {
-        if (wallChangeToCheck == wallchange_approaching) offset = BACK_WALLCHANGE_DISTANCE + wallChangeOffsets[wcoff_backApproaching];
-        else offset = BACK_WALLCHANGE_DISTANCE + wallChangeOffsets[wcoff_backLeaving];
-
-      }
-
-
-      if (g_potWallChanges[sensor][wallChangeToCheck].timestamp - millis() < 500) // Time is not tuned!!!
-      {
-        // Successful detection using potential wallchange
-        double corrected = g_potWallChanges[sensor][wallChangeToCheck].shadowDistanceDriven + offset;
-        if (abs(g_trueDistanceDriven - corrected) <= MAX_CORRECTION_DISTANCE) // Limit correction
+        angleCorrDistance = ultrasonicLastKnownDistances[sensor][usmt_raw]*sin(DEG_TO_RAD*g_robotAngle); // Left side
+        if (sensor==ultrasonic_RF || sensor==ultrasonic_RB) // Right side
         {
-          g_trueDistanceDriven = corrected;
+          angleCorrDistance *= -1;
         }
-        g_potWallChanges[sensor][wallChangeToCheck].timestamp = 0; // Resets the timeflag to prevent double detection. If correction was too large, also prevents from
-      }
-      else
-      {
-        // Normal detection using only smooth wallchange
-        if (abs(g_trueDistanceDriven-offset) <= MAX_CORRECTION_DISTANCE) // Limit correction
-        {
-          g_trueDistanceDriven = offset;
-        }
-      }
 
-      if (wallChangeToCheck == wallchange_leaving)
-      {
-        if (ultrasonicGroup == ultrasonics_front) stopReason = stop_frontWallChangeLeaving;
-        else stopReason = stop_backWallChangeLeaving;
+        offset+=angleCorrDistance; // Set the distance to write to trueDistanceDriven
       }
-      else
+      
+      // Actually executing the wallchange
+      if (abs(g_trueDistanceDriven-offset) <= MAX_CORRECTION_DISTANCE) // Limit correction
       {
-        if (ultrasonicGroup == ultrasonics_front) stopReason = stop_frontWallChangeApproaching;
-        else stopReason = stop_backWallChangeApproaching;
+        g_trueDistanceDriven = offset;
       }
     }
+
+    if (wallChangeToCheck == wallchange_leaving)
+    {
+      if (ultrasonicGroup == ultrasonics_front) stopReason = stop_frontWallChangeLeaving;
+      else stopReason = stop_backWallChangeLeaving;
+    }
+    else
+    {
+      if (ultrasonicGroup == ultrasonics_front) stopReason = stop_frontWallChangeApproaching;
+      else stopReason = stop_backWallChangeApproaching;
+    }
+  }
 }
 
 // Checks for wallchanges and sets the truedistance driven variable accordingly.
@@ -1849,7 +1892,18 @@ void checkWallChanges(StoppingReason& stopReason)
     {
       if (g_potWallChanges[k][wallChangeToCheck].detected == true)
       {
-        setShadowDistance(k, wallChangeToCheck, 0); // Begins the shadowdistance
+        #warning code also used elsewhere
+        double corrDistance = 0; // Default
+        if (abs(g_robotAngle) <= MAX_WALLCHANGE_ANGLE)
+        {
+          corrDistance = ultrasonicLastKnownDistances[k][usmt_raw]*sin(DEG_TO_RAD*g_robotAngle); // Left side
+          if (k==ultrasonic_RF || k==ultrasonic_RB) // Right side
+          {
+            corrDistance *= -1;
+          }
+        }
+        setShadowDistance(k, wallChangeToCheck, corrDistance); // Begins the shadowdistance
+        // Serial.print(g_robotAngle);Serial.print("    ");Serial.println(corrDistance);
       }
     }
   }
@@ -1948,6 +2002,7 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
   // printUltrasonics();
   getUltrasonics();
   checkWallPresence();
+  updateLastKnownDistances();
   // Separate this out into its own function? (deciding what wall to follow)
   if (safeWallPresence[wall_left] && safeWallPresence[wall_right]) wallToUse = wall_both;
   else if (safeWallPresence[wall_left]) wallToUse = wall_left;
@@ -2134,8 +2189,8 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
 bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, TouchSensorSide& frontSensorDetectionType, double& xDistanceOnRamp, double& yDistanceOnRamp, bool continuing)
 {
   // straighten();
-  if (g_turboSpeed==true) g_baseSpeed_CMPS = 21;
-  else g_baseSpeed_CMPS = 15;
+  // if (g_turboSpeed==true) g_baseSpeed_CMPS = 21;
+  // else g_baseSpeed_CMPS = 15;
   WallSide wallToUse = wall_none; // Initialize a variable for which wall to follow
   startDistanceMeasure(); // Starts the distance measuring (encoders)
   double dumbDistanceDriven = 0;
@@ -2309,20 +2364,21 @@ bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, To
   //   delay(100);
   //   lights::turnOff();
   // }
-  if (colSensor.lastKnownFloorColour == ColourSensor::floor_blue)
-  {
-    lights::indicateBlueCircle();
-  }
 
   // Give back the floor colour
   // Should update/double-check this before sending (but not always?)
-  
+
   // Check for blue
-  if (double(g_blueIterations)/double(g_totalIterations) > 0.85) // If the ground colour is blue
+  if (double(g_blueIterations)/double(g_totalIterations) > 0.85 && g_driveBack==false) // If the ground colour is blue
   {
     floorColourAhead = ColourSensor::floor_blue;
   }
-  else // When not blue
+  // Check for reflective
+  else if (double(g_reflectiveIterations)/double(g_totalIterations) > 0.85 && g_driveBack==false) // If the ground colour is reflective
+  {
+    floorColourAhead = ColourSensor::floor_reflective;
+  }
+  else // When not blue or reflective or if driving back
   {
     floorColourAhead = g_floorColour; // Or use last known floor colour?
 
@@ -2330,22 +2386,12 @@ bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, To
     {
       floorColourAhead = ColourSensor::floor_unknown;
     }
-  }
-
-  // Check for reflective
-  if (double(g_reflectiveIterations)/double(g_totalIterations) > 0.85) // If the ground colour is reflective
-  {
-    floorColourAhead = ColourSensor::floor_reflective;
-  }
-  else // When not reflective
-  {
-    floorColourAhead = g_floorColour; // Or use last known floor colour?
-
-    if (floorColourAhead == ColourSensor::floor_reflective) // Not allowed, so set unknown instead
+    else if (floorColourAhead == ColourSensor::floor_reflective) // Not allowed, so set unknown instead
     {
       floorColourAhead = ColourSensor::floor_unknown;
     }
   }
+  
 
   // Give an accurate angle measurement for the next step
   // This should probably be separated out into its own function
@@ -2602,4 +2648,9 @@ TouchSensorSide frontSensorActivated()
 void serialcomm::sendLOP()
 {
   Serial.println("!l");
+}
+
+void serialcomm::sendColourCal()
+{
+  Serial.println("!l,c");
 }

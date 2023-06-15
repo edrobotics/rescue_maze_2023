@@ -114,6 +114,8 @@ namespace serialcomm
     bool sendDebug();
 
     void sendLOP();
+
+    void sendColourCal();
 }
 
 // Makes a navigation decision
@@ -370,6 +372,8 @@ void printUltrasonics();
 void checkWallPresence();
 
 void printWallPresence();
+
+void updateLastKnownDistances();
 
 
 // Update the "true" distance to the wall and the angle from upright
