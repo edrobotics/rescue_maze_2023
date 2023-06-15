@@ -82,13 +82,13 @@ enum WheelSide {
 //---------------------- Variable definitions ----------------------------//
 
 // Wheel and wheelbase dimensions (all in cm)
-const double WHEEL_DIAMETER = 6.75;
+const double WHEEL_DIAMETER = 6.8;
 const double WHEEL_CIRCUMFERENCE = PI*WHEEL_DIAMETER;
 
 // Driving
 const double CMPS_TO_RPM = 1.0/WHEEL_CIRCUMFERENCE*60.0; // Constant to convert from cm/s to rpm
-double BASE_SPEED_CMPS = 15; // The base speed of driving (cm/s)
-const double BASE_SPEED_RPM = CMPS_TO_RPM*BASE_SPEED_CMPS; // The base speed of driving (rpm)
+double g_baseSpeed_CMPS = 15; // The base speed of driving (cm/s)
+const double BASE_SPEED_RPM = CMPS_TO_RPM*g_baseSpeed_CMPS; // The base speed of driving (rpm)
 double g_trueDistanceDriven = 0; // The correct driven distance. Measured as travelling along the wall and also updated when landmarks are seen
 double g_targetDistance = 0; // The distance that you want to drive
 double g_startDistance = 0; // The distance that you start from
@@ -109,14 +109,23 @@ const double ULTRASONIC_DISTANCE_TO_WALL = 7.1; // The distance between the ultr
 const double WALL_PRESENCE_TRESHOLD = 20; // Not calibrated !!!!!!!!!!!!!!!!!!!!!!!! Just a guess!!!!!!!!!!!!!!!!!!!!!!!
 const double FRONT_WALL_STOPPING_TRESHOLD = 15 - ULTRASONIC_FRONT_OFFSET + 1.8;
 
+// Wallchange offsets for original wheels
+// double wallChangeOffsets[wcoff_num] =
+// {
+//   3.5,  // frontLeaving
+//   -0.5, // frontApproaching
+//   3,    // backLeaving
+//   0     // backApproaching
+// };
+
+// Wallchange offsets for neoprene foam wheels
 double wallChangeOffsets[wcoff_num] =
 {
-  3.5,  // frontLeaving
-  -0.5, // frontApproaching
-  3,    // backLeaving
-  0     // backApproaching
+  2.3,  // frontLeaving
+  -1.2, // frontApproaching
+  2,    // backLeaving
+  -1     // backApproaching
 };
-
 const double BACK_WALLCHANGE_DISTANCE = 15 + ULTRASONIC_SPACING/2.0;
 const double FRONT_WALLCHANGE_DISTANCE = 15 - ULTRASONIC_SPACING/2.0;
 
@@ -251,6 +260,7 @@ Command serialcomm::readCommand(bool waitForSerial)
 }
 
 char lightCommandChar = ' ';
+bool g_turboSpeed = false;
 
 Command serialcomm::readCommand(bool waitForSerial, int timeout)
 {
@@ -272,6 +282,12 @@ Command serialcomm::readCommand(bool waitForSerial, int timeout)
       break;
 
     case 'd': // driveStep
+      ++strIdx;
+      if (readString.charAt(strIdx) != ',') return command_invalid;
+      ++strIdx;
+
+      if (readString.charAt(strIdx) == '1') g_turboSpeed = true;
+      else g_turboSpeed = false;
       return command_driveStep;
       break;
 
@@ -368,6 +384,7 @@ void serialcomm::answerInterrupt(int stepDriven)
   Serial.print("!a,i,");
   Serial.print(stepDriven);
   Serial.println("");
+  Serial.flush();
 }
 
 void serialcomm::cancelInterrupt()
@@ -997,7 +1014,7 @@ void gyroTurn(double turnAngle, bool stopMoving, bool aware = false, double base
     g_targetGyroAngle -= 360; // Should bind the value to be between 0 and 360 for positive target angles (no angle should be 720 degrees or greater, so this should work)
     crossingZero = true;
   }
-    //double speedToRun = multiplier*1.5*BASE_SPEED_CMPS*CMPS_TO_RPM;
+    //double speedToRun = multiplier*1.5*g_baseSpeed_CMPS*CMPS_TO_RPM;
     double dumbDistanceDriven = 0; // Only needed if speedToRun != 0
     double speedToRun = multiplier*35/CMPS_TO_RPM;
     if (baseSpeed != 0)
@@ -1516,11 +1533,11 @@ void checkSmoothWallChanges()
 
 // Drive just using the encoders
 // distance - the distance to drive
-// The speed is adjusted globally using the BASE_SPEED_CMPS variable.
+// The speed is adjusted globally using the g_baseSpeed_CMPS variable.
 void driveBlind(double distance, bool stopWhenDone)
 {
-  moveWheelSide(wheels_left, distance, BASE_SPEED_CMPS);
-  moveWheelSide(wheels_right, distance, BASE_SPEED_CMPS);
+  moveWheelSide(wheels_left, distance, g_baseSpeed_CMPS);
+  moveWheelSide(wheels_right, distance, g_baseSpeed_CMPS);
   letWheelsTurn(stopWhenDone);
 }
 
@@ -1661,8 +1678,8 @@ void pidDrive(WallSide wallSide)
   int multiplier = 1;
   if (g_driveBack == true) multiplier = -1;
 
-  runWheelSide(wheels_left, multiplier*BASE_SPEED_CMPS - correction);
-  runWheelSide(wheels_right, multiplier*BASE_SPEED_CMPS + correction);
+  runWheelSide(wheels_left, multiplier*g_baseSpeed_CMPS - correction);
+  runWheelSide(wheels_right, multiplier*g_baseSpeed_CMPS + correction);
   loopEncoders(); // Could maybe remove - already done in getUltrasonics()
   g_lastWallAngle = g_robotAngle; // Update the g_lastWallAngle - okay to do because this will not be read during the execution loop of pidTurn. It will only be used before.
   // Serial.println(g_robotAngle);
@@ -2000,7 +2017,7 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
     //Serial.println(ultrasonicDistanceF); // Debugging
 
 
-    if (g_trueDistanceDriven >= g_targetDistance-2) // Should not drive based on encoders if you have driven up the ramp // && rampDriven == false
+    if (g_trueDistanceDriven >= g_targetDistance-1.7) // Should not drive based on encoders if you have driven up the ramp // && rampDriven == false
     {
       if (stopReason == stop_none) stopReason = stop_deadReckoning;
       g_driveBack = false; // Reset the driveBack variable (do not drive back the next step)
@@ -2011,13 +2028,13 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
     g_floorColour = colSensor.checkFloorColour();
     if (g_driveBack == false)
     {
-      // BASE_SPEED_CMPS = 15;
+      // g_baseSpeed_CMPS = 15;
       switch (g_floorColour)
       {
         case ColourSensor::floor_notUpdated:
           break; // Do nothing
         case ColourSensor::floor_unknown:
-          // BASE_SPEED_CMPS = 10;
+          // g_baseSpeed_CMPS = 10;
           // Serial.println("Unknown");
           break;
         case ColourSensor::floor_black:
@@ -2074,7 +2091,7 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
         g_lastTouchSensorState = touchSensorState;
         return true; // Exit the loop
     }
-    
+
   } // Only do when not on ramp ends here
 
   // Checking for wallchanges
@@ -2096,7 +2113,8 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
     serialcomm::answerInterrupt(stepDriven);
     Command intrCommand = serialcomm::readCommand(true);
     if (intrCommand == command_dropKit) handleVictim(true);
-    else sounds::errorBeep();
+    else if (intrCommand == command_none) sounds::errorBeep();
+    else {} // Do nothing and continue
     }
 
     else // If on a ramp
@@ -2116,6 +2134,8 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
 bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, TouchSensorSide& frontSensorDetectionType, double& xDistanceOnRamp, double& yDistanceOnRamp, bool continuing)
 {
   // straighten();
+  if (g_turboSpeed==true) g_baseSpeed_CMPS = 21;
+  else g_baseSpeed_CMPS = 15;
   WallSide wallToUse = wall_none; // Initialize a variable for which wall to follow
   startDistanceMeasure(); // Starts the distance measuring (encoders)
   double dumbDistanceDriven = 0;
@@ -2137,8 +2157,9 @@ bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, To
   g_trueDistanceDriven = g_startDistance;
   dumbDistanceDriven = 0;
 
-  // For checking for a reflective tile
+  // For checking for blue and reflective tiles
   g_reflectiveIterations = 0;
+  g_blueIterations = 0;
   g_totalIterations = 0;
 
   // Get sensor data for initial values
@@ -2297,7 +2318,7 @@ bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, To
   // Should update/double-check this before sending (but not always?)
   
   // Check for blue
-  if (double(g_blueIterations)/double(g_totalIterations) > 0.7) // If the ground colour is blue
+  if (double(g_blueIterations)/double(g_totalIterations) > 0.85) // If the ground colour is blue
   {
     floorColourAhead = ColourSensor::floor_blue;
   }
@@ -2312,7 +2333,7 @@ bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, To
   }
 
   // Check for reflective
-  if (double(g_reflectiveIterations)/double(g_totalIterations) > 0.7) // If the ground colour is reflective
+  if (double(g_reflectiveIterations)/double(g_totalIterations) > 0.85) // If the ground colour is reflective
   {
     floorColourAhead = ColourSensor::floor_reflective;
   }

@@ -167,7 +167,7 @@ class ColourSensor
         double getColDistance(FloorColour ref, ColourSample comp);
         int getMinValIndex(double val1, double val2, double val3, double val4);
         FloorColour getClosestColour(ColourSample compare);
-        double maxDetectionDistance = 121;
+        double maxDetectionDistance = 50;
 
         unsigned long lastReadTime = 0; // Keep track of the last time you read from the sensor
         int INTEGRATION_TIME = 60; // The integration time in milliseconds
