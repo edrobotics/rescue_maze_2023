@@ -131,10 +131,12 @@ class imgproc:
         
         color_time = time.time()
 
-
-        self.find_victim()
-        self.Color_victim2()
+        try:
+            self.find_victim()
+            self.Color_victim2()
         #self.Color_victim3()
+        except: 
+            print("something went wrong")
         if self.showsource:
             cv2.imshow("image_clone",self.image_clone)
 
@@ -352,70 +354,73 @@ class imgproc:
     def find_edges(self,contour,mask, x,y,w,h):
         contours_match = False
         image = np.copy(self.image)
-        #blankout
-        aoi = image[y -20 : y+h+20 ,x-20: x+w+ 20]
-        aoi2 = np.copy(aoi)
-        aoi3 = np.copy(aoi)
-        binary = mask[y -20 : y+h+20 ,x-20: x+w+ 20]
-        kernel =np.ones((9,9),np.uint8)
-        img_gray = cv2.cvtColor(aoi, cv2.COLOR_BGR2GRAY)
-        img_blur = cv2.GaussianBlur(img_gray, (7,7), 1) 
-        img_blur = cv2.morphologyEx(img_blur, cv2.MORPH_CLOSE, kernel)
-        edges = cv2.Canny(image=img_blur, threshold1=10, threshold2=20)
-        edges = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel)
+            
+        try: 
+            #blankout
+            aoi = image[y -20 : y+h+20 ,x-20: x+w+ 20]
+            aoi2 = np.copy(aoi)
+            aoi3 = np.copy(aoi)
+            binary = mask[y -20 : y+h+20 ,x-20: x+w+ 20]
+            kernel =np.ones((9,9),np.uint8)
+            img_gray = cv2.cvtColor(aoi, cv2.COLOR_BGR2GRAY)
+            img_blur = cv2.GaussianBlur(img_gray, (7,7), 1) 
+            img_blur = cv2.morphologyEx(img_blur, cv2.MORPH_CLOSE, kernel)
+            edges = cv2.Canny(image=img_blur, threshold1=10, threshold2=20)
+            edges = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel)
 
-        contours, hierarchy = cv2.findContours(edges,cv2.RETR_LIST,cv2.CHAIN_APPROX_SIMPLE)
-        contours2, hierarchy = cv2.findContours(binary,cv2.RETR_LIST,cv2.CHAIN_APPROX_SIMPLE)
-        for cnt in contours2: #loops trough all contours on the mask (should only be one)
+            contours, hierarchy = cv2.findContours(edges,cv2.RETR_LIST,cv2.CHAIN_APPROX_SIMPLE)
+            contours2, hierarchy = cv2.findContours(binary,cv2.RETR_LIST,cv2.CHAIN_APPROX_SIMPLE)
+            for cnt in contours2: #loops trough all contours on the mask (should only be one)
 
 
-            #gets approximation points 
-            epsilon = 0.05*cv2.arcLength(cnt,True)
-            approx = cv2.approxPolyDP(cnt,epsilon,True)
-            points = len(approx)
-            cv2.drawContours(aoi2, [approx], -1, (0,0,255), 3)
-
-            for cnt in contours :
-
+                #gets approximation points 
                 epsilon = 0.05*cv2.arcLength(cnt,True)
-                approx2 = cv2.approxPolyDP(cnt,epsilon,True)
-                cv2.drawContours(aoi3, [approx2], -1, (0,0,255), 3)
+                approx = cv2.approxPolyDP(cnt,epsilon,True)
+                points = len(approx)
+                cv2.drawContours(aoi2, [approx], -1, (0,0,255), 3)
 
-                #compares approximation points with canny image
-                ct = 0 
-                for point in approx:
-                    print("point: ",point)
+                for cnt in contours :
 
-                    for point2 in approx2:
-                        print(point2)
-                        if self.is_close(point[0][0], point2[0][0], marginal=20) and self.is_close(point[0][1], point2[0][1], marginal=20):
-                            print(point[0][0], point2[0][0])
+                    epsilon = 0.05*cv2.arcLength(cnt,True)
+                    approx2 = cv2.approxPolyDP(cnt,epsilon,True)
+                    cv2.drawContours(aoi3, [approx2], -1, (0,0,255), 3)
 
-                            ct += 1
-                            break
-                print("ct: ", ct)
-                if ct > points -2:
-                    print("should be victim")
-                    contours_match = True
+                    #compares approximation points with canny image
+                    ct = 0 
+                    for point in approx:
+
+                        for point2 in approx2:
+                            if self.is_close(point[0][0], point2[0][0], marginal=20) and self.is_close(point[0][1], point2[0][1], marginal=20):
+
+                                ct += 1
+                    if ct > points -2:
+                        print("should be victim")
+                        contours_match = True
 
 
 
-        cv2.drawContours(aoi, contours2, -1, (0, 255, 0), 3)
-        cv2.drawContours(aoi, contours, -1, (255, 0, 0), 3)
-        cv2.drawContours(aoi3, contour, 0, (255, 255, 0), 3)
-        
-        epsilon = 0.1*cv2.arcLength(contour,True)
-        approx = cv2.approxPolyDP(contour,epsilon,True)
-#        print(len(approx))
-#        print(f"approx binary: {approx} ")
-        cv2.drawContours(aoi3, [approx], -1, (0,0,255), 3)
+                cv2.drawContours(aoi, contours2, -1, (0, 255, 0), 3)
+                cv2.drawContours(aoi, contours, -1, (255, 0, 0), 3)
+                cv2.drawContours(aoi3, contour, 0, (255, 255, 0), 3)
+                
+                epsilon = 0.1*cv2.arcLength(contour,True)
+                approx = cv2.approxPolyDP(contour,epsilon,True)
+        #        print(len(approx))
+        #        print(f"approx binary: {approx} ")
+                cv2.drawContours(aoi3, [approx], -1, (0,0,255), 3)
 
-        if self.showcolor:
-            cv2.imshow("binary",binary)
-            cv2.imshow("aoi",aoi)
-            cv2.imshow("aoi2",aoi2)
-            cv2.imshow("maskcnt",aoi3)
-            cv2.imshow('Canny Edge Detection', edges)
+                if self.showcolor:
+                    cv2.imshow("binary",binary)
+                    cv2.imshow("aoi",aoi)
+                    cv2.imshow("aoi2",aoi2)
+                    cv2.imshow("maskcnt",aoi3)
+                    cv2.imshow('Canny Edge Detection', edges)
+
+        except:
+
+            print("error in contours")
+            print(x,y,w,h)
+            logging.info(f"error in safeguard {x}, {y}, {w}, {h} ")
 
         return contours_match
 
@@ -479,12 +484,12 @@ class imgproc:
                     if color == "green": k = "k0"
                     else: k = "k1"
                     self.detected(k+self.side,victim=color)
-                    self.log(color,img = log_mask)
                     logging.info(f"found {color}, image {self.fnum}")
                     print(f"found {color}, image {self.fnum}")
+                    self.log(color,img = log_mask)
                 else: 
                     print("stoped by safeguard")
-                    self.log(color,img = log_mask)
+                    self.log(f"F{color}",img = log_mask)
                     logging.info(f"found {color}, image {self.fnum}, but was stopped by safeguards")
 
 
