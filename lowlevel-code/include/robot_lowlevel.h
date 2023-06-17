@@ -296,32 +296,55 @@ class RobotPose
   public:
     double xDist; // Distance (cm) counted from the left wall (or imaginary left wall). Positive goes right.
     double yDist; // Distance (cm) counted from the centre of one tile to the next. Positive goes forward
-    double angle; // Angle (degrees) relative to the wall. Positive is counter-clockwise.
+    double yDistIncrement; // Increment for yDist
+    double angle; // Angle (degrees) relative to the wall. Positive is counter-clockwise. Mathangle.
+    double lastAngle;
+    double startAngle; // Perhaps not needed?
+    double targetAngle;
+    double gyroAngle; // Angle measured by the gyro. Saved as mathangle.
+    double gyroOffset; // Gyro angle when standing parallel to the wall. Saved as mathangle.
+    double distOnRamp;
+    double xDistOnRamp;
+    double yDistOnRamp;
     RobotPose()
     {
       xDist = 15;
       yDist = 0;
       angle = 0;
     }
-    void update(); // Add variations. Should this be used to increment with the help of dumbDistanceDriven as well?
+    void update(); // Update the robot pose, with new ultrasonics and all.
+    void update(WallSide wallToUse);
+    void update(double distanceIncrement);
+    void update(WallSide wallToUse, double distanceIncrement);
+    void updateOnRamp(WallSide wallToUse, double distanceIncrement);
     void print();
-    void getSafeWallToUse();
-    void getNormalWallToUse();
+    WallSide getSafeWallToUse();
+    WallSide getNormalWallToUse();
     // Functions for determining which wall to follow. In here or outside?
   private:
-    void calculate(); // Will maybe need some parameters?
+    void calculate2(WallSide wallSide, double& angle, bool useGyroAngle, double distanceIncrement);
+    void calculate1(WallSide wallSide, double& angle, double& distance, bool useGyroAngle);
 };
 
-// Sets the global variables for angles and distances.
-// Does not update the gyro itself
-// secondaryWallDistance is supplied when both walls are present
-void updateRobotPose(WallSide wallSide, double& secondaryWallDistance);
-// Alternate way of calling
-void updateRobotPose(WallSide wallSide);
-// Updates the robot angles (including the lastwallangle)
-void updateRobotPose();
+// // Sets the global variables for angles and distances.
+// // Does not update the gyro itself
+// // secondaryWallDistance is supplied when both walls are present
+// void updateRobotPose(WallSide wallSide, double& secondaryWallDistance);
+// // Alternate way of calling
+// void updateRobotPose(WallSide wallSide);
+// // Updates the robot angles (including the lastwallangle)
+// void updateRobotPose();
 
-void printRobotPose();
+// void printRobotPose();
+
+// // Update the "true" distance to the wall and the angle from upright
+// // Other code should call the getUltrasonics() beforehand
+// // wallSide - which wallSide to check. wall_left, wall_right or wall_both
+// // angle - the variable to return the calculated angle to. Returned in degrees.
+// // angle (if useGyroAngle == true) - the angle calculated by the gyro. Will be used in the calculation and not modified. Degrees.
+// // trueDistance - the variable to return the calculated distance to. Returned in cm.
+// // useGyroAngle - whether to use the angle calculated by the gyro (true) or calculate the angle youself (false)
+// void calcRobotPose(WallSide wallSide, double& angle, double& trueDistance, bool useGyroAngle);
 
 // Returns the distance left to turn in degrees. When you get closer, it decreases. When you have overshot, it will be negative.
 // Can we omit zerocross, and just give the turn angle instead?
@@ -398,14 +421,6 @@ void printWallPresence();
 void updateLastKnownDistances();
 
 
-// Update the "true" distance to the wall and the angle from upright
-// Other code should call the getUltrasonics() beforehand
-// wallSide - which wallSide to check. wall_left, wall_right or wall_both
-// angle - the variable to return the calculated angle to. Returned in degrees.
-// angle (if useGyroAngle == true) - the angle calculated by the gyro. Will be used in the calculation and not modified. Degrees.
-// trueDistance - the variable to return the calculated distance to. Returned in cm.
-// useGyroAngle - whether to use the angle calculated by the gyro (true) or calculate the angle youself (false)
-void calcRobotPose(WallSide wallSide, double& angle, double& trueDistance, bool useGyroAngle);
 
 struct PotWallChange
 {
