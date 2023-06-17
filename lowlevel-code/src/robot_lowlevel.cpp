@@ -2166,7 +2166,7 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
   // Checking for interrupts
   if (serialcomm::checkInterrupt() == true)
   {
-    if (onRamp==false)
+    if (onRamp==false && g_driveBack==false)
     {
     stopWheels();
     bool stepDriven = false;
@@ -2178,7 +2178,7 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
     else {} // Do nothing and continue
     }
 
-    else // If on a ramp
+    else // If on a ramp or driving backwards
     {
       serialcomm::cancelInterrupt();
     }
