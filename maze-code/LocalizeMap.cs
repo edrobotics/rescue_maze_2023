@@ -8,7 +8,7 @@ namespace SerialConsole
 {
     internal partial class Program
     {
-
+        
         //******** Mapping & Checkpoints ********
 
         //static readonly ushort[,] mainMap = new ushort[50, 50]; //W = 0, A = 1, S = 2, D = 3, explored = 4, mapSearched = 5, victim  = 6, ramp = 7, black tile = 8, checkp = 9, blue = 10, crossroad = 11 -more? obstacles?
@@ -31,6 +31,7 @@ namespace SerialConsole
 
         static void UpdateDirection(int _leftTurns)
         {
+            if (reset) return;
             Log($"change dir from {direction}", false);
             direction += _leftTurns;
 
@@ -47,7 +48,7 @@ namespace SerialConsole
 
         static void KitDirectionUpdate(char _direction)
         {
-
+            if (reset) return;
             if (_direction == 'r')
             {
                 UpdateDirection(1);
@@ -103,19 +104,24 @@ namespace SerialConsole
 
         static int TileToDirection(byte[] _cell)
         {
-            if (_cell[0] == posX && _cell[1] == posZ - 1)
+            return TileToDirection(_cell, new byte[] { (byte)posX, (byte)posZ });
+        }
+
+        static int TileToDirection(byte[] _toCell, byte[] _fromCell)
+        {
+            if (_toCell[0] == _fromCell[1] && _toCell[1] == _fromCell[1] - 1)
             {
                 return 0;
             }
-            if (_cell[0] == posX - 1 && _cell[1] == posZ)
+            if (_toCell[0] == _fromCell[0] - 1 && _toCell[1] == _fromCell[1])
             {
                 return 1;
             }
-            if (_cell[0] == posX && _cell[1] == posZ + 1)
+            if (_toCell[0] == _fromCell[0] && _toCell[1] == _fromCell[1] + 1)
             {
                 return 2;
             }
-            if (_cell[0] == posX + 1 && _cell[1] == posZ)
+            if (_toCell[0] == _fromCell[0] + 1 && _toCell[1] == _fromCell[1])
             {
                 return 3;
             }
@@ -123,17 +129,17 @@ namespace SerialConsole
             Log("********* ACHTUNG ACHTUNG, DAS IST NICHT GUT ************", true);
             errors++;
             Thread.Sleep(10);
-            if (_cell[0] == posX && _cell[1] == posZ)
+            if (_toCell[0] == _fromCell[0] && _toCell[1] == _fromCell[1])
             {
                 return direction;
             }
-            errors += 2;
+            errors+=2;
 
             if (driveWay.Count > 0)
             {
                 Log("Finding new path");
                 FindPathHere(driveWay.Last()[0], driveWay.Last()[1]);
-                return TileToDirection(driveWay[0]);
+                return TileToDirection(driveWay[0], _fromCell);
             }
 
             Log("DriveWay is finished, but still error, strange", true);
@@ -169,6 +175,8 @@ namespace SerialConsole
 
         static void UpdateLocation() //ONLY USE AFTER YOU KNOW THERE IS A NEW CELL
         {
+            if (reset) return;
+
             if (locationUpdated)
             {
                 return;
@@ -211,25 +219,25 @@ namespace SerialConsole
             {
                 posX = maps[currentMap].Length;
                 for (int i = 0; i < 5; i++) Log("!!!Error PosX hi", true);
-                errors += 2;
+                errors+=2;
             }
             if (posX < 0)
             {
                 posX = 0;
                 for (int i = 0; i < 5; i++) Log("!!!Error posX lo", true);
-                errors += 2;
+                errors+=2;
             }
             if (posZ > maps[currentMap].Length)
             {
                 posZ = maps[currentMap].Length;
                 for (int i = 0; i < 5; i++) Log("!!!Error PosZ hi", true);
-                errors += 2;
+                errors+=2;
             }
             if (posZ < 0)
             {
                 posZ = 0;
                 for (int i = 0; i < 5; i++) Log("!!!Error posZ lo", true);
-                errors += 2;
+                errors+=2;
             }
             AddSinceCheckPoint();
 
@@ -241,6 +249,7 @@ namespace SerialConsole
 
         static void UpdateMap()//Behind - Always false when driving normally
         {
+            if (reset) return;
             SensorCheck();
 
             bool wallNZ;
@@ -334,6 +343,7 @@ namespace SerialConsole
 
         static void UpdateMapFull(bool _turnBack)
         {
+            Log("Updating full map", true);
             UpdateMap();
             Turn('l');
             SensorCheck();
@@ -347,12 +357,12 @@ namespace SerialConsole
 
         static void Reset()
         {
+            if (reset) return;
+
+            errors = 2;
             Log("Resetting", true);
-            reset = true;
             try
             {
-                serialPort1.DiscardInBuffer();
-                serialPort1.DiscardOutBuffer();
                 driveWay.Clear();
 
                 rampCount = savedRampCount;
@@ -374,11 +384,13 @@ namespace SerialConsole
                     currentMap = _checkpointXZ[2];
                     direction = _checkpointXZ[3];
 
-                    Log("Started reset", true);
-                    for (int i = sinceCheckpoint.Count - 1; i >= 0; i--)
+                    Log($"reset pos: {posX},{posZ}, dir: {direction}, map: {currentMap}", true);
+                    for (int i = sinceCheckpoint.Count-1; i >= 0; i--)
                     {
                         byte[] _coords = sinceCheckpoint[i];
-                        maps[_coords[2]].ClearTile(_coords[0], _coords[1], BitLocation.victim);
+                        Log($"::removing maps[{_coords[2]}] - {_coords[0]},{_coords[1]}", false);
+                        if (_coords[2] < maps.Count)
+                            maps[_coords[2]].ClearTile(_coords[0], _coords[1], BitLocation.victim);
                         sinceCheckpoint.RemoveAt(i);
                     }
                 }
@@ -391,24 +403,29 @@ namespace SerialConsole
                 posZ = 25;
                 currentMap = 0;
                 direction = 0;
-                UpdateMapFull(false);
+                errors = 6;
+                UpdateMapFull(true);
                 AddSinceCheckPoint();
                 throw new Exception("Reset error", e);
             }
+            dropKits = false;
 
             Thread.Sleep(10);
-            serialPort1.DiscardInBuffer();
-            serialPort1.DiscardOutBuffer();
+            
+            if (serialPort1.BytesToRead != 0)
+            {
+                serialPort1.ReadExisting();
+            }
 
-            dropKits = false;
-            //SerialComm("!w");
             Thread.Sleep(300);
 
             UpdateMapFull(true);
             AddSinceCheckPoint();
             Thread.Sleep(10);
+            reset = true;
         }
 
+        /// <summary>To make sure that we always add since checkpoint the same way</summary>
         static void AddSinceCheckPoint()
         {
             if (sinceCheckpoint.Count == 0)
@@ -494,10 +511,17 @@ namespace SerialConsole
             driveWay = new List<byte[]>(maps[currentMap].PathTo(_toX, _toZ, posX, posZ));
         }
 
+        /// <summary>
+        /// Searches for a path to any tile in the starting area, before the first ramp
+        /// </summary>
+        /// <returns>The path to the tile, or nothing </returns>
         static List<byte[]> PathToStart()
         {
+            byte _toX = (byte)maps[0].StartPosX,
+                 _toZ = (byte)maps[0].StartPosZ;
+            if (!maps[0].ReadBit(_toX, _toZ, BitLocation.explored)) _ = new List<byte[]>();
             List<byte[]> fullPath = new();
-            List<byte[]> path;
+            List<byte[]> path = new();
             byte _simMap = (byte)currentMap;
             byte _simX = (byte)posX;
             byte _simZ = (byte)posZ;
@@ -506,66 +530,73 @@ namespace SerialConsole
             byte[] _tile2;
             byte[] _newInfo;
 
-            while (!(_simMap != 0 && _simX == maps[0].StartPosX && _simZ == maps[0].StartPosZ))
+            while (!(_simMap == 0 && _simX == _toX && _simZ == _toZ))
             {
                 Log("(Re?)started path finding to start", true);
                 while (_simMap != 0)
                 {
                     Log($"On map {_simMap}", true);
-                    //The first ramp to the level, will lead us back to the first map
-                    _ramp = maps[currentMap].Ramps[0];
-
-                    //The tile we are searching to, to be able to go down the ramp
-                    _tile2 = DirToTile(_ramp[(int)RampStorage.RampDirection], _ramp[(int)RampStorage.XCoord], _ramp[(int)RampStorage.ZCoord]);
-
-                    path = new List<byte[]>(maps[_simMap].PathTo(_tile2[0], _tile2[1], _simX, _simZ));
-
+                    
                     //If we cannot find a path to the ramp, try other maps
-                    for (int i = 0; path.Count == 0; i++)
+                    for (int i = 0; i < maps[_simMap].Ramps.Count; i++)
                     {
                         //New ramp in acsending order, we want the first possible
-                        _ramp = maps[currentMap].Ramps[i];
+                        _ramp = maps[_simMap].Ramps[i];
 
                         //The tile we are searching to, to be able to go down the ramp
                         _tile2 = DirToTile(_ramp[(int)RampStorage.RampDirection], _ramp[(int)RampStorage.XCoord], _ramp[(int)RampStorage.ZCoord]);
 
                         path = new List<byte[]>(maps[_simMap].PathTo(_tile2[0], _tile2[1], _simX, _simZ));
+
+                        if (path.Count != 0)
+                        {
+                            fullPath.AddRange(path);
+                            _newInfo = maps[_ramp[(int)RampStorage.ConnectedMap]].GetRampAt(_ramp[(int)RampStorage.RampIndex]);
+                            _simMap = _ramp[(int)RampStorage.ConnectedMap];
+                            _simX = _newInfo[(int)RampStorage.XCoord];
+                            _simZ = _newInfo[(int)RampStorage.ZCoord];
+                            break;
+                        }
                     }
 
-                    fullPath.AddRange(path);
-                    _newInfo = maps[_ramp[(int)RampStorage.ConnectedMap]].GetRampAt(_ramp[(int)RampStorage.RampIndex]);
-                    _simMap = _ramp[(int)RampStorage.ConnectedMap];
-                    _simX = _newInfo[(int)RampStorage.XCoord];
-                    _simZ = _newInfo[(int)RampStorage.ZCoord];
+                    if (path.Count == 0)
+                    {
+                        Log("CANNOT FIND WAY DOWN", true);
+                        errors += 4;
+                        return new List<byte[]>();
+                    }
                 }
 
-                //When we are on the first map, find our way to the start
-                path = new List<byte[]>(maps[_simMap].PathTo((byte)maps[0].StartPosX, (byte)maps[0].StartPosZ, _simX, _simZ));
-                if (path.Count != 0 || (_simX != maps[0].StartPosX && _simZ != maps[0].StartPosZ))
+                //When we are on the first map, try to find our way to the start
+                path = new List<byte[]>(maps[_simMap].PathTo(_toX, _toZ, _simX, _simZ));
+                if (path.Count != 0 || (_simX == _toX && _simZ == _toZ))
                 {
                     fullPath.AddRange(path);
                     Log("Found path to start", true);
-                    return fullPath;
+                    return fullPath; 
                 }
 
-                //If we did not find a path to start, there might be
-                for (int i = 0; path.Count == 0; i++)
+                //If we did not find a path to goal, this area might be unconnected from the goal area
+                for (int i = 0; i < maps[_simMap].Ramps.Count; i++)
                 {
                     //Path down ramp will be path to ramp 1 + going the ramp
-                    _ramp = maps[currentMap].Ramps[i];
+                    _ramp = maps[_simMap].Ramps[i];
 
                     //The tile we are searching to, to be able to go down the ramp
                     _tile2 = DirToTile(_ramp[(int)RampStorage.RampDirection], _ramp[(int)RampStorage.XCoord], _ramp[(int)RampStorage.ZCoord]);
 
                     path = new List<byte[]>(maps[_simMap].PathTo(_tile2[0], _tile2[1], _simX, _simZ));
 
-                    _newInfo = maps[_ramp[(int)RampStorage.ConnectedMap]].GetRampAt(_ramp[(int)RampStorage.RampIndex]);
-                    _simMap = _ramp[(int)RampStorage.ConnectedMap];
-                    _simX = _newInfo[(int)RampStorage.XCoord];
-                    _simZ = _newInfo[(int)RampStorage.ZCoord];
+                    if (path.Count != 0)
+                    {
+                        fullPath.AddRange(path);
+                        _newInfo = maps[_ramp[(int)RampStorage.ConnectedMap]].GetRampAt(_ramp[(int)RampStorage.RampIndex]);
+                        _simMap = _ramp[(int)RampStorage.ConnectedMap];
+                        _simX = _newInfo[(int)RampStorage.XCoord];
+                        _simZ = _newInfo[(int)RampStorage.ZCoord];
+                        break;
+                    }
                 }
-
-                fullPath.AddRange(path);
             }
 
             return fullPath;

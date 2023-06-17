@@ -38,7 +38,7 @@ namespace SerialConsole
     {
         // ********************************** Variables And Objects ********************************** 
         //**Data, mapping**
-        public Map(int _mazeLength, int _height, int _startPosX, int _startPosZ)
+        public Map (int _mazeLength, int _height, int _startPosX, int _startPosZ)
         {
             Length = _mazeLength;
             map = new ushort[_mazeLength, _mazeLength];
@@ -102,7 +102,7 @@ namespace SerialConsole
         {
             for (int i = 0; i < reachedFrom.Count; i++)
             {
-                if (reachedFrom[i][(int)RampStorage.XCoord] == _x && reachedFrom[i][(int)RampStorage.ZCoord] == _z
+                if (reachedFrom[i][(int)RampStorage.XCoord] == _x && reachedFrom[i][(int)RampStorage.ZCoord] == _z 
                     && _direction == reachedFrom[i][(int)RampStorage.RampDirection])
                 {
                     return reachedFrom[i];
@@ -160,7 +160,7 @@ namespace SerialConsole
         /// </summary>
         public void AddBitInfo(byte[] _xz, BitLocation _bit)
         {
-            byte[] _info = new byte[] { _xz[0], _xz[1], (byte)_bit };
+            byte[] _info = new byte[] { _xz[0], _xz[1], (byte)_bit};
             extraBits.Add(_info);
         }
 

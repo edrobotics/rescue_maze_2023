@@ -18,6 +18,7 @@ namespace SerialConsole
         static int direction = 0;
 
         static bool locationUpdated;
+        static bool turboDrive = false;
 
         static bool frontPresent;
         static bool leftPresent;
@@ -39,91 +40,29 @@ namespace SerialConsole
 
         static readonly Stopwatch timer = new();
 
-        const double secoundsPerDrive = 4.5;
-        const double secoundsPerTurn = 2.5;
-        static int secoundsToStart = 0;
-        static bool distanceUpdated;
+        const double SecondsPerDrive = 3;
+        const double SecondsPerTurn = 3;
+        static int secondsToStart = 0;
+        static bool startTimeUpdated;
         static volatile bool exit = false;
 
         static bool timeOut = false;
 
+#warning change before competition
+        const int MINUTES = 4;
+
         /// <summary>
-        /// Keep track of the amount of errors, add an amount for each error depending on severity and subtract 1 for each right, 
+        /// Keep track of the amount of errors, add an amount for each error depending on severity, 
         /// if it is too high we use backup nav
         /// </summary>
         static int errors = 0;
-
-        //******** Team ********
-        //~Köra snabbare till utforskade tiles
-        //~if error - send to auriga which turns on lamps to suggest lop?
-        //~VIKTIG:Hur ska timern veta om reseten är första inför första körning, eller inte - första reset (rutin)(?) -hur gör vi med kalibrering???
-        //Send to auriga or recive from if there is likely an obstacle present?
-        //~Edit Baud Rate to read faster, 38,4 k seems good -- does not work??
-        //~Always send in beginning like in drive to avoid deadlock
-        //~Resume method?
-
-        //******** Tests ********
-        //Test (+finish?) sinceCheckpoint??
-        //Test reset so that it doesn't do anything unexpected
-        //Double check ramp data and ramp methods
-
-        //******** Possibilities ********
-        //draw map to file?
-        //private Directions ToLocalDirection() -- good to have - or just (int)Directions + direction to make global
-        //Compare map to sensor (+vision?) data?
-
-        //******** Solve/look into NOW ********
-        //Make it so that if I cannot find way to start - go down ramp
-        //optimiserad svängning vid kit dropping -------started in DropKits() -- finish asap
-        //Sätt ingen kit check förrän i turnLogic för att optimisera
-        //Fix line ~256 when ramps are fixed
-        //Check that mapping + writing it to file is correct and the search alg.
-        //Fault in left wall backup nav
-        //Fix what to do when driveWay seeking fails
-        //Direction when i drive OUT of checkpoint
-        //Update checkpoint direction of that when it left tile
-        //victims are saved until end of drive - problem if identified on first tile in drive -- send message in middle of drive?
-
-        //****Little lower, still high****
-        //OM VI KAN UPPSKATTA HUR HÖG + LÅNG EN RAMP ÄR - (GENOM GYRO + STRÄCKA KÖRD PÅ RAMP) KAN VI HA EN KARTA FÖR VARJE "NIVÅ", add height to mapinfo and lenth to calc position
-        // ------------------ if so -> make sure crossRoads() on two maps on same height but unconnected works when findway fails
-        // ------------------ finish ramp distances in Drive()
-        // ------------------ Set ramp to actual ramp instead of tile next to ++ put walls for if there is two next to each other - or search algorithm ramps
-        //TurnTo(direction - 2); DriveDeaf(); --When we don't want to go up ramp, panic solution
-        //Search algorithm with ramps?
-        //--Change map in search algorithm when searching to ramp
-        //use GoBackLevel???
-        //Förbättra felhantering
-        //GOOD IDEA: Own delay method so that i can do work while sleeping, like finding distance to start
-        //Full reset -- if we reset from start tile, also re-startup, but do not add another thread for victim
-
-
-        //******** Solve/look into ********
-        // TRiple slash /// for summaries above methods - useful, especially if put into classes
-        //File.AppendAllText("log.txt", $"found:{dropAmount},{dropSide}"); + more logging?
-        //Check driveblind() and its usage
-        //Resume method? - No answer from CheckAndDropKits in drive? - new method which doesn't excpect answer?
-        //Testa serial skriva och läsa "samtidigt"; lite innan och efter skickning
-
-
-        //******** Solved/done? (look into/could be bugs) ********
-        //Black tiles and ramp tiles in search tiles
-        //Count ramp as one tile? --rewrite UpRamp and DownRamp
-        //SEARCH DIRECTLY TO TILE !!!!!!!!!!!!!!!!!
-        //Black tiles & ramp in Search Algorithm
-        //Search directly to explore tile instead of crossroad
-        //Use remaining 4 bits for ramp location?
-        //change string lists to int[] lists? or own class lists - done?
-        //CrossTiles to tile done?
-        //Reset driveWay and update map if driveWay fails
-        //Remap on wall "hit" in drive -
-        //Check and log ramp data -- seems to be out of bounds??
 
         // ********************************** Main Loop & Startup ********************************** 
         #region Main
 
         static void Main()
         {
+            File.WriteAllText("log.txt", "::::::::::Program start::::::::::");
             Console.CancelKeyPress += delegate (object? o, ConsoleCancelEventArgs e)
             {
                 e.Cancel = false;
@@ -149,7 +88,7 @@ namespace SerialConsole
                     }
                     //CheckTimer();
                     Turnlogic();
-                    Drive(true);
+                    Drive(true, turboDrive);
                     Thread.Sleep(10);
 
                     if (errors >= 10)
@@ -172,52 +111,45 @@ namespace SerialConsole
 
         static void StartUp()
         {
-#if DEBUG
-            File.WriteAllText("log.txt", "::::::::::Testing start::::::::::");
-#endif
             listener.Start();
             Log("Waiting for connection...", true);
             client = listener.AcceptTcpClient();
             Log("Client accepted", true);
 
-        OpenPort:
-            try
+            while (!serialPort1.IsOpen)
             {
-                serialPort1.Open();
-            }
-            catch (Exception e)
-            {
-                LogException(e);
-                errors -= 2; //LogE adds automatic errors, we don't want to give errors here
-                Log("Cannot open port, try these: ");
-                string[] _ports = SerialPort.GetPortNames();
-                foreach (string _port in _ports)
+                serialPort1.PortName = "/dev/ttyS0";
+                try
                 {
-                    Log(_port);
+                    serialPort1.DiscardInBuffer();
+                    serialPort1.Open();
                 }
-
-                foreach (string _port in _ports)
+                catch
                 {
-                    try
+                    Log("Cannot open port, try these: ");
+                    string[] _ports = SerialPort.GetPortNames();
+                    foreach (string _port in _ports)
                     {
-                        if (_port.Contains("/dev/ttyUSB") || _port.Contains("COM") || _port.Contains("/dev/ttyS"))
+                        Log(_port);
+                    }
+
+                    foreach (string _port in _ports)
+                    {
+                        try
                         {
-                            serialPort1.PortName = _port;
-                            serialPort1.Open();
+                            if (_port.Contains("/dev/ttyUSB") || _port.Contains("COM") || _port.Contains("/dev/ttyS"))
+                            {
+                                serialPort1.PortName = _port;
+                                serialPort1.Open();
+                            }
+                        }
+                        catch
+                        {
+                            Log("Cannot open port " + _port);
                         }
                     }
-                    catch (Exception ex)
-                    {
-                        LogException(ex);
-                        errors -= 2; //LogE adds automatic errors, we don't want to give errors here
-                        Log("Cannot open port " + _port);
-                    }
-                }
-                if (!serialPort1.IsOpen)
-                {
-                    serialPort1.PortName = "/dev/ttyS0";
+
                     Thread.Sleep(200);
-                    goto OpenPort;
                 }
             }
             Log($"Connected to {serialPort1.PortName}", true);
@@ -225,42 +157,44 @@ namespace SerialConsole
             Thread.Sleep(100);
             if (serialPort1.BytesToRead != 0)
                 serialPort1.ReadExisting();
-            serialPort1.DiscardInBuffer();
-            serialPort1.DiscardOutBuffer();
-            Thread.Sleep(400);
+            Thread.Sleep(100);
             Log("Waiting for reset");
 
+            string _commandRecived;
             do //Wait for calibration start
             {
                 while (serialPort1.BytesToRead == 0)
                 {
                     Thread.Sleep(20);
                 }
-            } while (!serialPort1.ReadLine().Contains(RecivedCommands.LOP.GetCommand()));
+                _commandRecived = serialPort1.ReadLine();
+            } while (!(_commandRecived.Contains(RecivedCommands.LOP.GetCommand()) && _commandRecived.Contains(RecivedCommands.Calibration.GetCommand())));
 
             timer.Start();
+            _commandRecived = "";
+            Log("-Recived colour sensor reset", true);
+
             do //Wait for program start
             {
                 while (serialPort1.BytesToRead == 0)
                 {
                     Thread.Sleep(20);
                 }
-            } while (!serialPort1.ReadLine().Contains(RecivedCommands.LOP.GetCommand()));
+                _commandRecived = serialPort1.ReadLine();
+            } while (!_commandRecived.Contains(RecivedCommands.LOP.GetCommand()) || _commandRecived.Contains(RecivedCommands.Calibration.GetCommand()));
+            Log("-Recived second reset", true);
 
-
+            Thread serverThread = new(ServerLoop);
+            serverThread.Start();
             Thread.Sleep(200);
+
+            // Setup map and start info
 
             currentMap = 0;
             direction = 0;
             maps.Capacity = 15;
             maps.Add(new Map(50, 0, 25, 25));
-            //mapInfo.Add(new int[] { 25, 25, direction });
             maps[0].Clear();
-
-            Thread.Sleep(100);
-            Thread serverThread = new(ServerLoop);
-            serverThread.Start();
-            Thread.Sleep(100);
 
             Log("Updating first tile");
             UpdateMapFull(true);
@@ -277,6 +211,7 @@ namespace SerialConsole
         static void Turnlogic()
         {
             if (reset) return;
+            turboDrive = false;
 
             bool[] _surroundingTiles = {ShouldGoTo(posX, posZ - 1) && !ReadHere(BitLocation.frontWall), //NOT BLACK TILES   ///false,false, false, true
                                         ShouldGoTo(posX - 1, posZ) && !ReadHere(BitLocation.leftWall),
@@ -293,7 +228,7 @@ namespace SerialConsole
 
         NavLogic:
             if (reset) return;
-
+            
             Thread.Sleep(20);
 
             //+ all startpos stuff when ramps are done (or change startpos in map + add parameter in initializer)
@@ -305,7 +240,7 @@ namespace SerialConsole
                 Thread.Sleep(20_000);
                 Exit();
                 return;
-
+                
             }
 
             if (driveWay.Count > 0)
@@ -327,8 +262,12 @@ namespace SerialConsole
                 }
                 Log($"Is turning to {driveWay[0][0]},{driveWay[0][1]}", true);
                 TurnTo(TileToDirection(driveWay[0]));
+
                 if (!reset)
+                {
+                    turboDrive = true;
                     driveWay.RemoveAt(0);
+                }
             }
             else if (_unExpTiles > 0)
             {
@@ -393,14 +332,14 @@ namespace SerialConsole
                     }
                     else
                     {
-                        for (int i = maps[currentMap].CrossTiles.Count - 1; i <= 0; i--)
+                        for (int i = maps[currentMap].CrossTiles.Count-1; i <= 0; i--)
                         {
                             //(maps[currentMap].CrossTiles[^i], maps[currentMap].CrossTiles[^1]) = (maps[currentMap].CrossTiles[^1], maps[currentMap].CrossTiles[^i]); //BAD SOLUTION, IF ONE IS BAD, BOTH ARE LIKELY BAD; travel up ramp instead?
                             FindPathHere(maps[currentMap].CrossTiles[i][1], maps[currentMap].CrossTiles[i][1]);
                             if (driveWay.Count > 0) goto NavLogic;
                         }
                         Log("SOMETHING PROBABLY WRONG WITH RAMP OR MAP, MAYBE DUAL RAMP, trying to solve", true);
-                        GoToRamp(maps[currentMap].GetRampAt((byte)(rampCount - 1)));
+                        GoToRamp(maps[currentMap].GetRampAt((byte)(rampCount-1)));
                     }
                     goto NavLogic;
                 }
@@ -419,7 +358,7 @@ namespace SerialConsole
 
         static void BackupNav()
         {
-            for (int i = 0; i < 10; i++) Log("!!!!!!!!!!!!!!!PROBLEM PROBLEM NAVIGATION FAILED!!!!!!!!!!!!!!!", true);
+            for (int i = 0; i < 10; i++)  Log("!!!!!!!!!!!!!!!PROBLEM PROBLEM NAVIGATION FAILED!!!!!!!!!!!!!!!", true);
             Thread.Sleep(1_000);
 
             while (true)
@@ -438,7 +377,7 @@ namespace SerialConsole
                         Turn('l');
                         CheckAndDropKits(true);
                         Thread.Sleep(100);
-                        Drive(false);
+                        Drive(false, false);
                     }
                     else if (frontPresent || ReadNextTo(BitLocation.blackTile, Directions.front) /*|| RampCheck(direction)*/)
                     {
@@ -454,7 +393,7 @@ namespace SerialConsole
                     Thread.Sleep(10);
                 }
 
-                Drive(false); //Do not check for ramps, we want to have 'dumber' code so less can go wrong
+                Drive(false, false); //Do not check for ramps, we want to have 'dumber' code so less can go wrong
                 CheckAndDropKits(true);
             }
         }
@@ -524,7 +463,7 @@ namespace SerialConsole
                 {
                     Log("-_-_-_-_-_-_-_-_-_-_ Ramp was a previously used ramp _-_-_-_-_-_-_-_-_-_-", true);
                     if (!ReadNextTo(BitLocation.explored, Directions.front))
-                    {
+                    { 
                         WriteNextTo(BitLocation.explored, true, Directions.front);
                         maps[currentMap].AddBitInfo(DirToTile(direction, (byte)posX, (byte)posZ), BitLocation.explored);
                     }
@@ -623,39 +562,38 @@ namespace SerialConsole
         static void CheckTimer()
         {
 #warning fix
+            if (!startTimeUpdated)
+            {
+                secondsToStart = PathSeconds(PathToStart());
+                startTimeUpdated = true;
+            }
             //if !starttimechecked => checktime
-            if (timer.ElapsedMilliseconds + secoundsToStart * 1000 > 7.5 * 60 * 1000)//7,75 min passed
+            // if driveWay => check time on it
+            if (timer.ElapsedMilliseconds +  secondsToStart * 1000 > 7.5 * 60 * 1000)//7,75 min passed
             {
                 Console.WriteLine("7 mins passed, returning");
+                driveWay = new List<byte[]>(PathToStart());
                 timeOut = true;
             }
         }
 
-        // ********************************** Helpers/nice to have instead of writing manually ********************************** 
-        #region Helpers
-
         static void DelayThread(int _millis, bool _doWork)
         {
             Stopwatch sw = Stopwatch.StartNew();
-            if (_millis > 10 && _doWork)
+
+            if (((_millis > 50) || (_millis > 10 && currentMap == 0)) && _doWork && !startTimeUpdated)
             {
-                if (!distanceUpdated)
-                {
-#warning NOT DONE
-                    //while (currentMap != 0){ } - do smth to check go back
-                    if (currentMap == 0)
-                    {
-                        secoundsToStart = (int)(maps[currentMap].PathTo(maps[currentMap].StartPosX, maps[currentMap].StartPosZ, posX, posZ).Count * (secoundsPerDrive + secoundsPerTurn));
-                        distanceUpdated = true;
-                    }
-                }
+                secondsToStart = PathSeconds(PathToStart());
+                startTimeUpdated = true;
             }
 
             if (_millis - (int)sw.ElapsedMilliseconds > 1)
             {
                 try
                 {
+                    sw.Stop();
                     Thread.Sleep(_millis - (int)sw.ElapsedMilliseconds);
+                    Log($"distance search took {sw.ElapsedMilliseconds}", false);
                 }
                 catch (Exception e)
                 {
@@ -664,6 +602,71 @@ namespace SerialConsole
                 }
             }
         }
+
+        static int PathSeconds(List<byte[]> path)
+        {
+            double _driveTime = 0,
+                   _turnTime = 0;
+
+            _turnTime += SecondsPerTurn * 2; //Assume that we are facing away from the first search for extra margin
+
+            for (int i = 0; i < path.Count; i++)
+            {
+                _driveTime += SecondsPerDrive;
+
+                if (i > 0 && i < path.Count - 1) //Last tile has no turning from, since it is the final tile. First tile already added.
+                {
+                    if (TileToDirection(path[i], path[i + 1]) != TileToDirection(path[i - 1], path[i]))
+                    {
+                        _turnTime += SecondsPerTurn;
+                    }
+                }
+            }
+
+            return (int)Math.Round((_driveTime + _turnTime + 10) * 1,2); //Extra margin (for example dropping missed kits) and exit time
+        }
+
+        static void Exit()
+        {
+            reset = true;
+            exit = true;
+            Log($"Lowest: {lowestX},{lowestZ}; Highest: {highestX},{highestZ}", true);
+            for (int m = 0; m < maps.Count; m++)
+            {
+                string[] _mapToText = new string[(3 + highestZ - lowestZ)];
+                int _loops = 0;
+                for (int i = lowestZ - 1; i <= highestZ + 1; i++)
+                {
+                    for (int j = lowestX - 1; j <= highestX + 1; j++)
+                    {
+                        string _bits = $"{j};{i}:";
+                        for (int k = 15; k >= 0; k--)
+                        {
+                            _bits += maps[m].ReadBit(j, i, (BitLocation)k) ? "1" : "0";
+                        }
+
+                        _mapToText[_loops] += _bits + ",";
+                    }
+                    _loops++;
+                }
+                try
+                {
+                    File.AppendAllText("log.txt",$"map {m+1}/{maps.Count}\n" + string.Join('\n', _mapToText) + "\n\n"); // Writes map to log file
+                }
+                catch (Exception e)
+                {
+                    Log($"Could not create log because: ", true);
+                    LogException(e);
+                }
+            }
+            Log("done with map file", true);
+            Thread.Sleep(1000);
+            listener.Stop();
+            serialPort1.Close();
+        }
+
+
+        // ********************************** Logging ********************************** 
 
         public static void Log(string _message)
         {
@@ -689,48 +692,5 @@ namespace SerialConsole
             Log($"Exception: {e.Message} at {e.Source}:{e}", false);
             Log($"Exception -- {e.Message}");
         }
-
-        static void Exit()
-        {
-            reset = true;
-            exit = true;
-            File.WriteAllText("map.txt", "");
-            Log($"Lowest: {lowestX},{lowestZ}; Highest: {highestX},{highestZ}", true);
-            for (int m = 0; m < maps.Count; m++)
-            {
-                string[] _mapToText = new string[(3 + highestZ - lowestZ)];
-                int _loops = 0;
-                for (int i = lowestZ - 1; i <= highestZ + 1; i++)
-                {
-                    for (int j = lowestX - 1; j <= highestX + 1; j++)
-                    {
-                        string _bits = $"{j};{i}:";
-                        for (int k = 15; k >= 0; k--)
-                        {
-                            _bits += maps[m].ReadBit(j, i, (BitLocation)k) ? "1" : "0";
-                        }
-
-                        _mapToText[_loops] += _bits + ",";
-                    }
-                    _loops++;
-                }
-                try
-                {
-                    File.AppendAllText("map.txt", $"map {m}/{maps.Count}\n" + string.Join('\n', _mapToText) + "\n\n");
-                    //File.WriteAllText("map.txt", string.Join('\n', mapToText)); // Writes map to text file; previous: /*@"C:\Users\0515frma\Desktop\Test\log.txt"*/
-                }
-                catch (Exception e)
-                {
-                    Log($"Could not create log because: ", true);
-                    LogException(e);
-                }
-            }
-            Log("done with map file", true);
-            Thread.Sleep(1000);
-            listener.Stop();
-            serialPort1.Close();
-            //throw new Exception();
-        }
-        #endregion
     }
 }
