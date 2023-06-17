@@ -290,11 +290,16 @@ Command serialcomm::readCommand(bool waitForSerial, int timeout)
 
     case 'd': // driveStep
       ++strIdx;
-      if (readString.charAt(strIdx) != ',') return command_invalid;
+      if (readString.charAt(strIdx) != ',')
+      {
+        // g_turboSpeed = false;
+        // return command_driveStep;
+        return command_invalid;
+      }
       ++strIdx;
-
       if (readString.charAt(strIdx) == '1') g_turboSpeed = true;
       else g_turboSpeed = false;
+
       return command_driveStep;
       break;
 
@@ -416,8 +421,8 @@ void lightsAndBuzzerInit()
   for (int i=0; i<CAMERA_LED_NUM; ++i)
   {
     cameraLeds[i].r = 255;
-    cameraLeds[i].g = 255;
-    cameraLeds[i].b = 255;
+    cameraLeds[i].g = 160;
+    cameraLeds[i].b = 100;
   }
   FastLED.show();
 }
@@ -2191,7 +2196,7 @@ bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, To
 {
   // straighten();
   if (g_turboSpeed==true) g_baseSpeed_CMPS = 21;
-  else g_baseSpeed_CMPS = 15;
+  else g_baseSpeed_CMPS = BASE_SPEED_CMPS;
   WallSide wallToUse = wall_none; // Initialize a variable for which wall to follow
   startDistanceMeasure(); // Starts the distance measuring (encoders)
   double dumbDistanceDriven = 0;
