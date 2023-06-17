@@ -87,7 +87,8 @@ const double WHEEL_CIRCUMFERENCE = PI*WHEEL_DIAMETER;
 
 // Driving
 const double CMPS_TO_RPM = 1.0/WHEEL_CIRCUMFERENCE*60.0; // Constant to convert from cm/s to rpm
-double g_baseSpeed_CMPS = 15; // The base speed of driving (cm/s)
+const double BASE_SPEED_CMPS = 15; // The base speed of driving (cm/s)
+double g_baseSpeed_CMPS = BASE_SPEED_CMPS; // The speed to drive at
 const double BASE_SPEED_RPM = CMPS_TO_RPM*g_baseSpeed_CMPS; // The base speed of driving (rpm)
 double g_trueDistanceDriven = 0; // The correct driven distance. Measured as travelling along the wall and also updated when landmarks are seen
 double g_targetDistance = 0; // The distance that you want to drive
@@ -288,12 +289,12 @@ Command serialcomm::readCommand(bool waitForSerial, int timeout)
       break;
 
     case 'd': // driveStep
-      // ++strIdx;
-      // if (readString.charAt(strIdx) != ',') return command_invalid;
-      // ++strIdx;
+      ++strIdx;
+      if (readString.charAt(strIdx) != ',') return command_invalid;
+      ++strIdx;
 
-      // if (readString.charAt(strIdx) == '1') g_turboSpeed = true;
-      // else g_turboSpeed = false;
+      if (readString.charAt(strIdx) == '1') g_turboSpeed = true;
+      else g_turboSpeed = false;
       return command_driveStep;
       break;
 
@@ -2189,8 +2190,8 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
 bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, TouchSensorSide& frontSensorDetectionType, double& xDistanceOnRamp, double& yDistanceOnRamp, bool continuing)
 {
   // straighten();
-  // if (g_turboSpeed==true) g_baseSpeed_CMPS = 21;
-  // else g_baseSpeed_CMPS = 15;
+  if (g_turboSpeed==true) g_baseSpeed_CMPS = 21;
+  else g_baseSpeed_CMPS = 15;
   WallSide wallToUse = wall_none; // Initialize a variable for which wall to follow
   startDistanceMeasure(); // Starts the distance measuring (encoders)
   double dumbDistanceDriven = 0;
