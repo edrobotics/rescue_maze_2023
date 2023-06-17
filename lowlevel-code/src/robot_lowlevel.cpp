@@ -1262,7 +1262,7 @@ void awareGyroTurn(double turnAngle, bool stopMoving, double baseSpeed = 0)
   centerAngle180(endGyroAngle, startGyroAngle);
   double angleDiff = endGyroAngle - startGyroAngle;
   #warning Offset used wrong!
-  pose.gyroOffset = gyroAngleToMathAngle(gyro.getAngleZ());// The angle measured by the gyro (absolute angle) in the beginning.
+  pose.gyroOffset = gyroAngleToMathAngle(gyro.getAngleZ()) - pose.angle;// The angle measured by the gyro (absolute angle) in the beginning.
 
   pose.update();
   pose.startAngle = pose.lastAngle + angleDiff;
@@ -1295,7 +1295,7 @@ void gyroTurnSteps(TurningDirection direction, int steps, bool doCorrection)
   double endGyroAngle = gyroAngleToMathAngle(gyro.getAngleZ());
   centerAngle180(endGyroAngle, startGyroAngle);
   double angleDiff = endGyroAngle - startGyroAngle;
-  pose.angle = pose.lastAngle + angleDiff - multiplier*90;
+  pose.angle -= multiplier*90;
   pose.gyroOffset = gyroAngleToMathAngle(gyro.getAngleZ()) - pose.angle; // Set gyro offset (preliminary, may not be very good?)
 
   // Serial.print(g_startWallAngle);
