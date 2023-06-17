@@ -290,6 +290,28 @@ enum WallSide {
     wall_both,
     wall_none,
 };
+
+class RobotPose
+{
+  public:
+    double xDist; // Distance (cm) counted from the left wall (or imaginary left wall). Positive goes right.
+    double yDist; // Distance (cm) counted from the centre of one tile to the next. Positive goes forward
+    double angle; // Angle (degrees) relative to the wall. Positive is counter-clockwise.
+    RobotPose()
+    {
+      xDist = 15;
+      yDist = 0;
+      angle = 0;
+    }
+    void update(); // Add variations. Should this be used to increment with the help of dumbDistanceDriven as well?
+    void print();
+    void getSafeWallToUse();
+    void getNormalWallToUse();
+    // Functions for determining which wall to follow. In here or outside?
+  private:
+    void calculate(); // Will maybe need some parameters?
+};
+
 // Sets the global variables for angles and distances.
 // Does not update the gyro itself
 // secondaryWallDistance is supplied when both walls are present
