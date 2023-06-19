@@ -1,4 +1,5 @@
-﻿using System;
+﻿// |||| NAVIGATION - Class which contains all the mapping stuff, as well as paths between tiles in the same area ||||
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -12,7 +13,8 @@ namespace SerialConsole
         ZCoord,
         RampDirection,
         RampIndex,
-        ConnectedMap
+        ConnectedMap,
+        RampSearched
     }
 
     enum BitLocation
@@ -45,6 +47,7 @@ namespace SerialConsole
             StartPosX = _startPosX;
             StartPosZ = _startPosZ;
             Height = _height;
+            areas.Add(new List<byte[]>()); //New area created
         }
         /// <summary>The size of the map in tile amount</summary>
         public int Length;
@@ -60,6 +63,9 @@ namespace SerialConsole
         List<byte[]> crossTiles = new(); //byte[0].Length = 2; 0 posX, 1 posZ 
         List<byte[]> saveCross = new();
 
+        List<List<byte[]>> areas = new();
+        List<List<byte[]>> saveAreas = new();
+
         public ref ushort[,] GetMap
         {
             get => ref map;
@@ -73,6 +79,11 @@ namespace SerialConsole
         public ref List<byte[]> Ramps
         {
             get => ref reachedFrom;
+        }
+
+        public ref List<List<byte[]>> Areas
+        {
+            get => ref areas;
         }
 
         //**Searching**
@@ -92,9 +103,52 @@ namespace SerialConsole
 
         // ********************************** Data - Methods ********************************** 
 
+        public void AddArea()
+        {
+            areas.Add(new List<byte[]>());
+        }
+
+        public void MergeAreas(int _fromArea, int _toArea)
+        {
+            areas[_toArea].AddRange(areas[_fromArea]);
+            areas.RemoveAt(_fromArea);
+        }
+
+        public bool IsInArea(byte[] _tile, int _area)
+        {
+            for (int i = 0; i < areas[_area].Count; i++)
+            {
+                if (_tile == areas[_area][i])
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        public bool IsSameArea(byte[] _tile1, byte[] _tile2)
+        {
+            return GetArea(_tile1) == GetArea(_tile2);
+        }
+
+        public int GetArea(byte[] _tile)
+        {
+            for (int i = 0; i < areas.Count; i++)
+            {
+                for (int j = 0; j < areas[i].Count; j++)
+                {
+                    if (_tile == areas[i][j])
+                    {
+                        return i;
+                    }
+                }
+            }
+            return -1;
+        }
+
         public void AddRamp(byte _x, byte _z, byte _direction, byte _rampIndex, byte _connectedMap)
         {
-            byte[] _info = new byte[5] { _x, _z, _direction, _rampIndex, _connectedMap };
+            byte[] _info = new byte[6] { _x, _z, _direction, _rampIndex, _connectedMap, 0 };
             reachedFrom.Add(_info);
         }
 
@@ -111,17 +165,6 @@ namespace SerialConsole
             return new byte[] { 250, 250, 250, 250 };
         }
 
-        public byte[] GetFirstRampAt(byte _x, byte _z)
-        {
-            for (int i = 0; i < reachedFrom.Count; i++)
-            {
-                if (reachedFrom[i][(int)RampStorage.XCoord] == _x && reachedFrom[i][(int)RampStorage.ZCoord] == _z)
-                {
-                    return reachedFrom[i];
-                }
-            }
-            return new byte[] { 250, 250, 250, 250 };
-        }
 
         /// <summary>
         /// Gets a ramp by index
@@ -130,7 +173,7 @@ namespace SerialConsole
         {
             for (int i = 0; i < reachedFrom.Count; i++)
             {
-                if (reachedFrom[i][3] == _index)
+                if (reachedFrom[i][(int)RampStorage.RampIndex] == _index)
                 {
                     return reachedFrom[i];
                 }
@@ -171,6 +214,7 @@ namespace SerialConsole
         {
             saveCross = new List<byte[]>(crossTiles);
             saveReached = new List<byte[]>(reachedFrom);
+            saveAreas = new List<List<byte[]>>(areas);
             extraBits.Clear();
         }
 
@@ -181,6 +225,7 @@ namespace SerialConsole
         {
             crossTiles = new List<byte[]>(saveCross);
             reachedFrom = new List<byte[]>(saveReached);
+            areas = new List<List<byte[]>>(saveAreas);
             foreach (byte[] _extrabit in extraBits)
             {
                 WriteBit(_extrabit[0], _extrabit[1], (BitLocation)_extrabit[2], false);

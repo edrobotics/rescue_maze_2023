@@ -1,4 +1,5 @@
-﻿using System;
+﻿// |||| NAVIGATION - Custom attribute for commands for better code structure ||||
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;

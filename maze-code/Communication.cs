@@ -1,4 +1,5 @@
-﻿using System;
+﻿// |||| NAVIGATION - Code for communication stuff and related ||||
+using System;
 using System.Collections.Generic;
 using System.IO.Ports;
 using System.Linq;
