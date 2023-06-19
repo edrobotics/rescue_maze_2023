@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+#this is the code that processes the images and sends socket communication to the navigation code 
 import numpy as np
 import socket
 import time
@@ -10,38 +11,15 @@ import os
 class imgproc:
     victim_pos = None
 
+#find sample path
     cwd = os.getcwd()
     if cwd == '/Users/lukas/GitHub/rescue_maze_2023/vision-code':
         sampledir = "/Users/lukas/GitHub/rescue_maze_2023/vision-code/samples/"
-        print("on mac")        
     else: 
         sampledir = "/home/pi/rescue_maze_2023/vision-code/samples/"
         
-        print("connecting...")
 
-    def connect(self):
-        while True:
-            try:
-                self.HEADER = 16
-                PORT = 4242
-                SERVER = socket.gethostbyname(socket.gethostname())
-                ADDR = (SERVER, PORT)
-                self.FORMAT = 'utf-8'
-                DISCONNECT_MESSAGE = "!DISCONNECT"
-                self.client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                self.client.connect(ADDR)
-            except:
-                print("failed")
-                time.sleep(2)
-            else:
-                print("Connected")
-                connected = True
-                break
-
-
-
-
-
+#loading samples
     Dictand = {
         "H": None, 
         "S": None, 
@@ -68,7 +46,6 @@ class imgproc:
             Dict[key] = binary
 
 
-    #lastdetected = (None, -10, None)
     lastdetected = {
         "H": [None, -10, 0],
         "S": [None, -10, 0],
@@ -78,29 +55,32 @@ class imgproc:
         "green": [None, -10, 0],
     }
 
-    blacklist = []
-    def detected(self,msg, victim):
-
-        list = self.lastdetected[victim]
+    blacklist = [] #possible safety feature in case the colour code gets messed up by the lightning(not active)
+    def detected(self,msg, victim): #makes the victim only send once every victim detection
+        
+        notblacklisted = True
         for key in self.lastdetected:
             if self.lastdetected[key][1] == self.fnum:
                 self.blacklist.append(victim)
+                print(f"{victim} was blackliste. on {self.fnum}")
+                logging.info(f"{victim} was blacklisted")
+                notblacklisted = False
 
+        if notblacklisted:
 
+            list = self.lastdetected[victim]
+            if list[1] + 2 < self.fnum:
+                self.sendMessage(msg)
 
-
-
-        if list[1] + 2 < self.fnum:
-           self.sendMessage(msg)
-
-        else:
-            print("alredy detected")
+            else:
+                print("alredy detected")
+        #updates last detected
         new_list = (msg, self.fnum, list[2]+ 1)
         self.lastdetected[victim] = new_list
 
 
 
-
+#sends message to navigaion code using sockets
     def sendMessage(self,msg):
         print("sending message", msg)
         logging.info(f"sending: {msg}")
@@ -112,6 +92,25 @@ class imgproc:
             self.client.send(message)
         except:
             print("failed to send messsage")
+#connects to navigation code
+    def connect(self):
+        while True:
+            try:
+                self.HEADER = 16
+                PORT = 4242
+                SERVER = socket.gethostbyname(socket.gethostname())
+                ADDR = (SERVER, PORT)
+                self.FORMAT = 'utf-8'
+                DISCONNECT_MESSAGE = "!DISCONNECT"
+                self.client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                self.client.connect(ADDR)
+            except:
+                print("failed")
+                time.sleep(2)
+            else:
+                print("Connected")
+                connected = True
+                break
 
 
     def __init__(self, showsource= False,showcolor = False, show_visual = False, logging = True, debugidentification = False, info = True, time=False, connect = True):
@@ -126,48 +125,21 @@ class imgproc:
             self.connect()
     
 
-    def adjust_white_balance2(self, image, percent_red=0, percent_blue=0):
-        # Split the image into individual color channels
-        b, g, r = cv2.split(image)
-        
-        # Calculate the average intensity of each channel
-        avg_b = np.mean(b)
-        avg_g = np.mean(g)
-        avg_r = np.mean(r)
-        
-        # Adjust the color channels based on the desired white balance
-        adj_b = b * (avg_g / avg_b) * (100 - percent_blue) / 100
-        adj_r = r * (avg_g / avg_r) * (100 - percent_red) / 100
-        
-        # Clip the values to ensure they stay within the valid range
-        adj_b = np.clip(adj_b, 0, 255).astype(np.uint8)
-        adj_r = np.clip(adj_r, 0, 255).astype(np.uint8)
-    
-        # Merge the adjusted color channels back into an image
-        adjusted_image = cv2.merge([adj_b, g, adj_r])
-        
-        return adjusted_image
     
     def adjust_white_balance(self, image, percent_red=0, percent_blue=0):
-        # Split the image into individual color channels
         image = self.blank_out(image)
         b, g, r = cv2.split(image)
 
-        
-        # Calculate the average intensity of each channel
         avg_b = np.mean(b)
         avg_g = np.mean(g)
         avg_r = np.mean(r)
         
-        # Adjust the color channels based on the desired white balance
         adj_b = b * (avg_g / avg_b) * (100 - percent_blue) / 100
         adj_r = r * (avg_g / avg_r) * (100 - percent_red) / 100
         
-        # Clip the values to ensure they stay within the valid range
         adj_b = np.clip(adj_b, 0, 255).astype(np.uint8)
         adj_r = np.clip(adj_r, 0, 255).astype(np.uint8)
     
-        # Merge the adjusted color channels back into an image
         adjusted_image = cv2.merge([adj_b, g, adj_r])
         return adjusted_image
         
@@ -179,26 +151,21 @@ class imgproc:
         self.image_clone = self.image.copy()
         self.fnum = fnum
         self.log("E")
-        
-        
-        color_time = time.time()
 
         try:
             self.find_victim()
             self.Color_victim2()
         except: 
             print("something went wrong")
+            logging.info("something went wrong")
         if self.showsource:
             cv2.imshow("image_clone",self.image_clone)
 
-
-
-    
-    def blank_out(self, binary):
+   
+    def blank_out(self, img33):
         #blanks out pixels that can't be poi but can still make problems
-        if binary.ndim >= 3:
-            _, _, x = np.shape(binary)
-            print(x)
+        if img33.ndim >= 3:
+            _, _, x = np.shape(img33)
             if x == 3:
                 n = (0,0,0)
             else:
@@ -208,31 +175,28 @@ class imgproc:
         else: 
             n = (0)
 
-        binary[:, 280:360] = n
-        binary[:, 590:] = n
-        binary[:, :15] = n
+        img33[:, 280:360] = n
+        img33[:, 590:] = n
+        img33[:, :15] = n
 
-        binary[:30, :] = n
-        binary[450:, :] = n
-        return binary
+        img33[:30, :] = n
+        img33[450:, :] = n
+        return img33
 
-    def preproccesing(self,img):
+
+    def preproccesing(self,img): #for visual victim identification
         gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
         blurred = cv2.GaussianBlur(gray, (7, 7), 0)
-    #    ret,binary = cv2.threshold(gray,125,255,0, cv2.THRESH_BINARY)
-    # binary = cv2.adaptiveThreshold(blurred,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,cv2.THRESH_BINARY,21,10)
         binary = cv2.adaptiveThreshold(blurred,255,cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY,21,10)
         binary = np.invert(binary)
-    #    cv2.imshow("binary", binary)
         binary = self.blank_out(binary)
         self.binary = binary
         return binary
 
 
-    def find_victim(self):
+    def find_victim(self): #for visual victims
 
         img = self.image
-        #cv2.imshow("test",image)
         binary = self.preproccesing(img)
  
         contours, hierarchy = cv2.findContours(binary,cv2.RETR_LIST,cv2.CHAIN_APPROX_NONE)
@@ -345,13 +309,14 @@ class imgproc:
                     if self.info: print(f"identified: {victim}")
                     logging.info(f"identified victim: {victim}")
                     self.log(victim, img= ivictim)
+                    break
         if victim:
             identified = True
 
         return (identified,kits, victim)
 
     
-    def safeguards_color(self, contour, victim,mask):
+    def safeguards_color(self, contour, victim,mask):#reducing false identified colour victims
         correct = False
         (x,y,w,h) = cv2.boundingRect(contour)
         if x > 300: self.side = "l"
@@ -359,20 +324,20 @@ class imgproc:
 
         if self.find_edges(contour, mask, x,y,w,h):
             if self.check_position(x,y,w,h):
-                if self.check_movement(victim,x,y,w,h) or True: # debug remove
+                if self.check_movement(victim,x,y,w,h):
                     correct = True
         
         return correct
 
 
 
-    def check_position(self, x,y,w,h):
+    def check_position(self, x,y,w,h): # makes sure the victim is on the right height
         b_position = None
         victimheight = 142
-        victimheight2 = 450
-        if victimheight > x and victimheight - 25 < x + w:
+        victimheight2 = 442
+        if victimheight > x and victimheight - 20 < x + w:
             b_position = True
-        elif victimheight2 > x and victimheight2 - 25 < x + w:
+        elif victimheight2 > x and victimheight2 - 20 < x + w:
             b_position = True
         return b_position
  
@@ -382,7 +347,9 @@ class imgproc:
             pos = self.victim_pos
 
             if self.is_close(x, pos[2]) and self.is_close(w,pos[4]) and self.is_close(h,pos[5]):
-                #same_height = True
+                same_height = True
+#                b_movement = True #only for testing
+                print("keeping shape")
                 if y < pos[3]:
                     b_movement = True
                     print("moving")
@@ -398,7 +365,7 @@ class imgproc:
 
 
 
-    def is_close(self, num1, num2, marginal = 3):
+    def is_close(self, num1, num2, marginal = 5):
         close = False
         if num1 > num2:
            if num1 - num2 < marginal:
@@ -413,13 +380,12 @@ class imgproc:
 
 
         
-
+#safe guard to make sure the found mask is actually a contour
     def find_edges(self,contour,mask, x,y,w,h):
         contours_match = False
         image = np.copy(self.image)
             
         try: 
-            #blankout
             aoi = image[y -20 : y+h+20 ,x-20: x+w+ 20]
             aoi2 = np.copy(aoi)
             aoi3 = np.copy(aoi)
@@ -459,25 +425,8 @@ class imgproc:
                     if ct > points -2:
                         print("should be victim")
                         contours_match = True
+                        break
 
-
-
-                cv2.drawContours(aoi, contours2, -1, (0, 255, 0), 3)
-                cv2.drawContours(aoi, contours, -1, (255, 0, 0), 3)
-                cv2.drawContours(aoi3, contour, 0, (255, 255, 0), 3)
-                
-                epsilon = 0.1*cv2.arcLength(contour,True)
-                approx = cv2.approxPolyDP(contour,epsilon,True)
-        #        print(len(approx))
-        #        print(f"approx binary: {approx} ")
-                cv2.drawContours(aoi3, [approx], -1, (0,0,255), 3)
-
-                if self.showcolor:
-                    cv2.imshow("binary",binary)
-                    cv2.imshow("aoi",aoi)
-                    cv2.imshow("aoi2",aoi2)
-                    cv2.imshow("maskcnt",aoi3)
-                    cv2.imshow('Canny Edge Detection', edges)
 
         except:
 
@@ -490,13 +439,6 @@ class imgproc:
 
 
 
-
-
-
-        
-
-
-
     def Color_victim2(self):
         image = self.image
         #    image = image.copy
@@ -504,9 +446,9 @@ class imgproc:
         hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
 
         lower_range = {
-            "green": np.array([69,100,120]),
-            "yellow": np.array([15,90,130]),
-            "red" : np.array([130,110,60])
+            "green": np.array([50,70,70]), 
+            "yellow": np.array([15,90,100]),      
+            "red" : np.array([130,90,60]) 
             }
         upper_range = {
             "green" : np.array([95,255,255]),
@@ -518,7 +460,7 @@ class imgproc:
             upper = upper_range[color]
             mask = cv2.inRange(hsv,lower,upper)
             if color == "red":
-                red2_lower =np.array([0,150,100]) 
+                red2_lower =np.array([0,140,60]) 
                 red2_upper =np.array([7,255,255]) 
                 mask2 = cv2.inRange(hsv,red2_lower,red2_upper)
                 mask = np.bitwise_or(mask,mask2)
@@ -526,7 +468,7 @@ class imgproc:
             self.ColVicP(mask, color)
 
 
-
+#analysing the contours 
     def ColVicP(self, mask,color):
         kernel = np.ones((9, 9), np.uint8) 
         mask = cv2.erode(mask,kernel, iterations=1)
@@ -564,11 +506,10 @@ class imgproc:
 
 
 
-    def log(self, name, img=None):
+    def log(self, name, img=None):#logging the images
         if img is None:
             img = self.original_image
-        
-        
+   
         if self.logging:
             path = f'./log/{name}{self.fnum}.png'
             cv2.imwrite(path,img)

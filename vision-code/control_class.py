@@ -10,15 +10,16 @@ if __name__ == '__main__':
     n = 0
     logging.basicConfig(filename='example.log', encoding='utf-8', level=logging.DEBUG)
     logging.info("started")
-
+#initating class
     imgproc = tc.imgproc()
 
     #camera starts here
     camera = PiCamera()
     camera.resolution = (640, 480)
     camera.framerate = 10
-    #camera.shutter_speed = 10000
-    #camera.iso = 800
+    camera.awb_mode = 'off'
+    rg, bg = (1.8, 1.42)
+    camera.awb_gains = (rg, bg)
     rawCapture = PiRGBArray(camera, size=(640, 480))
     for frame in camera.capture_continuous(rawCapture, format="bgr", use_video_port=True):
         image = frame.array
