@@ -1,33 +1,10 @@
 #!/usr/bin/env python3
-import cv2
 import numpy as np
 import socket
 import time
+import cv2
 import logging
 import os
-
-
-for i in range(1):
-    print("connecting...")
-    try:
-        HEADER = 16
-        PORT = 4242
-        SERVER = socket.gethostbyname(socket.gethostname())
-        ADDR = (SERVER, PORT)
-        FORMAT = 'utf-8'
-        DISCONNECT_MESSAGE = "!DISCONNECT"
-        client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        client.connect(ADDR)
-    except:
-        print("failed")
-        time.sleep(2)
-    else:
-        print("Connected")
-        connected = True
-        break
-
-
-
 
 
 class imgproc:
@@ -37,7 +14,34 @@ class imgproc:
     if cwd == '/Users/lukas/GitHub/rescue_maze_2023/vision-code':
         sampledir = "/Users/lukas/GitHub/rescue_maze_2023/vision-code/samples/"
         print("on mac")        
-    else: sampledir = "/home/pi/rescue_maze_2023/vision-code/samples/" 
+    else: 
+        sampledir = "/home/pi/rescue_maze_2023/vision-code/samples/"
+        
+        print("connecting...")
+
+    def connect(self):
+        while True:
+            try:
+                self.HEADER = 16
+                PORT = 4242
+                SERVER = socket.gethostbyname(socket.gethostname())
+                ADDR = (SERVER, PORT)
+                self.FORMAT = 'utf-8'
+                DISCONNECT_MESSAGE = "!DISCONNECT"
+                self.client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                self.client.connect(ADDR)
+            except:
+                print("failed")
+                time.sleep(2)
+            else:
+                print("Connected")
+                connected = True
+                break
+
+
+
+
+
     Dictand = {
         "H": None, 
         "S": None, 
@@ -97,23 +101,20 @@ class imgproc:
 
 
 
-
-
     def sendMessage(self,msg):
         print("sending message", msg)
         logging.info(f"sending: {msg}")
 
         try:
-            message = msg.encode(FORMAT)
-            msg_length = len(message).to_bytes(HEADER, "big")
-            client.send(msg_length)
-            client.send(message)
+            message = msg.encode(self.FORMAT)
+            msg_length = len(message).to_bytes(self.HEADER, "big")
+            self.client.send(msg_length)
+            self.client.send(message)
         except:
             print("failed to send messsage")
 
 
-
-    def __init__(self, showsource= False,showcolor = False, show_visual = False, logging = True, debugidentification = False, info = True, time=False):
+    def __init__(self, showsource= False,showcolor = False, show_visual = False, logging = True, debugidentification = False, info = True, time=False, connect = True):
         self.showsource = showsource
         self.showcolor = showcolor
         self.show_visual = show_visual
@@ -121,20 +122,70 @@ class imgproc:
         self.debugidentification = debugidentification
         self.info = info
         self.time = time
+        if connect:
+            self.connect()
+    
+
+    def adjust_white_balance2(self, image, percent_red=0, percent_blue=0):
+        # Split the image into individual color channels
+        b, g, r = cv2.split(image)
+        
+        # Calculate the average intensity of each channel
+        avg_b = np.mean(b)
+        avg_g = np.mean(g)
+        avg_r = np.mean(r)
+        
+        # Adjust the color channels based on the desired white balance
+        adj_b = b * (avg_g / avg_b) * (100 - percent_blue) / 100
+        adj_r = r * (avg_g / avg_r) * (100 - percent_red) / 100
+        
+        # Clip the values to ensure they stay within the valid range
+        adj_b = np.clip(adj_b, 0, 255).astype(np.uint8)
+        adj_r = np.clip(adj_r, 0, 255).astype(np.uint8)
+    
+        # Merge the adjusted color channels back into an image
+        adjusted_image = cv2.merge([adj_b, g, adj_r])
+        
+        return adjusted_image
+    
+    def adjust_white_balance(self, image, percent_red=0, percent_blue=0):
+        # Split the image into individual color channels
+        image = self.blank_out(image)
+        b, g, r = cv2.split(image)
+
+        
+        # Calculate the average intensity of each channel
+        avg_b = np.mean(b)
+        avg_g = np.mean(g)
+        avg_r = np.mean(r)
+        
+        # Adjust the color channels based on the desired white balance
+        adj_b = b * (avg_g / avg_b) * (100 - percent_blue) / 100
+        adj_r = r * (avg_g / avg_r) * (100 - percent_red) / 100
+        
+        # Clip the values to ensure they stay within the valid range
+        adj_b = np.clip(adj_b, 0, 255).astype(np.uint8)
+        adj_r = np.clip(adj_r, 0, 255).astype(np.uint8)
+    
+        # Merge the adjusted color channels back into an image
+        adjusted_image = cv2.merge([adj_b, g, adj_r])
+        return adjusted_image
+        
 
 
     def do_the_work(self, image, fnum):
-        self.image = image
-        self.image_clone = image.copy()
+        self.original_image = np.copy(image)
+        self.image = self.adjust_white_balance(self.original_image)
+        self.image_clone = self.image.copy()
         self.fnum = fnum
         self.log("E")
+        
         
         color_time = time.time()
 
         try:
             self.find_victim()
             self.Color_victim2()
-        #self.Color_victim3()
         except: 
             print("something went wrong")
         if self.showsource:
@@ -142,16 +193,28 @@ class imgproc:
 
 
 
+    
     def blank_out(self, binary):
         #blanks out pixels that can't be poi but can still make problems
-        binary[:, 280:360] = (0)
-        binary[:, 590:] = (0)
-        binary[:, :15] = (0)
+        if binary.ndim >= 3:
+            _, _, x = np.shape(binary)
+            print(x)
+            if x == 3:
+                n = (0,0,0)
+            else:
+                print("something wrong in blankout")
+                print(x)
+                n = (0)
+        else: 
+            n = (0)
 
-        binary[:30, :] = (0)
-        binary[450:, :] = (0)
+        binary[:, 280:360] = n
+        binary[:, 590:] = n
+        binary[:, :15] = n
+
+        binary[:30, :] = n
+        binary[450:, :] = n
         return binary
-
 
     def preproccesing(self,img):
         gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
@@ -441,21 +504,21 @@ class imgproc:
         hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
 
         lower_range = {
-            "green": np.array([69,100,69]),
-            "yellow": np.array([10,35,130]),
+            "green": np.array([69,100,120]),
+            "yellow": np.array([15,90,130]),
             "red" : np.array([130,110,60])
             }
         upper_range = {
-            "green" : np.array([80,255,150]),
-            "yellow" : np.array([69,100,255]),
-            "red" : np.array([180,255,140])
+            "green" : np.array([95,255,255]),
+            "yellow" : np.array([50,255,255]),
+            "red" : np.array([180,255,255])
             }
         for color in lower_range:
             lower = lower_range[color]
             upper = upper_range[color]
             mask = cv2.inRange(hsv,lower,upper)
             if color == "red":
-                red2_lower =np.array([0,100,100]) 
+                red2_lower =np.array([0,150,100]) 
                 red2_upper =np.array([7,255,255]) 
                 mask2 = cv2.inRange(hsv,red2_lower,red2_upper)
                 mask = np.bitwise_or(mask,mask2)
@@ -503,7 +566,7 @@ class imgproc:
 
     def log(self, name, img=None):
         if img is None:
-            img = self.image
+            img = self.original_image
         
         
         if self.logging:
