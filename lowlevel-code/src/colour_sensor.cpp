@@ -1,3 +1,6 @@
+// Provides code for the colour sensor
+
+
 #include <colour_sensor.h>
 #include <Arduino.h>
 #include <MeRGBLed.h>

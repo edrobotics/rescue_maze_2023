@@ -1,3 +1,5 @@
+// Provides most functions for main.cpp
+
 #include <robot_lowlevel.h>
 #include <colour_sensor.h>
 // #include <ultrasonic_sensor.h>

@@ -1,3 +1,5 @@
+// Colour sensor header file
+
 #ifndef COLOUR_SENSOR
 #define COLOUR_SENSOR
 

@@ -1,3 +1,6 @@
+// This is the main program for the Auriga
+
+
 #include <robot_lowlevel.h>
 #include <colour_sensor.h>
 #include <Arduino.h>
