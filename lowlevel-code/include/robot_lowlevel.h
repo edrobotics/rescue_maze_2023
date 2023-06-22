@@ -302,6 +302,7 @@ class RobotPose
     double startAngle; // Perhaps not needed?
     double targetAngle;
     double gyroAngle; // Angle measured by the gyro. Saved as mathangle.
+    double targetGyroAngle;
     double gyroOffset; // Gyro angle when standing parallel to the wall. Saved as mathangle.
     double distOnRamp;
     double xDistOnRamp;

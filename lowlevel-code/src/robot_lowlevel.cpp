@@ -1060,6 +1060,7 @@ void RobotPose::calculate2(WallSide wallSide, double& tAngle, bool useGyroAngle,
   else
   {
     // If no wall is present
+    // If front ultrasonic sensor data is available, use that difference instead of the encoders
     xDist += distanceIncrement*sin(angle*DEG_TO_RAD);
   }
   #warning Not yet blended with ultrasonic front distance sensor // Should perhaps not even be here
@@ -1089,15 +1090,22 @@ void RobotPose::calculate1(WallSide wallSide, double& tAngle, double& distance, 
   else tAngle *= DEG_TO_RAD; // Convert the angle to radians to execute the calculation
 
   if (wallSide==wall_right) distance = 30 - distance; // Invert if the measured side is the right one
-  distance = cos(angle) * ((d1 + d2)/2.0);
+  distance = cos(tAngle) * ((d1 + d2)/2.0);
   tAngle *= RAD_TO_DEG; // Convert the angle to degrees
 }
 
 void RobotPose::print()
 {
-  Serial.print("angle:  ");Serial.println(angle, 2);
-  Serial.print("xDist:  ");Serial.println(xDist, 1);
-  Serial.print("yDist:  ");Serial.println(yDist, 1);
+  Serial.print("angle:  ");Serial.print(angle, 2);Serial.print("  ");
+  Serial.print("startAngle:  ");Serial.print(startAngle, 2);Serial.print("  ");
+  Serial.print("lastAngle:  ");Serial.print(lastAngle, 2);Serial.print("  ");
+  Serial.print("targetAngle:  ");Serial.print(targetAngle, 2);Serial.print("  ");
+  Serial.print("gyroAngle:  ");Serial.print(gyroAngle, 2);Serial.print("  ");
+  Serial.print("gyroOffset:  ");Serial.print(gyroOffset, 2);Serial.print("  ");
+  Serial.print("targetGyroAngle:  ");Serial.print(targetGyroAngle, 2);Serial.print("  ");
+  Serial.print("xDist:  ");Serial.print(xDist, 1);Serial.print("  ");
+  Serial.print("yDist:  ");Serial.print(yDist, 1);Serial.print("  ");
+  Serial.println("");
 }
 
 
@@ -1173,13 +1181,13 @@ void gyroTurn(double turnAngle, bool stopMoving, bool aware = false, double base
     }
 
     gyro.update();
-    pose.angle = gyroAngleToMathAngle(gyro.getAngleZ());
-    pose.targetAngle = pose.angle + turnAngle;
-    if (pose.targetAngle<0) {
-    pose.targetAngle +=360; // If the target angle is negative, add 360 to make it between 0 and 360 (no angle should be smaller than -360)
+    pose.gyroAngle = gyroAngleToMathAngle(gyro.getAngleZ());
+    pose.targetGyroAngle = pose.gyroAngle + turnAngle;
+    if (pose.targetGyroAngle<0) {
+    pose.targetGyroAngle +=360; // If the target angle is negative, add 360 to make it between 0 and 360 (no angle should be smaller than -360)
     crossingZero = true;
-  } else if (pose.targetAngle >= 360) {
-    pose.targetAngle -= 360; // Should bind the value to be between 0 and 360 for positive target angles (no angle should be 720 degrees or greater, so this should work)
+  } else if (pose.targetGyroAngle >= 360) {
+    pose.targetGyroAngle -= 360; // Should bind the value to be between 0 and 360 for positive target angles (no angle should be 720 degrees or greater, so this should work)
     crossingZero = true;
   }
     //double speedToRun = multiplier*1.5*g_baseSpeed_CMPS*CMPS_TO_RPM;
@@ -1197,20 +1205,21 @@ void gyroTurn(double turnAngle, bool stopMoving, bool aware = false, double base
       runWheelSide(wheels_right, speedToRun);
     }
 
-    double varLeftToTurn = leftToTurn(crossingZero, multiplier, pose.targetAngle, pose.angle);
+    double varLeftToTurn = leftToTurn(crossingZero, multiplier, pose.targetGyroAngle, pose.gyroAngle);
 
     while (varLeftToTurn > 15) {
+      pose.print();
       gyro.update();
-      pose.angle = gyroAngleToMathAngle(gyro.getAngleZ());
+      pose.gyroAngle = gyroAngleToMathAngle(gyro.getAngleZ());
       loopEncoders();
-      varLeftToTurn = leftToTurn(crossingZero, multiplier, pose.targetAngle, pose.gyroAngle);
+      varLeftToTurn = leftToTurn(crossingZero, multiplier, pose.targetGyroAngle, pose.gyroAngle);
+      Serial.println(varLeftToTurn);
 
       if (baseSpeed != 0 && aware==true)
       {
         // Update truedistancedriven (copied from driveStepDriveLoop and slightly modified)
         double dumbDistanceIncrement = getDistanceDriven() - dumbDistanceDriven;
-        double trueDistanceIncrement = dumbDistanceIncrement * cos(abs(pose.angle*DEG_TO_RAD));
-        g_trueDistanceDriven += trueDistanceIncrement;
+        pose.update(wall_none, dumbDistanceIncrement);
         dumbDistanceDriven = getDistanceDriven();
       }
     }
@@ -1230,10 +1239,11 @@ void gyroTurn(double turnAngle, bool stopMoving, bool aware = false, double base
     }
 
     while (varLeftToTurn > 2) {
+      pose.print();
       gyro.update();
       pose.gyroAngle = gyroAngleToMathAngle(gyro.getAngleZ());
       loopEncoders();
-      varLeftToTurn = leftToTurn(crossingZero, multiplier, pose.targetAngle, pose.gyroAngle);
+      varLeftToTurn = leftToTurn(crossingZero, multiplier, pose.targetGyroAngle, pose.gyroAngle);
 
       if (baseSpeed != 0 && aware==true)
       {
@@ -1253,7 +1263,7 @@ void gyroTurn(double turnAngle, bool stopMoving, bool aware = false, double base
 void awareGyroTurn(double turnAngle, bool stopMoving, double baseSpeed = 0)
 {
   pose.update();
-  pose.startAngle = pose.lastAngle;
+  pose.startAngle = pose.angle;
 
   double startGyroAngle = gyroAngleToMathAngle(gyro.getAngleZ());
   gyroTurn(turnAngle, true, true, baseSpeed);
@@ -1265,7 +1275,7 @@ void awareGyroTurn(double turnAngle, bool stopMoving, double baseSpeed = 0)
   pose.gyroOffset = gyroAngleToMathAngle(gyro.getAngleZ()) - pose.angle;// The angle measured by the gyro (absolute angle) in the beginning.
 
   pose.update();
-  pose.startAngle = pose.lastAngle + angleDiff;
+  pose.startAngle = pose.startAngle + angleDiff;
 
 }
 
@@ -1281,11 +1291,11 @@ void gyroTurnSteps(TurningDirection direction, int steps, bool doCorrection)
   double turnAngle = multiplier*90;
   if (steps==0) turnAngle = 0;
   pose.update();
-  pose.startAngle = pose.lastAngle;
+  pose.startAngle = pose.angle;
 
   if (doCorrection == true)
   {
-    turnAngle = turnAngle - pose.lastAngle;
+    turnAngle = turnAngle - pose.angle;
     // g_lastWallAngle = 0; // You should have turned perfectly. Should be replaced by actually checking how far you have turned.
   }
 
@@ -1295,16 +1305,14 @@ void gyroTurnSteps(TurningDirection direction, int steps, bool doCorrection)
   double endGyroAngle = gyroAngleToMathAngle(gyro.getAngleZ());
   centerAngle180(endGyroAngle, startGyroAngle);
   double angleDiff = endGyroAngle - startGyroAngle;
-  pose.angle -= multiplier*90;
+  // pose.angle -= multiplier*90;
+  if (steps==0) pose.angle = pose.angle + angleDiff;
+  else pose.angle = pose.angle + angleDiff - multiplier*90;
   pose.gyroOffset = gyroAngleToMathAngle(gyro.getAngleZ()) - pose.angle; // Set gyro offset (preliminary, may not be very good?)
-
-  // Serial.print(g_startWallAngle);
-  // Serial.print("  ");
   pose.update(0);
-  pose.startAngle = pose.lastAngle + angleDiff - multiplier*90;
-  if (steps==0) pose.startAngle = pose.lastAngle + angleDiff; // For the straightening
-  pose.update(0); // Is this needed?
-  // Serial.println(g_lastWallAngle);
+
+  Serial.println("Robot pose at end");
+  pose.print(); // Debugging
 
 }
 
@@ -2105,10 +2113,12 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
   double dumbDistanceIncrement = getDistanceDriven() - dumbDistanceDriven;
   pose.update(wallToUse, dumbDistanceIncrement);
   if (g_driveBack==true) g_trueDistanceDriven = 30 - pose.yDist;
+  else g_trueDistanceDriven = pose.yDist;
   dumbDistanceDriven = getDistanceDriven();
 
   //pidDrive(wallToUse, startAngle, gyroOffset);
   pidDrive(wallToUse);
+  pose.print(); // Debugging
 
 
   // Ramp handling -------------------
@@ -2232,9 +2242,9 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
   } // Only do when not on ramp ends here
 
   // Checking for wallchanges
-  if (abs(pose.angle) <= 40) // Only check wallchanges if below certain angle. Correction for angle is also done with the distance.
+  if (abs(pose.angle) <= 33) // Only check wallchanges if below certain angle. Correction for angle is also done with the distance.
   {
-    checkWallChanges(stopReason);
+    // checkWallChanges(stopReason);
   }
   // printWallchangeData(ultrasonic_RF);
   // Serial.println("");
@@ -2513,6 +2523,7 @@ bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, To
   // Serial.println(xDistanceOnRamp);
   // Serial.println(yDistanceOnRamp);
   pose.update();
+  pose.yDist = 0; // Reset for next move
 
   // Determine whether you have driven a step or not
   if (g_trueDistanceDriven > 15 && stoppingReason != stop_floorColour) return true;
