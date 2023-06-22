@@ -7,7 +7,7 @@
 
 extern ColourSensor colSensor; // The colSensor object in robot_lowlevel.cpp
 
-HardwareButton colCalButton {32, false};
+HardwareButton colCalButton {36, false};
 
 void setup()
 {

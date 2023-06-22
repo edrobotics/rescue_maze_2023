@@ -401,7 +401,7 @@ void serialcomm::cancelInterrupt()
 
 //---------------------- Buzzer and lights (for debugging) ------------------//
 
-const int CAMERA_LED_PIN = 30;
+const int CAMERA_LED_PIN = 34;
 const int CAMERA_LED_NUM = 12;
 CRGB cameraLeds[CAMERA_LED_NUM];
 
@@ -2676,8 +2676,8 @@ void handleVictim(double fromInterrupt)
 
 // Front touch sensor buttons
 
-HardwareButton pressPlateLeft {34, false};
-HardwareButton pressPlateRight {36, false};
+HardwareButton pressPlateLeft {30, false};
+HardwareButton pressPlateRight {32, false};
 
 
 TouchSensorSide frontSensorActivated()
