@@ -1,0 +1,5 @@
+When driving back, should the distance increment or decrement?
+
+I need to keep track of the dumbdistanceincrements. Occurs mostly when updating while standing still or turning.
+
+Gyro offsets need to be handled
