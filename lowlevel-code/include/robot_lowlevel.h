@@ -319,6 +319,7 @@ class RobotPose
     void update(WallSide wallToUse);
     void update(double distanceIncrement);
     void update(WallSide wallToUse, double distanceIncrement);
+    void updateGyroOffset();
     void updateOnRamp(WallSide wallToUse, double distanceIncrement);
     void print();
     WallSide getSafeWallToUse();

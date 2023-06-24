@@ -1,5 +1,4 @@
-When driving back, should the distance increment or decrement?
-
-I need to keep track of the dumbdistanceincrements. Occurs mostly when updating while standing still or turning.
-
-Gyro offsets need to be handled
+Problems:
+When driving, sometimes the robot drives too far
+When driving past a corner, the robot turns and stays turned (believes it is straight?)
+Sometimes, wall detection using the front ultrasonic sensor does not work - probably due to restricted max correction distance (fixed? not flashed)

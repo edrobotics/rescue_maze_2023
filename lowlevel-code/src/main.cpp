@@ -15,7 +15,7 @@ HardwareButton colCalButton {36, false};
 void setup()
 {
   // Init serial for debugging
-  Serial.begin(9600);
+  Serial.begin(115200);
   
   // Init hardware
   gyroInit();
@@ -49,8 +49,8 @@ void setup()
 // double robotAngle = 0;
 // double wallDistance = 0;
 
-#define PICODE
-// #define TESTING_NAV
+// #define PICODE
+#define TESTING_NAV
 // #define TESTING
 // #define COLSENS_CALIBRATION
 
