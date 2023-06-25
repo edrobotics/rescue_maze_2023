@@ -97,7 +97,7 @@ const double WHEEL_CIRCUMFERENCE = PI*WHEEL_DIAMETER;
 
 // Driving
 const double CMPS_TO_RPM = 1.0/WHEEL_CIRCUMFERENCE*60.0; // Constant to convert from cm/s to rpm
-const double BASE_SPEED_CMPS = 15; // The base speed of driving (cm/s)
+const double BASE_SPEED_CMPS = 17; // The base speed of driving (cm/s)
 double BASE_TURNING_SPEED = 35/CMPS_TO_RPM; // The turning speed to normally use
 double g_baseSpeed_CMPS = BASE_SPEED_CMPS; // The speed to drive at
 const double BASE_SPEED_RPM = CMPS_TO_RPM*g_baseSpeed_CMPS; // The base speed of driving (rpm)
@@ -560,10 +560,13 @@ void lights::activated()
   delay(70);
   for (int i=0;i<3;++i)
   {
+    static int freq = 520;
+    if (i==1) freq = 660;
+    if (i==2) freq = 900;
     turnOff();
     delay(80);
     setColour(0, colourAffirmative, true);
-    buzzer.tone(660, 70);
+    buzzer.tone(freq, 70);
     delay(30);
   }
   delay(150);
@@ -660,6 +663,13 @@ void sounds::errorBeep()
 void sounds::tone(int freq, int duration)
 {
   buzzer.tone(freq, duration);
+}
+
+void sounds::startupSound()
+{
+  tone(520, 400);
+  delay(200);
+  tone(1000, 400);
 }
 
 int lights::safeIndex(int index)
@@ -1032,6 +1042,18 @@ void RobotPose::updateGyroOffset()
   if (getSafeWallToUse() != wall_none)
   {
     gyroOffset = gyroAngle - angle;
+  }
+}
+
+void RobotPose::compensateRamp(double& rampXDistIncr, double& rampYDistIncr)
+{
+  double rampAngle = gyro.getAngleX();
+  if (rampAngle < 0)
+  {
+  }
+  else
+  {
+    
   }
 }
 

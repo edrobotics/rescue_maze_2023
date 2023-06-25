@@ -209,6 +209,8 @@ namespace sounds
     void errorBeep();
 
     void tone(int freq, int duration);
+
+    void startupSound();
 }
 
 void initColourSensor();
@@ -330,6 +332,11 @@ class RobotPose
   private:
     void calculate2(WallSide wallSide, double& angle, bool useGyroAngle, double distanceIncrement);
     void calculate1(WallSide wallSide, double& angle, double& distance, bool useGyroAngle);
+    void compensateRamp(double& rampXDistIncr, double& rampYDistIncr);
+    const double downwardXSlipCoef = 1;
+    const double downwardYSlipCoef = 1;
+    const double upwardXSlipCoef = 1;
+    const double upwardYSlipCoef = 1;
 };
 
 // // Sets the global variables for angles and distances.

@@ -8,6 +8,15 @@
 #include <Wire.h>
 #include <SPI.h>
 
+#define PICODE
+// #define TESTING_NAV // Add interrupt testing
+// #define TESTING
+// #define COLSENS_CALIBRATION
+
+#ifdef COLSENS_CALIBRATION
+#define TESTING
+#endif
+
 extern ColourSensor colSensor; // The colSensor object in robot_lowlevel.cpp
 extern RobotPose pose;
 extern double BASE_TURNING_SPEED;
@@ -17,7 +26,11 @@ HardwareButton colCalButton {36, false};
 void setup()
 {
   // Init serial for debugging
+  #ifdef PICODE
+  Serial.begin(9600);
+  #else
   Serial.begin(115200);
+  #endif
   
   // Init hardware
   gyroInit();
@@ -31,19 +44,20 @@ void setup()
   
 
   // Wait for beginning (to give time to remove hands etc.)
-  delay(500);
   lights::activated();
   if (colCalButton.isPressed())
   {
-  colSensor.clearCalibrationData();
-  serialcomm::sendColourCal(); // So that Markus can start the scoring run timer
-  while(colCalButton.isPressed())
-  {
-    colSensor.calibrationRoutineLoop();
+    colSensor.clearCalibrationData();
+    serialcomm::sendColourCal(); // So that Markus can start the scoring run timer
+    while(colCalButton.isPressed())
+    {
+      colSensor.calibrationRoutineLoop();
+    }
+    delay(20);
+    lights::turnOff();
   }
-  lights::turnOff();
-  }
-  delay(100);
+  delay(500);
+  sounds::startupSound();
   serialcomm::sendLOP();
 }
 
@@ -51,14 +65,7 @@ void setup()
 // double robotAngle = 0;
 // double wallDistance = 0;
 
-// #define PICODE
-#define TESTING_NAV
-// #define TESTING
-// #define COLSENS_CALIBRATION
 
-#ifdef COLSENS_CALIBRATION
-#define TESTING
-#endif
 
 
 void loop()
