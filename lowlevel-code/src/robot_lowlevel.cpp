@@ -65,7 +65,8 @@ MeRGBLed ledRing(0, 12);
 
 const double MAX_CORRECTION_DISTANCE = 16;
 const double MIN_CORRECTION_ANGLE = 8;
-const double MAX_WALLCHANGE_ANGLE = 25; // Should be changed later to compute the actual distances
+const double MAX_WALLCHANGE_ANGLE = 20; // Should be changed later to compute the actual distances
+const double MAX_WALLCHANGE_DISTANCE;
 
 #warning untuned constants
 // const double MAX_ULTRASONIC_FAR = 70; // Max distance to use differences in front ultrasonic sensor distance
@@ -97,6 +98,7 @@ const double WHEEL_CIRCUMFERENCE = PI*WHEEL_DIAMETER;
 // Driving
 const double CMPS_TO_RPM = 1.0/WHEEL_CIRCUMFERENCE*60.0; // Constant to convert from cm/s to rpm
 const double BASE_SPEED_CMPS = 15; // The base speed of driving (cm/s)
+double BASE_TURNING_SPEED = 35/CMPS_TO_RPM; // The turning speed to normally use
 double g_baseSpeed_CMPS = BASE_SPEED_CMPS; // The speed to drive at
 const double BASE_SPEED_RPM = CMPS_TO_RPM*g_baseSpeed_CMPS; // The base speed of driving (rpm)
 double g_trueDistanceDriven = 0; // The correct driven distance. Measured as travelling along the wall and also updated when landmarks are seen
@@ -164,7 +166,7 @@ int ultrasonicRawDistancesPointer[ULTRASONIC_NUM] {};
 // First dimension: Which sensor to use
 // Second dimension: Which data type to use (usmt_raw or usmt_smooth)
 double ultrasonicCurrentDistances[ULTRASONIC_NUM][USMT_NUM] {};
-double ultrasonicLastKnownDistances[ULTRASONIC_NUM][USMT_NUM] {};
+// double ultrasonicLastKnownDistances[ULTRASONIC_NUM][USMT_NUM] {};
 double ultrasonicTheoreticalDistances[ULTRASONIC_NUM] {};
 
 // Whether or not a wall is present at the currenct execution of checkSmoothWallChanges
@@ -1246,7 +1248,7 @@ double gyroDriveCorrectionCoeff = 1;
 // stopMoving - Whether or not the robot should stop when the function is done. Set to false when driving continuously.
 // baseSpeed - Optional argument for specifying the speed to move at while turning. cm/s
 // If baseSpeed != 0, the function will update trueDistanceDriven.
-void gyroTurn(double turnAngle, bool stopMoving, bool aware = false, double baseSpeed = 0)
+void gyroTurn(double turnAngle, bool stopMoving, double turnSpeed, bool aware = false, double baseSpeed = 0)
 {
   // Used to determine turning direction of the wheels
     int multiplier = 1; // Positive is ccw
@@ -1277,7 +1279,7 @@ void gyroTurn(double turnAngle, bool stopMoving, bool aware = false, double base
   }
     //double speedToRun = multiplier*1.5*g_baseSpeed_CMPS*CMPS_TO_RPM;
     double dumbDistanceDriven = 0; // Only needed if speedToRun != 0
-    double speedToRun = multiplier*35/CMPS_TO_RPM;
+    double speedToRun = multiplier*turnSpeed;
     if (baseSpeed != 0)
     {
       if (aware==true) startDistanceMeasure(); // For aware gyro turn
@@ -1311,7 +1313,7 @@ void gyroTurn(double turnAngle, bool stopMoving, bool aware = false, double base
 
     // Slowing down in the end of the turn.
     // All of this code could be placed inside of the first while-loop, but then every iteration would take more time because of checks and the gyro would become less accurate due to that.
-    speedToRun = multiplier*20/CMPS_TO_RPM;
+    speedToRun = multiplier*turnSpeed*0.5;
     if (baseSpeed != 0)
     {
       runWheelSide(wheels_left, baseSpeed - speedToRun*gyroDriveCorrectionCoeff);
@@ -1345,21 +1347,38 @@ void gyroTurn(double turnAngle, bool stopMoving, bool aware = false, double base
 
 // GyroTurn but it is updating the robot pose variables accordingly.
 // The code is copied from gyroTurnSteps(), so I should probably make gyroTurnSteps() make use of awareGyroTurn().
-void awareGyroTurn(double turnAngle, bool stopMoving, double baseSpeed = 0)
+// turnAngle - the angle to turn
+// stopMoving - whether to stop when done or not
+// baseSpeed - the speed at which to drive (0 for just turning)
+void awareGyroTurn(double turnAngle, bool stopMoving, double turnSpeed, bool ultrasonicUpdate, double baseSpeed = 0)
 {
-  pose.update();
+  if (ultrasonicUpdate==true)
+  {
+    pose.update();
+  }
+  else
+  {
+    pose.update(pose.getSafeWallToUse());
+  }
   pose.startAngle = pose.angle;
 
   double startGyroAngle = gyroAngleToMathAngle(gyro.getAngleZ());
-  gyroTurn(turnAngle, true, true, baseSpeed);
+  gyroTurn(turnAngle, stopMoving, turnSpeed, true, baseSpeed);
   gyro.update();
   double endGyroAngle = gyroAngleToMathAngle(gyro.getAngleZ());
   centerAngle180(endGyroAngle, startGyroAngle);
   double angleDiff = endGyroAngle - startGyroAngle;
-  #warning Offset used wrong!
+  #warning Offset used wrong! (?)
   pose.gyroOffset = gyroAngleToMathAngle(gyro.getAngleZ()) - pose.angle;// The angle measured by the gyro (absolute angle) in the beginning.
 
-  pose.update();
+  if (ultrasonicUpdate==true)
+  {
+    pose.update();
+  }
+  else
+  {
+    pose.update(pose.getSafeWallToUse());
+  }
   pose.startAngle = pose.startAngle + angleDiff;
 
 }
@@ -1369,7 +1388,7 @@ void awareGyroTurn(double turnAngle, bool stopMoving, double baseSpeed = 0)
 // direction - cw (clockwise) or ccw (counter-clockwise) turn.
 // steps - the amount of 90-degree turns to do in the chosen direction. (NOT YET IMPLEMENTED!)
 // doCorrection - Whether or not you should correct for the g_lastWallAngle
-void gyroTurnSteps(TurningDirection direction, int steps, bool doCorrection)
+void gyroTurnSteps(TurningDirection direction, int steps, bool doCorrection, double turningSpeed)
 {
   int multiplier=-1;
   if (direction==ccw) multiplier=1;
@@ -1385,7 +1404,7 @@ void gyroTurnSteps(TurningDirection direction, int steps, bool doCorrection)
   }
 
   double startGyroAngle = gyroAngleToMathAngle(gyro.getAngleZ());
-  gyroTurn(turnAngle, true);
+  gyroTurn(turnAngle, true, turningSpeed, false, 0);
   gyro.update();
   double endGyroAngle = gyroAngleToMathAngle(gyro.getAngleZ());
   centerAngle180(endGyroAngle, startGyroAngle);
@@ -1401,10 +1420,10 @@ void gyroTurnSteps(TurningDirection direction, int steps, bool doCorrection)
 
 }
 
-void turnSteps(TurningDirection direction, int steps)
+void turnSteps(TurningDirection direction, int steps, double turningSpeed)
 {
   flushDistanceArrays();
-  gyroTurnSteps(direction, steps, true);
+  gyroTurnSteps(direction, steps, true, turningSpeed);
   flushDistanceArrays();
   if (abs(pose.angle) > MIN_CORRECTION_ANGLE)
   {
@@ -1416,24 +1435,44 @@ void turnSteps(TurningDirection direction, int steps)
 // Should be done after every move. (at the end of drivestep and turnsteps) That way, the robot should always be straigt for the new measurements.
 void straighten()
 {
-  gyroTurnSteps(cw, 0, true);
+  gyroTurnSteps(cw, 0, true, BASE_TURNING_SPEED);
 }
 
-void sideWiggleCorrection(WallSide direction)
+void sideWiggleCorrection(WallSide direction, WallSide wallToUse)
 {
-  
+  getUltrasonics();
+  pose.update(direction, 0);
+  double distanceError = pose.xDist - 15;
+  int multiplier = 1;
+  if (direction==wall_left) multiplier = -1;
+  double stopMoving = true;
+  int wiggles = 0;
+
+  while (distanceError > 0.8 && wiggles <=3) // One wiggle-cycle corrects about 1cm
+  {
+    double turnStepAngle = 10;
+    awareGyroTurn(-multiplier*turnStepAngle/2.0, stopMoving, 20, false, 0);
+    awareGyroTurn(-multiplier*turnStepAngle/2.0, stopMoving, 11, false, 15);
+    awareGyroTurn(multiplier*turnStepAngle*1.5, stopMoving, 20, false, 0);
+    awareGyroTurn(multiplier*turnStepAngle/2.0, stopMoving, 11, false, -15);
+    awareGyroTurn(-multiplier*turnStepAngle, true, 30, false, 0);
+    distanceError = -multiplier*(pose.xDist - 15); // Pose updated by aware gyro turn
+    ++wiggles;
+  }
+
+
 }
 
-// Wiggles and updates pose before and after
 void sideWiggleCorrection()
 {
   double distanceError = 0; // Positive is to the right of the centre of the tile
   distanceError = pose.xDist - 15;
-  WallSide wallToWiggle = pose.getSafeWallToUse();
-  if (distanceError < 0) wallToWiggle = wall_right; // If to the left, go right
-  else wallToWiggle = wall_left; // If to the right, go left
+  WallSide wallToUse = pose.getSafeWallToUse();
+  WallSide direction = wall_left;
+  if (distanceError < 0) direction = wall_right; // If to the left, go right
+  else direction = wall_left; // If to the right, go left
 
-  sideWiggleCorrection(wallToWiggle); // Does the wiggling
+  sideWiggleCorrection(direction, wallToUse); // Does the wiggling
 }
 
 void turnToPIDAngle()
@@ -1516,12 +1555,36 @@ void getUltrasonics()
   ultrasonicUpdateLoop(ultrasonic_RB, 35, true);
   ultrasonicUpdateLoop(ultrasonic_RF, 35, true);
   ultrasonicUpdateLoop(ultrasonic_LB, 35, true);
-  ultrasonicUpdateLoop(ultrasonic_F, 120, false);
+  ultrasonicUpdateLoop(ultrasonic_F, 35, false);
 }
 
 void getFrontUltrasonic()
 {
-  ultrasonicUpdateLoop(ultrasonic_F, 120, true);
+  ultrasonicUpdateLoop(ultrasonic_F, 35, true);
+}
+
+void getUltrasonics(WallSide wallSide)
+{
+  switch (wallSide)
+  {
+    case wall_both:
+      getUltrasonics(wall_left);
+      ultrasonicIdle();
+      getUltrasonics(wall_right);
+      break;
+    case wall_left:
+      ultrasonicUpdateLoop(ultrasonic_LF, 35, true);
+      ultrasonicUpdateLoop(ultrasonic_LB, 35, false);
+      break;
+    case wall_right:
+      ultrasonicUpdateLoop(ultrasonic_RF, 35, true);
+      ultrasonicUpdateLoop(ultrasonic_RB, 35, false);
+      break;
+    default:
+      getUltrasonics();
+      break;
+  }
+  
 }
 // For determining wall presence for individual sensors
 // bool wallPresentLF = false;
@@ -1686,31 +1749,39 @@ void setPreviousSensorWallStates()
   setSinglePreviousSensorWallState(ultrasonic_F);
 }
 
-void updateLastKnownDistance(UltrasonicSensorEnum sensor)
-{
-  if (currentSensorWallStates[sensor][usmt_raw] == true)
-  {
-    ultrasonicLastKnownDistances[sensor][usmt_raw] = ultrasonicCurrentDistances[sensor][usmt_raw];
-  }
-  if (currentSensorWallStates[sensor][usmt_smooth] == true)
-  {
-    ultrasonicLastKnownDistances[sensor][usmt_smooth] = ultrasonicCurrentDistances[sensor][usmt_smooth];
-  }
+// void updateLastKnownDistance(UltrasonicSensorEnum sensor)
+// {
+//   if (currentSensorWallStates[sensor][usmt_raw] == true)
+//   {
+//     ultrasonicLastKnownDistances[sensor][usmt_raw] = ultrasonicCurrentDistances[sensor][usmt_raw];
+//   }
+//   if (currentSensorWallStates[sensor][usmt_smooth] == true)
+//   {
+//     ultrasonicLastKnownDistances[sensor][usmt_smooth] = ultrasonicCurrentDistances[sensor][usmt_smooth];
+//   }
 
-}
+// }
 
-void updateLastKnownDistances()
-{
-  updateLastKnownDistance(ultrasonic_LF);
-  updateLastKnownDistance(ultrasonic_LB);
-  updateLastKnownDistance(ultrasonic_RF);
-  updateLastKnownDistance(ultrasonic_RB);
-}
+// void updateLastKnownDistances()
+// {
+//   updateLastKnownDistance(ultrasonic_LF);
+//   updateLastKnownDistance(ultrasonic_LB);
+//   updateLastKnownDistance(ultrasonic_RF);
+//   updateLastKnownDistance(ultrasonic_RB);
+// }
 
 void updateTheoreticalDistance(UltrasonicSensorEnum sensor)
 {
+  // The inverse of pose calculation
 }
 
+void updateTheoreticalDistances(UltrasonicSensorEnum sensor)
+{
+  updateTheoreticalDistance(ultrasonic_LF);
+  updateTheoreticalDistance(ultrasonic_LB);
+  updateTheoreticalDistance(ultrasonic_RF);
+  updateTheoreticalDistance(ultrasonic_RB);
+}
 
 // Returns the struct containing information about the presence of the walls.
 // The reason for using a struct is that I do not know how else to return 3 values
@@ -2037,7 +2108,7 @@ void checkAndUseWallChange(int sensor, WallChangeType wallChangeToCheck, Stoppin
       double angleCorrDistance = 0;
       if (abs(pose.angle) <= MAX_WALLCHANGE_ANGLE)
       {
-        angleCorrDistance = ultrasonicLastKnownDistances[sensor][usmt_raw]*sin(DEG_TO_RAD*pose.angle); // Left side
+        angleCorrDistance = ultrasonicTheoreticalDistances[sensor]*sin(DEG_TO_RAD*pose.angle); // Left side
         if (sensor==ultrasonic_RF || sensor==ultrasonic_RB) // Right side
         {
           angleCorrDistance *= -1;
@@ -2089,7 +2160,7 @@ void checkWallChanges(StoppingReason& stopReason)
         double corrDistance = 0; // Default
         if (abs(pose.angle) <= MAX_WALLCHANGE_ANGLE)
         {
-          corrDistance = ultrasonicLastKnownDistances[k][usmt_raw]*sin(DEG_TO_RAD*pose.angle); // Left side
+          corrDistance = ultrasonicTheoreticalDistances[k]*sin(DEG_TO_RAD*pose.angle); // Left side
           if (k==ultrasonic_RF || k==ultrasonic_RB) // Right side
           {
             corrDistance *= -1;
@@ -2609,18 +2680,18 @@ bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, To
   else // Only straighten or wiggle when not by obstacle (will drive back next time)
   {
     pose.update();
-    if (abs(15-pose.xDist) > 3 && g_driveBack == false)
-    {
-      if (abs(pose.angle) > MIN_CORRECTION_ANGLE && g_driveBack == false)
-      {
-        straighten();
-        pose.update();
-      }
-      sideWiggleCorrection();
-      pose.update();
-      straighten();
-    }
-    else if (abs(pose.angle) > MIN_CORRECTION_ANGLE && g_driveBack == false)
+    // if (abs(15-pose.xDist) > 3 && g_driveBack == false)
+    // {
+    //   if (abs(pose.angle) > MIN_CORRECTION_ANGLE && g_driveBack == false)
+    //   {
+    //     straighten();
+    //     pose.update();
+    //   }
+    //   sideWiggleCorrection();
+    //   pose.update();
+    //   straighten();
+    // }
+    if (abs(pose.angle) > MIN_CORRECTION_ANGLE && g_driveBack == false)
     {
       straighten();
     }
@@ -2633,7 +2704,6 @@ bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, To
   // Serial.println(xDistanceOnRamp);
   // Serial.println(yDistanceOnRamp);
   pose.update();
-  pose.yDist = 0; // Reset for next move
 
   // Determine whether you have driven a step or not
   if (g_trueDistanceDriven > 15 && stoppingReason != stop_floorColour) return true;
@@ -2698,7 +2768,7 @@ void handleVictim(double fromInterrupt)
   TurningDirection turnDirection = cw; // Default - if the kit is on the right
   if (g_dropDirection == 'r') turnDirection = ccw; // If the kit is on the left
   // Serial.print(g_dropDirection);
-  if (g_kitsToDrop != 0) turnSteps(turnDirection, 1); // Only turn if you have to drop
+  if (g_kitsToDrop != 0) turnSteps(turnDirection, 1, BASE_TURNING_SPEED); // Only turn if you have to drop
 
   int blinkCycleTime = 500; // The time for a complete blink cycle in ms
   int droppedKits = 0;
@@ -2762,7 +2832,7 @@ void handleVictim(double fromInterrupt)
   // Return the robot to original orientation
   if (turnDirection == ccw) turnDirection = cw; // Reverse direction
   else turnDirection = ccw; // Reverse direction
-  if (g_kitsToDrop != 0 && (g_returnAfterDrop==true || fromInterrupt==true)) turnSteps(turnDirection, 1); // Only turn if you have to drop and only turn back if necessary
+  if (g_kitsToDrop != 0 && (g_returnAfterDrop==true || fromInterrupt==true)) turnSteps(turnDirection, 1, BASE_TURNING_SPEED); // Only turn if you have to drop and only turn back if necessary
 
   // Reset variables
   g_dropDirection = ' ';

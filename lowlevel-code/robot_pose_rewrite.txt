@@ -6,4 +6,10 @@ Sometimes, wall detection using the front ultrasonic sensor does not work - prob
 
 Left to do:
 Fix last known distances (angle correction in wallchanges) to use xDist instead
+Translation of last x and y distance when turning
 
+
+
+
+gyroturn add turnspeed in calls
+awaregyroturn add turnspeed in calls

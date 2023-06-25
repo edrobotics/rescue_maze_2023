@@ -64,7 +64,7 @@ enum TurningDirection {
 // Turns the specified amount of steps.
 // steps - the amount of steps (90 degrees) to turn. Positive is counter-clockwise, negative is clockwise.
 // The direction may be separated into a separate argument and given its own type.
-void turnSteps(TurningDirection direction, int steps);
+void turnSteps(TurningDirection direction, int steps, double turningSpeed);
 
 // Returns an byte giving information about whether the walls are present
 int getWallStates();
@@ -364,19 +364,21 @@ double leftToTurn(bool zeroCross, int turningDirection, double tarAng, double cu
 // stopMoving - Whether or not the robot should stop when the function is done. Set to false when driving continuously.
 // baseSpeed - Optional argument for specifying the speed to move at while turning. cm/s
 // If baseSpeed != 0, the function will update trueDistanceDriven.
-void gyroTurn(double turnAngle, bool stopMoving, bool aware, double baseSpeed = 0);
+void gyroTurn(double turnAngle, bool stopMoving, double turnSpeed, bool aware = 0, double baseSpeed = 0);
 
 // GyroTurn but it is updating the robot pose variables accordingly.
 // The code is copied from gyroTurnSteps(), so I should probably make gyroTurnSteps() make use of awareGyroTurn().
-// Same arguments as gyroTurn()
-void awareGyroTurn(double turnAngle, bool stopMoving, double baseSpeed = 0);
+// turnAngle - the angle to turn
+// stopMoving - whether to stop when done or not
+// baseSpeed - the speed at which to drive (0 for just turning)
+void awareGyroTurn(double turnAngle, bool stopMoving, double turnSpeed, bool ultrasonicUpdate, double baseSpeed = 0);
 
 // Turns the specified steps (90 degrees) in the direction specified above.
 // Automatic correction for the last angle to the wall can be specified by the last argument. Make sure that the lastWallAngle is up to date!
 // direction - cw (clockwise) or ccw (counter-clockwise) turn.
 // steps - the amount of 90-degree turns to do in the chosen direction.
 // doCorrection - Whether or not you should correct for the lastWallAngle
-void gyroTurnSteps(TurningDirection direction, int steps, bool doCorrection);
+void gyroTurnSteps(TurningDirection direction, int steps, bool doCorrection, double turningSpeed);
 
 // Aligns the robot to the grid (parallel/normal to the walls)
 void straighten();

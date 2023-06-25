@@ -9,6 +9,8 @@
 #include <SPI.h>
 
 extern ColourSensor colSensor; // The colSensor object in robot_lowlevel.cpp
+extern RobotPose pose;
+extern double BASE_TURNING_SPEED;
 
 HardwareButton colCalButton {36, false};
 
@@ -104,9 +106,22 @@ void loop()
 
   // lights::indicateBlueCircle();
   // lights::turnOff();
-  driveStep();
-  delay(2000);
-  lights::turnOff();
+  // pose.update();
+  // if (abs(pose.xDist - 15) > 3)
+  // {
+  // sideWiggleCorrection();
+  // }
+  // delay(2000);
+  // lights::turnOff();
+  int multiplier = 1;
+  bool stopMoving = true;
+  double turnStepAngle = 10;
+  awareGyroTurn(-multiplier*turnStepAngle/2.0, stopMoving, 20, false, 0);
+  awareGyroTurn(-multiplier*turnStepAngle/2.0, stopMoving, 11, false, 15);
+  awareGyroTurn(multiplier*turnStepAngle*1.5, stopMoving, 20, false, 0);
+  awareGyroTurn(multiplier*turnStepAngle/2.0, stopMoving, 11, false, -15);
+  awareGyroTurn(-multiplier*turnStepAngle, true, 30, false, 0);
+  delay(1000);
 
 
   #endif
@@ -170,7 +185,7 @@ void loop()
           if (frontSensorDetectionType == touch_left)
           {
             // Correct by turning right
-            awareGyroTurn(-18, true, -5);
+            awareGyroTurn(-18, true, BASE_TURNING_SPEED, true, -5);
             continuing = true;
             goto driveStepBegin;
             
@@ -178,7 +193,7 @@ void loop()
           else if (frontSensorDetectionType == touch_right)
           {
             // Correct by turning left
-            awareGyroTurn(18, true, -5);
+            awareGyroTurn(18, true, BASE_TURNING_SPEED, true, -5);
             continuing = true;
             goto driveStepBegin;
           }
@@ -215,6 +230,7 @@ void loop()
           {
             serialcomm::returnFailure();
           }
+          if (pose.yDist > 15) pose.yDist -= 30; // Just set to 0 instead?
         
       }
         break;
@@ -228,7 +244,8 @@ void loop()
       case command_turnLeft: // turn counterclockwise one step
         serialcomm::returnSuccess();
         // lights::showDirection(lights::left);
-        turnSteps(ccw, 1);
+        turnSteps(ccw, 1, BASE_TURNING_SPEED);
+        
         // sounds::tone(440, 100);
         // lights::turnOff();
         serialcomm::returnSuccess();
@@ -237,7 +254,7 @@ void loop()
       case command_turnRight: // turn clockwise one step
         serialcomm::returnSuccess();
         // lights::showDirection(lights::right);
-        turnSteps(cw, 1);
+        turnSteps(cw, 1, BASE_TURNING_SPEED);
         // sounds::tone(880, 100);
         // lights::turnOff();
         serialcomm::returnSuccess();
