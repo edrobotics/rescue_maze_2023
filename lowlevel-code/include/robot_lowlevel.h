@@ -426,7 +426,7 @@ void checkWallPresence();
 
 void printWallPresence();
 
-void updateLastKnownDistances();
+// void updateLastKnownDistances();
 
 
 

@@ -116,7 +116,7 @@ WallChangeType g_smoothWallChanges[ULTRASONIC_NUM] {};
 
 // Sensor constants
 const double ULTRASONIC_FORWARDOFFSET = 7.3;
-const double ULTRASONIC_SPACING = ULTRASONIC_FORWARDOFFSET*2; // The distance between the centers two ultrasonic sensors.
+const double ULTRASONIC_SPACING = ULTRASONIC_FORWARDOFFSET*2; // The distance between the centers two ultrasonic sensors on the same side.
 #warning uncalibrated constants
 const double ULTRASONIC_SIDEOFFSET = 7;
 const double ULTRASONIC_FRONT_OFFSET = 9.5; // The distance from the front sensor to the center of the robot
@@ -1773,14 +1773,53 @@ void setPreviousSensorWallStates()
 void updateTheoreticalDistance(UltrasonicSensorEnum sensor)
 {
   // The inverse of pose calculation
+  double dSum = 0;
+  if (sensor==ultrasonic_LF || sensor==ultrasonic_LB)
+  {
+    dSum = 2*pose.xDist/cos(pose.angle*DEG_TO_RAD);
+  }
+  else
+  {
+    dSum = 2*(30-pose.xDist)/cos(pose.angle*DEG_TO_RAD);
+  }
+  double dDiff = tan(pose.angle*DEG_TO_RAD)*ULTRASONIC_SPACING;
+  double d1 = (dSum + dDiff)/2.0;
+  double d2 = dSum - d1;
+  if (sensor==ultrasonic_LF || sensor==ultrasonic_RB)
+  {
+    ultrasonicTheoreticalDistances[sensor] = d1 - ULTRASONIC_SIDEOFFSET;
+  }
+  else
+  {
+    ultrasonicTheoreticalDistances[sensor] = d2 - ULTRASONIC_SIDEOFFSET;
+  }
 }
 
-void updateTheoreticalDistances(UltrasonicSensorEnum sensor)
+void updateTheoreticalDistances()
 {
   updateTheoreticalDistance(ultrasonic_LF);
   updateTheoreticalDistance(ultrasonic_LB);
   updateTheoreticalDistance(ultrasonic_RF);
   updateTheoreticalDistance(ultrasonic_RB);
+}
+
+void printTheoreticalDistances()
+{
+  Serial.print("LF: ");Serial.print(ultrasonicTheoreticalDistances[ultrasonic_LF]);Serial.print("  ");
+  Serial.print("LB: ");Serial.print(ultrasonicTheoreticalDistances[ultrasonic_LB]);Serial.print("  ");
+  Serial.print("RF: ");Serial.print(ultrasonicTheoreticalDistances[ultrasonic_RF]);Serial.print("  ");
+  Serial.print("RB: ");Serial.print(ultrasonicTheoreticalDistances[ultrasonic_RB]);Serial.print("  ");
+  Serial.println("");
+}
+
+void printDistanceDiff()
+{
+  Serial.print("LF: ");Serial.print(ultrasonicTheoreticalDistances[ultrasonic_LF] - ultrasonicCurrentDistances[ultrasonic_LF][usmt_smooth]);Serial.print("  ");
+  Serial.print("LB: ");Serial.print(ultrasonicTheoreticalDistances[ultrasonic_LB] - ultrasonicCurrentDistances[ultrasonic_LB][usmt_smooth]);Serial.print("  ");
+  Serial.print("RF: ");Serial.print(ultrasonicTheoreticalDistances[ultrasonic_RF] - ultrasonicCurrentDistances[ultrasonic_RF][usmt_smooth]);Serial.print("  ");
+  Serial.print("RB: ");Serial.print(ultrasonicTheoreticalDistances[ultrasonic_RB] - ultrasonicCurrentDistances[ultrasonic_RB][usmt_smooth]);Serial.print("  ");
+  Serial.println("");
+
 }
 
 // Returns the struct containing information about the presence of the walls.
@@ -2266,7 +2305,6 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
   // printUltrasonics();
   getUltrasonics();
   checkWallPresence();
-  updateLastKnownDistances();
   // Deciding which wall to follow
   wallToUse = pose.getSafeWallToUse();
 
@@ -2278,6 +2316,7 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
   if (g_driveBack==true) g_trueDistanceDriven = 30 - pose.yDist;
   else g_trueDistanceDriven = pose.yDist;
   dumbDistanceDriven = getDistanceDriven();
+  updateTheoreticalDistances();
   // pose.print();
 
   //pidDrive(wallToUse, startAngle, gyroOffset);
