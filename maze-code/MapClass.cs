@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -14,7 +15,7 @@ namespace SerialConsole
         RampDirection,
         RampIndex,
         ConnectedMap,
-        RampSearched
+        RampLength
     }
 
     enum BitLocation
@@ -30,7 +31,8 @@ namespace SerialConsole
         blackTile,
         checkPointTile,
         blueTile,
-        inDriveWay
+        inDriveWay,
+        tileAdded
     }
 
     /// <summary>
@@ -47,7 +49,6 @@ namespace SerialConsole
             StartPosX = _startPosX;
             StartPosZ = _startPosZ;
             Height = _height;
-            areas.Add(new List<byte[]>()); //New area created
         }
         /// <summary>The size of the map in tile amount</summary>
         public int Length;
@@ -66,11 +67,15 @@ namespace SerialConsole
         List<List<byte[]>> areas = new();
         List<List<byte[]>> saveAreas = new();
 
-        public ref ushort[,] GetMap
+        public ushort[,] GetMap
         {
-            get => ref map;
+            get => map;
+            set => map = value;
         }
 
+        /// <summary>
+        /// The unexplored tiles that I have been next to, will be explored later
+        /// </summary>
         public ref List<byte[]> CrossTiles
         {
             get => ref crossTiles;
@@ -100,8 +105,24 @@ namespace SerialConsole
 
         readonly List<byte[]> extraBits = new();
 
+        public ref ushort this[int _index1, int _index2]
+        {
+            get => ref map[_index1, _index2];
+        }
 
         // ********************************** Data - Methods ********************************** 
+
+        public void UpdateCrossTiles()
+        {
+            for (int i = 0; i < crossTiles.Count; i++)
+            {
+                if (ReadBit(crossTiles[i][0], crossTiles[i][1], BitLocation.explored))
+                {
+                    crossTiles.RemoveAt(i);
+                    i--;
+                }
+            }
+        }
 
         public void AddArea()
         {
@@ -146,12 +167,15 @@ namespace SerialConsole
             return -1;
         }
 
-        public void AddRamp(byte _x, byte _z, byte _direction, byte _rampIndex, byte _connectedMap)
+        public void AddRamp(byte _x, byte _z, byte _direction, byte _rampIndex, byte _connectedMap, byte _rampLength)
         {
-            byte[] _info = new byte[6] { _x, _z, _direction, _rampIndex, _connectedMap, 0 };
-            reachedFrom.Add(_info);
+            reachedFrom.Add(new byte[6] { _x, _z, _direction, _rampIndex, _connectedMap, _rampLength });
         }
 
+        /// <summary>
+        /// Gets a ramp by coordinates and direction
+        /// </summary>
+        /// <returns>The ramp info</returns>
         public byte[] GetRampAt(byte _x, byte _z, byte _direction)
         {
             for (int i = 0; i < reachedFrom.Count; i++)
@@ -162,13 +186,14 @@ namespace SerialConsole
                     return reachedFrom[i];
                 }
             }
-            return new byte[] { 250, 250, 250, 250 };
+            throw new NonexistantRampException();
         }
 
 
         /// <summary>
         /// Gets a ramp by index
         /// </summary>
+        /// <returns>The ramp info</returns>
         public byte[] GetRampAt(byte _index)
         {
             for (int i = 0; i < reachedFrom.Count; i++)
@@ -178,7 +203,7 @@ namespace SerialConsole
                     return reachedFrom[i];
                 }
             }
-            return new byte[] { 250, 250, 250, 250, 250 };
+            throw new NonexistantRampException();
         }
 
         /// <summary>
@@ -261,7 +286,7 @@ namespace SerialConsole
         }
 
         /// <summary>
-        /// Wipes map
+        /// Sets all bits in the map to 0
         /// </summary>
         public void Clear()
         {
@@ -338,7 +363,7 @@ namespace SerialConsole
 
             if ((foundPath.Count > savedPath.Count || foundPath.Count == 0) && savedPath.Count > 0)
             {
-                foundPath = new List<byte[]>(savedPath);
+                foundPath = savedPath;
             }
 
             //driveWay.ForEach(num => Debug.Log(num.X + " , " + num.Z + " ; "));
@@ -348,15 +373,17 @@ namespace SerialConsole
             ClearBit(BitLocation.mapSearched);
             ClearBit(BitLocation.inDriveWay);
 
-            savedPath.Clear();
             if (foundPath.Count == 0)
             {
                 Program.Log("!!!!!!!!!Could not find path!!!!!!!!!", true);
-                Thread.Sleep(250); //Don't do work here
-                //return false;
+                Thread.Sleep(200);
             }
 
-            return foundPath;
+            //Make absolutely sure that we do not modify the returned list
+            List<byte[]> scrap = foundPath;
+            savedPath = new List<byte[]>();
+            foundPath = new List<byte[]>();
+            return scrap;
         }
 
         void FindFrom(byte _onX, byte _onZ)
@@ -464,7 +491,7 @@ namespace SerialConsole
             {
                 Program.Log("Found " + foundPath.Count + " long", true);
 
-                if (foundPath.Count < savedPath.Count || savedPath.Count == 0) //If we found a better path, save it
+                if (foundPath.Count <= savedPath.Count || savedPath.Count == 0) //If we found a better path, save it
                 {
                     savedPath = new List<byte[]>(foundPath);
                     if (savedPath.Count == Math.Abs(fromPosX - toPosX) + Math.Abs(fromPosZ - toPosZ)) //If this is the shortest possible path (manhattan distance), we are done

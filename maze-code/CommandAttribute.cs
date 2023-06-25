@@ -79,3 +79,22 @@ namespace EnumCommand
         public string CommandValue { get; protected set; }
     }
 }
+
+namespace SerialConsole
+{
+    [Serializable]
+    public class NonexistantRampException : Exception
+    {
+        public NonexistantRampException()
+            : base("This ramp does not exist")
+        { }
+
+        public NonexistantRampException(string message)
+            : base(message)
+        { }
+
+        public NonexistantRampException(string message, Exception innerException)
+            : base(message, innerException)
+        { }
+    }
+}

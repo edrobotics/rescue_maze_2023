@@ -78,7 +78,7 @@ namespace SerialConsole
             //StreamWriter sw = new StreamWriter(client.GetStream());
             while (!exit)
             {
-                Thread.Sleep(10);
+                Delay(10);
                 try
                 {
                     if (!client.Connected)
@@ -173,8 +173,6 @@ namespace SerialConsole
                 {
                     throw new Exception("Wrong answer format - no a ");
                 }
-
-                errors--; //If it works, decrease errors
             }
             catch (Exception e) //Something is wrong, check sensors and try again or update map
             {
@@ -199,8 +197,9 @@ namespace SerialConsole
                     if (driveWay.Count > 0)
                     {
                         Log("Nav via driveWay failed");
-                        byte[] toPos = driveWay.Last();
-                        FindPathHere(toPos[0], toPos[1]);
+                        //byte[] toPos = driveWay.Last();
+                        //FindPathHere(toPos[0], toPos[1]);
+                        driveWay.Clear(); //We will find new since crosstile was not removed and mapwayback will be updated
                     }
                     return;
                 }
@@ -208,7 +207,7 @@ namespace SerialConsole
 
             FloorHandler(_recived, _checkRamps);
 
-            Thread.Sleep(10);
+            Delay(10);
         }
 
         static void FloorHandler(string _recived, bool _checkRamps)
@@ -357,7 +356,6 @@ namespace SerialConsole
                 return;
             Log("checking sensors", true);
             string _sensorInfo = SerialComm(SendCommands.SensorCheck.GetCommand(), false, false);
-            Thread.Sleep(30);
 
             try
             {
@@ -373,7 +371,7 @@ namespace SerialConsole
                 }
                 else
                 {
-                    Thread.Sleep(10);
+                    Delay(10);
                     Log($"{_sensorInfo} - Sensorcheck error - incorrect format recived, trying again", true);
                     SensorCheck();
                 }
@@ -442,7 +440,6 @@ namespace SerialConsole
                     LogException(e);
                     Log($"{_recived} --WRONG", true);
                 }
-                Thread.Sleep(20);
                 dropKits = false;
             }
             else if (dropKits)
@@ -476,7 +473,7 @@ namespace SerialConsole
                     kitsLeft -= lastDropped;
                     WriteHere(BitLocation.victim, true);
 
-                    Thread.Sleep(5);
+                    Delay(5);
                     dropKits = false;
                 }
                 catch (Exception e)
@@ -504,7 +501,7 @@ namespace SerialConsole
             Log("interrupting", true);
             string _recived = SerialComm(SendCommands.Interrupt.GetCommand(), false, false);
             Log("interrupted", false);
-            Thread.Sleep(100);
+            Delay(100, true);
             return _recived;
         }
 
@@ -541,12 +538,11 @@ namespace SerialConsole
             catch (Exception e)
             {
                 LogException(e);
-                Thread.Sleep(10);
+                Delay(10, true);
                 Log("Something went very wrong, retrying", true);
                 goto StartComm;
             }
 
-            Thread.Sleep(20);
             return _recived;
         }
 
@@ -562,11 +558,11 @@ namespace SerialConsole
             {
                 Log($"Sending {_send}", false);
                 serialPort1.WriteLine(_send);
-                Thread.Sleep(10);
+                Delay(10);
 
                 for (int i = 0; i < 250; i++)//50 iterations gives ~1 s.
                 {
-                    Thread.Sleep(20);
+                    Delay(20);
                     if (serialPort1.BytesToRead != 0)
                     {
                         break;
@@ -591,7 +587,7 @@ namespace SerialConsole
                     string _interruptRec = "";
                     while (serialPort1.BytesToRead == 0)
                     {
-                        Thread.Sleep(20);
+                        Delay(20);
                         if (dropKits)
                         {
                             #region InterruptHandling
@@ -641,7 +637,7 @@ namespace SerialConsole
                                                 throw new Exception("No interrupt 1 or 0");
                                             }
 
-                                            Thread.Sleep(20);
+                                            Delay(20);
                                         }
                                         catch (Exception e)
                                         {
@@ -670,7 +666,7 @@ namespace SerialConsole
                     if (serialPort1.BytesToRead == 0)
                     {
                         _recived = _interruptRec;
-                        Thread.Sleep(1000); //DO NOT REMOVE, otherwise serial comm breaks
+                        Delay(1000, true); //DO NOT REMOVE, otherwise serial comm breaks
                     }
                     else
                     {
@@ -681,7 +677,7 @@ namespace SerialConsole
                 {
                     while (serialPort1.BytesToRead == 0)
                     {
-                        Thread.Sleep(20);
+                        Delay(20);
                     }
 
                     _recived = serialPort1.ReadLine();
@@ -718,6 +714,7 @@ namespace SerialConsole
                 }
             }
 
+            Delay(10, true);
             Log($"recived:{_recived}", false);
             return _recived;
         }
