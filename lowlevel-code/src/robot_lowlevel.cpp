@@ -1053,7 +1053,7 @@ void RobotPose::compensateRamp(double& rampXDistIncr, double& rampYDistIncr)
   }
   else
   {
-    
+
   }
 }
 
@@ -1191,8 +1191,8 @@ void RobotPose::calculate1(WallSide wallSide, double& tAngle, double& distance, 
   if (useGyroAngle==false) tAngle = atan((d2 - d1)/ULTRASONIC_SPACING);
   else tAngle *= DEG_TO_RAD; // Convert the angle to radians to execute the calculation
 
-  if (wallSide==wall_right) distance = 30 - distance; // Invert if the measured side is the right one
   distance = cos(tAngle) * ((d1 + d2)/2.0);
+  if (wallSide==wall_right) distance = 30 - distance; // Invert if the measured side is the right one
   tAngle *= RAD_TO_DEG; // Convert the angle to degrees
 }
 
