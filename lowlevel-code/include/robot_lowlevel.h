@@ -298,6 +298,7 @@ class RobotPose
   public:
     double xDist; // Distance (cm) counted from the left wall (or imaginary left wall). Positive goes right.
     double yDist; // Distance (cm) counted from the centre of one tile to the next. Positive goes forward
+    double xDistIncrement;
     double yDistIncrement; // Increment for yDist
     double angle; // Angle (degrees) relative to the wall. Positive is counter-clockwise. Mathangle.
     double lastAngle;
@@ -319,6 +320,7 @@ class RobotPose
     void update(WallSide wallToUse);
     void update(double distanceIncrement);
     void update(WallSide wallToUse, double distanceIncrement);
+    void gyroUpdate(double distanceIncrement);
     void updateGyroOffset();
     void updateOnRamp(WallSide wallToUse, double distanceIncrement);
     void print();

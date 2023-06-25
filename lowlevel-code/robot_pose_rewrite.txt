@@ -2,3 +2,8 @@ Problems:
 When driving, sometimes the robot drives too far
 When driving past a corner, the robot turns and stays turned (believes it is straight?)
 Sometimes, wall detection using the front ultrasonic sensor does not work - probably due to restricted max correction distance (fixed? not flashed)
+
+
+Left to do:
+Fix last known distances (angle correction in wallchanges) to use xDist instead
+

@@ -68,11 +68,11 @@ const double MIN_CORRECTION_ANGLE = 8;
 const double MAX_WALLCHANGE_ANGLE = 25; // Should be changed later to compute the actual distances
 
 #warning untuned constants
-const double MAX_ULTRASONIC_FAR = 120; // Max distance to use differences in front ultrasonic sensor distance
+// const double MAX_ULTRASONIC_FAR = 70; // Max distance to use differences in front ultrasonic sensor distance
 const double MAX_ULTRASONIC_NEAR = 20; // Max distance to use absolute value of front ultrasonic sensor
-const double MAX_FRONT_DIFFERENCE = 3; // The maximum allowed difference between two front ultrasonic readings
-const double MAX_FRONT_CORRECTION_DISTANCE = 9; // The maximum allowed difference between pose and corrected pose when the front ultrasonic sensor gets involved.
-const double MAX_FRONT_ANGLE = 7; // The maximum allowed angle for the front sensor to be used. Untuned constant
+// const double MAX_FRONT_DIFFERENCE = 3; // The maximum allowed difference between two front ultrasonic readings
+const double MAX_FRONT_CORRECTION_DISTANCE = 11; // The maximum allowed difference between pose and corrected pose when the front ultrasonic sensor gets involved.
+// const double MAX_FRONT_ANGLE = 7; // The maximum allowed angle for the front sensor to be used. Tuned theoretically for 120cm far distance
 #warning If stopping too early, either ignore or drive back saying it is blocked (could be an obstacle)
 
 
@@ -123,22 +123,22 @@ const double WALL_PRESENCE_TRESHOLD = 20; // Not calibrated !!!!!!!!!!!!!!!!!!!!
 const double FRONT_WALL_STOPPING_TRESHOLD = 15 - ULTRASONIC_FRONT_OFFSET + 1.8;
 
 // Wallchange offsets for original wheels
-// double wallChangeOffsets[wcoff_num] =
-// {
-//   3.5,  // frontLeaving
-//   -0.5, // frontApproaching
-//   3,    // backLeaving
-//   0     // backApproaching
-// };
-
-// Wallchange offsets for neoprene foam wheels
 double wallChangeOffsets[wcoff_num] =
 {
-  2.3,  // frontLeaving
-  -1.2, // frontApproaching
-  2,    // backLeaving
-  -0.5     // backApproaching
+  3.5,  // frontLeaving
+  -0.5, // frontApproaching
+  3,    // backLeaving
+  0     // backApproaching
 };
+
+// Wallchange offsets for neoprene foam wheels
+// double wallChangeOffsets[wcoff_num] =
+// {
+//   2.3,  // frontLeaving
+//   -1.2, // frontApproaching
+//   2,    // backLeaving
+//   -0.5     // backApproaching
+// };
 
 const double BACK_WALLCHANGE_DISTANCE = 15 + ULTRASONIC_SPACING/2.0;
 const double FRONT_WALLCHANGE_DISTANCE = 15 - ULTRASONIC_SPACING/2.0;
@@ -1019,6 +1019,11 @@ void RobotPose::update(WallSide wallToUse, double distanceIncrement)
 
 }
 
+void RobotPose::gyroUpdate(double distanceIncrement)
+{
+
+}
+
 // Updates the gyro offset using the current angle values (update them before calling this function)
 void RobotPose::updateGyroOffset()
 {
@@ -1052,6 +1057,7 @@ WallSide RobotPose::getSafeWallToUse()
 }
 
 bool g_frontUltrasonicUsed = false;
+bool g_frontUltrasonicNear = false;
 
 void RobotPose::calculate2(WallSide wallSide, double& tAngle, bool useGyroAngle, double distanceIncrement)
 {
@@ -1086,48 +1092,33 @@ void RobotPose::calculate2(WallSide wallSide, double& tAngle, bool useGyroAngle,
   else
   {
     // If no wall is present
-    // If front ultrasonic sensor data is available, use that difference instead of the encoders
     xDist += distanceIncrement*sin(angle*DEG_TO_RAD);
   }
 
   // Blending with front ultrasonic sensor
+  yDistIncrement = distanceIncrement*cos(angle*DEG_TO_RAD); // Encoder measurement
   if (ultrasonicCurrentDistances[ultrasonic_F][usmt_smooth] < MAX_ULTRASONIC_NEAR)
   {
     // If you should use the direct value of the front sensor
     double newY = 30 - (ultrasonicCurrentDistances[ultrasonic_F][usmt_smooth] + ULTRASONIC_FRONT_OFFSET) + 15;
-    while(newY < 0) {newY += 30;} // Wrap the value to 0-30, as yDist should be between 0 and 30 normally
-    double difference =  newY - yDist;
-    if (abs(difference) < MAX_FRONT_CORRECTION_DISTANCE) // Problem: something in here should go into else
+    while (newY < 0) {newY += 30;} // Wrap the value to 0-30, as yDist should be between 0 and 30 normally
+    double diff =  newY - yDist;
+    if (abs(diff) < MAX_FRONT_CORRECTION_DISTANCE) // Problem: something in here should go into else
     {
-      #warning could be problematic for wallchanges. Maybe always use front sensor differences (see below)?
-      yDistIncrement = difference;
+      // yDistIncrement = difference;
       yDist = newY;
+      g_frontUltrasonicUsed = true;
     }
-    g_frontUltrasonicUsed = true;
+    else
+    {
+      yDist += yDistIncrement;
+      g_frontUltrasonicUsed = false;
+    }
   }
-  // else if (ultrasonicCurrentDistances[ultrasonic_F][usmt_smooth] < MAX_ULTRASONIC_FAR && abs(angle) < MAX_FRONT_ANGLE)
-  // {
-  //   // When to look at differences in ultrasonic readings
-  //   #warning lastDistance will be wrong after turning moves
-  //   static double lastDistance = ultrasonicCurrentDistances[ultrasonic_F][usmt_smooth];
-  //   double distance = ultrasonicCurrentDistances[ultrasonic_F][usmt_smooth];
-  //   double difference = lastDistance - distance;
-    
-  //   lastDistance = distance; // Set variable for next execution
-
-  //   if (abs(difference) < MAX_FRONT_DIFFERENCE)
-  //   {
-  //     yDistIncrement = difference;
-  //     yDist += yDistIncrement;
-  //   }
-  //   g_frontUltrasonicUsed = true;
-  
-  //   #warning does not yet check for wallchanges (should use already existing ones) (maybe not needed?)
-  // }
   else
   {
-    yDistIncrement = distanceIncrement*cos(angle*DEG_TO_RAD);
-    yDist += yDistIncrement;
+    // Normal increase, when front wall not present
+    yDist += yDistIncrement; // Encoder measurement;
     g_frontUltrasonicUsed = false;
   }
   // yDistIncrement = distanceIncrement*cos(angle*DEG_TO_RAD); // The default increment
@@ -1526,7 +1517,11 @@ void getUltrasonics()
   ultrasonicUpdateLoop(ultrasonic_RF, 35, true);
   ultrasonicUpdateLoop(ultrasonic_LB, 35, true);
   ultrasonicUpdateLoop(ultrasonic_F, 120, false);
+}
 
+void getFrontUltrasonic()
+{
+  ultrasonicUpdateLoop(ultrasonic_F, 120, true);
 }
 // For determining wall presence for individual sensors
 // bool wallPresentLF = false;
@@ -2030,7 +2025,8 @@ void checkAndUseWallChange(int sensor, WallChangeType wallChangeToCheck, Stoppin
       double corrected = g_potWallChanges[sensor][wallChangeToCheck].shadowDistanceDriven + offset;
       if (abs(g_trueDistanceDriven - corrected) <= MAX_CORRECTION_DISTANCE) // Limit correction
       {
-        g_trueDistanceDriven = corrected;
+        if (g_driveBack==true) pose.yDist = 30 - corrected;
+        else pose.yDist = corrected;
       }
       g_potWallChanges[sensor][wallChangeToCheck].timestamp = 0; // Resets the timeflag to prevent double detection. If correction was too large, also prevents from
     }
@@ -2053,7 +2049,8 @@ void checkAndUseWallChange(int sensor, WallChangeType wallChangeToCheck, Stoppin
       // Actually executing the wallchange
       if (abs(g_trueDistanceDriven-offset) <= MAX_CORRECTION_DISTANCE) // Limit correction
       {
-        g_trueDistanceDriven = offset;
+        if (g_driveBack==true) pose.yDist = g_targetDistance - offset;
+        else pose.yDist = offset;
       }
     }
 
@@ -2210,6 +2207,7 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
   if (g_driveBack==true) g_trueDistanceDriven = 30 - pose.yDist;
   else g_trueDistanceDriven = pose.yDist;
   dumbDistanceDriven = getDistanceDriven();
+  // pose.print();
 
   //pidDrive(wallToUse, startAngle, gyroOffset);
   pidDrive(wallToUse);
@@ -2268,7 +2266,7 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
 
     if (g_driveBack==false && g_trueDistanceDriven >= g_targetDistance+15 - (ULTRASONIC_FRONT_OFFSET + FRONT_WALL_STOPPING_TRESHOLD) - 1 && g_frontUltrasonicUsed==true)
     {
-      if (stopReason == stop_none) stopReason = stop_frontWallPresent;
+      if (stopReason==stop_none) stopReason = stop_frontWallPresent;
       g_driveBack = false;
       return true;
     }
@@ -2353,7 +2351,7 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
   // Checking for wallchanges
   if (abs(pose.angle) <= 33) // Only check wallchanges if below certain angle. Correction for angle is also done with the distance.
   {
-    // checkWallChanges(stopReason);
+    checkWallChanges(stopReason);
   }
   // printWallchangeData(ultrasonic_RF);
   // Serial.println("");
@@ -2403,12 +2401,14 @@ bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, To
   {
     // g_targetDistance = g_trueDistanceDriven + 2;
     // g_targetDistance = 15;
-    g_startDistance = g_targetDistance - pose.yDist;
+    g_startDistance = g_targetDistance - g_trueDistanceDriven;
+    pose.yDist = g_trueDistanceDriven; // Needed? Problematic?
     // g_targetDistance += 3;
   }
   if (continuing == true)
   {
     g_startDistance = g_trueDistanceDriven;
+    pose.yDist = g_startDistance;
   }
   g_trueDistanceDriven = g_startDistance;
   dumbDistanceDriven = 0;
@@ -2458,26 +2458,26 @@ bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, To
 
   // // Checking how far you have driven
   // // Get new sensor data
-  // getUltrasonics();
-  // checkWallPresence();
-  // // Reset drive variables
-  // startDistanceMeasure();
-  // dumbDistanceDriven = 0;
-  // double trueDistanceDrivenFlag = g_trueDistanceDriven;
-  // // Continue driving forward if necessary (close enough to the wall in front)
-  // if (stoppingReason != stop_frontWallPresent && stoppingReason != stop_floorColour && ultrasonicCurrentDistances[ultrasonic_F][usmt_smooth] < (15-ULTRASONIC_FRONT_OFFSET + 10) && (g_floorColour != ColourSensor::floor_black) && g_driveBack == false) // && g_floorColour != ColourSensor::floor_blue // Removed due to strategy change
-  // {
-  //   bool throwaWayRampDriven = false; // Just to give driveStepDriveLoop someting. Is not used for anything.
-  //   lights::setColour(3, colourOrange, true);
-  //   shouldStop = false;
-  //   while (ultrasonicCurrentDistances[ultrasonic_F][usmt_smooth] > FRONT_WALL_STOPPING_TRESHOLD) // The part about trueDistance is a failsafe in case the sensor fails && (g_trueDistanceDriven-trueDistanceDrivenFlag) < 7
-  //   {
-  //     driveStepDriveLoop(wallToUse, dumbDistanceDriven, stoppingReason, throwaWayRampDriven);
-  //     // Serial.println(ultrasonicDistanceF);
-  //   }
-  //   // lights::setColour(3, colourBase, true);
-  //    stoppingReason = stop_frontWallPresentFaraway;
-  // }
+  getUltrasonics();
+  checkWallPresence();
+  // Reset drive variables
+  startDistanceMeasure();
+  dumbDistanceDriven = 0;
+  double trueDistanceDrivenFlag = g_trueDistanceDriven;
+  // Continue driving forward if necessary (close enough to the wall in front)
+  if (stoppingReason != stop_frontWallPresent && stoppingReason != stop_floorColour && ultrasonicCurrentDistances[ultrasonic_F][usmt_smooth] < (15-ULTRASONIC_FRONT_OFFSET + 10) && (g_floorColour != ColourSensor::floor_black) && g_driveBack == false) // && g_floorColour != ColourSensor::floor_blue // Removed due to strategy change
+  {
+    bool throwaWayRampDriven = false; // Just to give driveStepDriveLoop someting. Is not used for anything.
+    lights::setColour(3, colourOrange, true);
+    shouldStop = false;
+    while (ultrasonicCurrentDistances[ultrasonic_F][usmt_smooth] > FRONT_WALL_STOPPING_TRESHOLD) // The part about trueDistance is a failsafe in case the sensor fails && (g_trueDistanceDriven-trueDistanceDrivenFlag) < 7
+    {
+      driveStepDriveLoop(wallToUse, dumbDistanceDriven, stoppingReason, throwaWayRampDriven);
+      // Serial.println(ultrasonicDistanceF);
+    }
+    // lights::setColour(3, colourBase, true);
+     stoppingReason = stop_frontWallPresentFaraway;
+  }
 
   stopWheels();
   // Serial.println("STOPPED"); // Debugging
