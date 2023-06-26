@@ -105,9 +105,10 @@ namespace SerialConsole
 
         readonly List<byte[]> extraBits = new();
 
-        public ref ushort this[int _index1, int _index2]
+        public bool this[int _index1, int _index2, BitLocation _bit]
         {
-            get => ref map[_index1, _index2];
+            get => ReadBit(_index1, _index2, _bit);
+            set => WriteBit(_index1, _index2, _bit, value);
         }
 
         // ********************************** Data - Methods ********************************** 
@@ -158,12 +159,13 @@ namespace SerialConsole
             {
                 for (int j = 0; j < areas[i].Count; j++)
                 {
-                    if (_tile == areas[i][j])
+                    if (_tile[0] == areas[i][j][0] && _tile[1] == areas[i][j][1])
                     {
                         return i;
                     }
                 }
             }
+            Program.Log("!_!-!| Current tile is not added to area |!-!_!", true);
             return -1;
         }
 
@@ -388,7 +390,7 @@ namespace SerialConsole
 
         void FindFrom(byte _onX, byte _onZ)
         {
-            Program.Log($"*****{_onX},{_onZ}*****", false);
+            Program.Log($":::: {_onX},{_onZ} ::::", false);
             WriteBit(_onX, _onZ, BitLocation.inDriveWay, true);
             if (Math.Abs(_onZ - toPosZ) >= Math.Abs(_onX - toPosX)) //All these if-statements are very ugly, but I do not have a better solution right now
             {
@@ -486,7 +488,7 @@ namespace SerialConsole
 
         void SearchCell(byte _onX, byte _onZ)
         {
-            Program.Log($"*****{_onX},{_onZ}*****", false);
+            Program.Log($":::: {_onX},{_onZ} ::::", false);
             if (_onX == toPosX && _onZ == toPosZ)
             {
                 Program.Log("Found " + foundPath.Count + " long", true);

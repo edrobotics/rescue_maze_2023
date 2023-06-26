@@ -54,7 +54,7 @@ namespace SerialConsole
         static bool goingBack = false;
 
 #warning check before competition
-        static double MINUTES = 4;
+        static double MINUTES = 8;
 
         /// <summary>
         /// Keep track of the amount of errors, add an amount for each error depending on severity, 
@@ -67,7 +67,7 @@ namespace SerialConsole
 
         static void Main()
         {
-            File.WriteAllText("log.txt", "::::::::::Program start::::::::::");
+            File.WriteAllText("log.txt", ":::::::::: Program start ::::::::::\n-----------------------------------");
             Console.CancelKeyPress += delegate (object? o, ConsoleCancelEventArgs e)
             {
                 e.Cancel = false;
@@ -78,7 +78,6 @@ namespace SerialConsole
             Delay(100);
 
             StartUp();
-            Log("Finished startup, drive loop starting", false);
 
         LoopStart:
             try
@@ -112,7 +111,7 @@ namespace SerialConsole
 
         static void StartUp()
         {
-            string _config = File.ReadAllText("Config.txt");
+            string _config = File.ReadAllText("config.txt");
             string _find = "MINUTES:";
             MINUTES = double.Parse(_config.Substring(_config.IndexOf(_find) + _find.Length, 1));
             Log($"MINUTES = {MINUTES}");
@@ -163,8 +162,9 @@ namespace SerialConsole
             if (serialPort1.BytesToRead != 0)
                 serialPort1.ReadExisting();
             Delay(100);
-            Log("/     Waiting for reset     \\", true);
+            Log(" /      Waiting for reset    \\", true);
 
+            bool _recivedReset = false;
             string _commandRecived;
             do //Wait for calibration start
             {
@@ -173,21 +173,33 @@ namespace SerialConsole
                     Delay(20);
                 }
                 _commandRecived = serialPort1.ReadLine();
+
+                if (_commandRecived.Contains(RecivedCommands.LOP.GetCommand()) && !_commandRecived.Contains(RecivedCommands.Calibration.GetCommand()))
+                {
+                    _recivedReset = true;
+                    break;
+                }
+
             } while (!(_commandRecived.Contains(RecivedCommands.LOP.GetCommand()) && _commandRecived.Contains(RecivedCommands.Calibration.GetCommand())));
 
             timer.Start();
-            _commandRecived = "";
-            Log("|Recived colour sensor reset|", true);
 
-            do //Wait for program start
+            if (!_recivedReset)
             {
-                while (serialPort1.BytesToRead == 0)
+                _commandRecived = "";
+                Log(": Recived colour sensor reset :", true);
+
+                do //Wait for program start
                 {
-                    Delay(20);
-                }
-                _commandRecived = serialPort1.ReadLine();
-            } while (!_commandRecived.Contains(RecivedCommands.LOP.GetCommand()) || _commandRecived.Contains(RecivedCommands.Calibration.GetCommand()));
-            Log("\\   Recived second reset   /", true);
+                    while (serialPort1.BytesToRead == 0)
+                    {
+                        Delay(20);
+                    }
+                    _commandRecived = serialPort1.ReadLine();
+                } while (!_commandRecived.Contains(RecivedCommands.LOP.GetCommand()) || _commandRecived.Contains(RecivedCommands.Calibration.GetCommand()));
+            }
+
+            Log(" \\     Recived full reset    /", true);
 
             Thread serverThread = new(ServerLoop);
             serverThread.Start();
@@ -202,10 +214,10 @@ namespace SerialConsole
             maps[0].Clear();
 
             Log("Updating first tile");
-            AddTile();
+            AddArea(posX, posZ);
             UpdateMapFull(true);
 
-            AddArea();
+            AddTile();
             saveWayBack = new List<List<byte[]>>(mapWayBack);
 
             Delay(100);
@@ -471,17 +483,15 @@ namespace SerialConsole
 
                         WriteNextTo(BitLocation.ramp, true, Directions.back);
                         _rampTile = DirToTile(direction - 2, (byte)posX, (byte)posZ);
-                        currentArea = maps[currentMap].Areas.Count;
                     }
 
                     byte[] _newRampTile = DirToTile(direction - 2, (byte)posX, (byte)posZ);
                     AddSinceCheckpoint(_newRampTile[0], _newRampTile[1], (byte)currentMap);
 
-                    AddArea();
+                    AddArea(_rampTile[0], _rampTile[1]);
                     if (_mapIndex != -1) TileAreaCheck((byte)posX, (byte)posZ, (byte)currentArea, (byte)currentMap);
 
                     AddTile();
-                    mapWayBack[^1].Add(new byte[] { _rampTile[0], _rampTile[1] }); //Add ramp to mapwayback, important to find way down ramp
 
                     Log($"NEW: x:{posX}, z:{posZ}, dir:{_rampDirection}, rampCount:{rampCount}, map:{maps.Count - 1}", false);
                 }
@@ -605,7 +615,7 @@ namespace SerialConsole
 
             if (timer.ElapsedMilliseconds/1000 +  secondsToStart > (MINUTES - 0.5) * 60 && !goingBack)
             {
-                Console.WriteLine("7 mins passed, returning");
+                Console.WriteLine("Time passed, returning");
                 driveWay = PathToStart();
                 goingBack = true;
             }
@@ -642,7 +652,7 @@ namespace SerialConsole
         static int StartPathSeconds()
         {
             int _secounds = 0;
-            for (int _area = mapWayBack.Count; _area >= 0; _area--)
+            for (int _area = mapWayBack.Count - 1; _area >= 0; _area--)
             {
                 double _driveTime = 0,
                        _turnTime = 0;

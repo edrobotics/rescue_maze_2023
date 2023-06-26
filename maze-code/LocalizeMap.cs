@@ -396,6 +396,7 @@ namespace SerialConsole
                 posX = 25;
                 posZ = 25;
                 currentMap = 0;
+                currentArea = 0;
                 direction = 0;
                 errors = 6;
                 AddTile();
@@ -416,6 +417,8 @@ namespace SerialConsole
             AddTile();
             UpdateMapFull(true);
             currentArea = maps[currentMap].GetArea(new byte[] {(byte)posX, (byte)posZ});
+            if (currentArea == -1)
+                currentArea = 0;
             Delay(10);
             reset = true;
         }
@@ -445,17 +448,19 @@ namespace SerialConsole
 
             if (!ReadHere(BitLocation.tileAdded))
             {
+                Log($"Adding {posX},{posZ}", false);
                 maps[currentMap].Areas[currentArea].Add(new byte[] { (byte)posX, (byte)posZ });
                 WriteHere(BitLocation.tileAdded, true);
             }
         }
 
-        static void AddArea()
+        static void AddArea(int _firstX, int _firstZ)
         {
             maps[currentMap].AddArea();
-            currentArea = maps[currentMap].Areas.Count;
+            currentArea = maps[currentMap].Areas.Count - 1;
 
             mapWayBack.Add(new List<byte[]>() { new byte[] { (byte)currentMap, (byte)currentArea } });
+            mapWayBack.Add(new List<byte[]>() { new byte[] { (byte)_firstX, (byte)_firstZ } });
         }
 
         /// <summary>
@@ -518,6 +523,11 @@ namespace SerialConsole
             if (maps[_map].ReadBit(_x, _z, BitLocation.explored) && !maps[_map].ReadBit(_x, _z, BitLocation.blackTile))
             {
                 int _tileArea = maps[_map].GetArea(new byte[] { _x, _z });
+                if (_tileArea == -1)
+                {
+                    Log($"{_x},{_z} is not added, why???", false);
+                }
+
                 if (_tileArea != _area)
                 {
                     //Merge areas
