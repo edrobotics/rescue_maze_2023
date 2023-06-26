@@ -106,6 +106,7 @@ namespace serialcomm
     void clearBuffer();
 
     bool checkInterrupt();
+    bool checkDebugInterrupt();
 
     void answerInterrupt(int stepDriven);
 
