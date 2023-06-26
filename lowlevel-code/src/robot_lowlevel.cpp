@@ -65,7 +65,7 @@ MeRGBLed ledRing(0, 12);
 
 const double MAX_CORRECTION_DISTANCE = 16;
 const double MIN_CORRECTION_ANGLE = 8;
-const double MAX_WALLCHANGE_ANGLE = 20; // Should be changed later to compute the actual distances
+const double MAX_WALLCHANGE_ANGLE = 33; // Should be changed later to compute the actual distances
 const double MAX_WALLCHANGE_DISTANCE;
 
 #warning untuned constants
@@ -403,6 +403,20 @@ bool serialcomm::checkInterrupt()
   else return false;
 }
 
+bool serialcomm::checkDebugInterrupt()
+{
+  if (Serial.available() > 0)
+  {
+    char readChar = Serial.read();
+    if (readChar == 'i')
+    {
+      return true;
+    }
+    else return false;
+  }
+  else return false;
+}
+
 void serialcomm::answerInterrupt(int stepDriven)
 {
   Serial.print("!a,i,");
@@ -667,9 +681,9 @@ void sounds::tone(int freq, int duration)
 
 void sounds::startupSound()
 {
-  tone(520, 400);
+  tone(494, 400);
   delay(200);
-  tone(1000, 400);
+  tone(880, 400);
 }
 
 int lights::safeIndex(int index)
@@ -1444,14 +1458,14 @@ void gyroTurnSteps(TurningDirection direction, int steps, bool doCorrection, dou
 
 void turnSteps(TurningDirection direction, int steps, double turningSpeed)
 {
-  flushDistanceArrays();
+  pose.update();
   gyroTurnSteps(direction, steps, true, turningSpeed);
-  flushDistanceArrays();
+  pose.update();
   if (abs(pose.angle) > MIN_CORRECTION_ANGLE)
   {
   straighten();
   }
-  flushDistanceArrays();
+  pose.update();
 }
 
 // Should be done after every move. (at the end of drivestep and turnsteps) That way, the robot should always be straigt for the new measurements.
@@ -2481,7 +2495,7 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
   } // Only do when not on ramp ends here
 
   // Checking for wallchanges
-  if (abs(pose.angle) <= 33) // Only check wallchanges if below certain angle. Correction for angle is also done with the distance.
+  if (abs(pose.angle) <= MAX_WALLCHANGE_ANGLE) // Only check wallchanges if below certain angle. Correction for angle is also done with the distance.
   {
     checkWallChanges(stopReason);
   }
@@ -2489,7 +2503,11 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
   // Serial.println("");
 
   // Checking for interrupts
+  #ifdef PICODE
   if (serialcomm::checkInterrupt() == true)
+  #else
+  if (serialcomm::checkDebugInterrupt() == true)
+  #endif
   {
     if (onRamp==false && g_driveBack==false)
     {
@@ -2497,8 +2515,20 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
     bool stepDriven = false;
     if (g_trueDistanceDriven >= 15) stepDriven = true;
     serialcomm::answerInterrupt(stepDriven);
+    #ifdef PICODE
     Command intrCommand = serialcomm::readCommand(true);
-    if (intrCommand == command_dropKit) handleVictim(true);
+    #else
+    Command intrCommand = command_dropKit;
+    g_kitsToDrop = 1;
+    g_dropDirection = 'r';
+    g_returnAfterDrop = true;
+    #endif
+    if (intrCommand == command_dropKit)
+    {
+      handleVictim(true);
+      startDistanceMeasure(); // Reset distance measurement
+      dumbDistanceDriven = getDistanceDriven(); // Set new distance measurement
+    }
     else if (intrCommand == command_none) sounds::errorBeep();
     else {} // Do nothing and continue
     }

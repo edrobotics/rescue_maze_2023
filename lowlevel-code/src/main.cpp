@@ -9,7 +9,7 @@
 #include <SPI.h>
 
 // #define PICODE
-#define TESTING_NAV // Add interrupt testing
+#define TESTING_NAV
 // #define TESTING
 // #define COLSENS_CALIBRATION
 
@@ -33,8 +33,10 @@ void setup()
   #endif
   
   // Init hardware
-  gyroInit();
   lightsAndBuzzerInit();
+  lights::activated();
+
+  gyroInit();
   encodersInit();
   initColourSensor();
   servoSetup();
@@ -44,7 +46,6 @@ void setup()
   
 
   // Wait for beginning (to give time to remove hands etc.)
-  lights::activated();
   if (colCalButton.isPressed())
   {
     colSensor.clearCalibrationData();
