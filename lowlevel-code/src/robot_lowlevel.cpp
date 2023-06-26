@@ -125,22 +125,29 @@ const double WALL_PRESENCE_TRESHOLD = 20; // Not calibrated !!!!!!!!!!!!!!!!!!!!
 const double FRONT_WALL_STOPPING_TRESHOLD = 15 - ULTRASONIC_FRONT_OFFSET + 1.8;
 
 // Wallchange offsets for original wheels
-double wallChangeOffsets[wcoff_num] =
-{
-  3.5,  // frontLeaving
-  -0.5, // frontApproaching
-  3,    // backLeaving
-  0     // backApproaching
-};
-
-// Wallchange offsets for neoprene foam wheels
 // double wallChangeOffsets[wcoff_num] =
 // {
-//   2.3,  // frontLeaving
-//   -1.2, // frontApproaching
-//   2,    // backLeaving
-//   -0.5     // backApproaching
+//   3.5,  // frontLeaving
+//   -0.5, // frontApproaching
+//   3,    // backLeaving
+//   0     // backApproaching
 // };
+
+// Wallchange offsets for neoprene foam wheels
+double wallChangeOffsets[wcoff_num] =
+{
+  1,  // frontLeaving
+  -1.2, // frontApproaching
+  2,    // backLeaving
+  -0.5     // backApproaching
+};
+double wallChangeOffsetsSmooth[wcoff_num] =
+{
+  2.3,  // frontLeaving
+  -0.1, // frontApproaching
+  3,    // backLeaving
+  -1.8     // backApproaching
+};
 
 const double BACK_WALLCHANGE_DISTANCE = 15 + ULTRASONIC_SPACING/2.0;
 const double FRONT_WALLCHANGE_DISTANCE = 15 - ULTRASONIC_SPACING/2.0;
@@ -574,9 +581,9 @@ void lights::activated()
   delay(70);
   for (int i=0;i<3;++i)
   {
-    static int freq = 520;
-    if (i==1) freq = 660;
-    if (i==2) freq = 900;
+    static int freq = 660;
+    // if (i==1) freq = 660;
+    // if (i==2) freq = 900;
     turnOff();
     delay(80);
     setColour(0, colourAffirmative, true);
@@ -681,9 +688,9 @@ void sounds::tone(int freq, int duration)
 
 void sounds::startupSound()
 {
-  tone(494, 400);
+  tone(555, 400);
   delay(200);
-  tone(880, 400);
+  tone(1033, 400);
 }
 
 int lights::safeIndex(int index)
@@ -1073,7 +1080,7 @@ void RobotPose::compensateRamp(double& rampXDistIncr, double& rampYDistIncr)
 
 void RobotPose::updateOnRamp(WallSide wallToUse, double distanceIncrement)
 {
-  distOnRamp += yDistIncrement;
+  distOnRamp += distanceIncrement*cos(angle*DEG_TO_RAD);
   xDistOnRamp += distanceIncrement*cos(abs(gyro.getAngleX())*DEG_TO_RAD);
   yDistOnRamp += distanceIncrement*sin(-gyro.getAngleX()*DEG_TO_RAD);
 }
@@ -1221,6 +1228,7 @@ void RobotPose::print()
   Serial.print("targetGyroAngle:  ");Serial.print(targetGyroAngle, 2);Serial.print("  ");
   Serial.print("xDist:  ");Serial.print(xDist, 1);Serial.print("  ");
   Serial.print("yDist:  ");Serial.print(yDist, 1);Serial.print("  ");
+  Serial.print("distOnRamp:  ");Serial.print(distOnRamp, 1);Serial.print("  ");
   Serial.println("");
 }
 
@@ -1880,11 +1888,13 @@ void checkPotWallChange(int sensor)
     {
       g_potWallChanges[sensor][wallchange_approaching].detected = true;
       g_potWallChanges[sensor][wallchange_approaching].timestamp = millis();
+      // Serial.print(sensor);Serial.print(": POT APPR");Serial.println("");
     }
     else
     {
       g_potWallChanges[sensor][wallchange_leaving].detected = true;
       g_potWallChanges[sensor][wallchange_leaving].timestamp = millis();
+      // Serial.print(sensor);Serial.print(": POT LEAV");Serial.println("");
     }
   }
   else
@@ -1907,8 +1917,16 @@ void checkSmoothWallChange(int sensor)
 {
   if (currentSensorWallStates[sensor][usmt_smooth] != previousSensorWallStates[sensor][usmt_smooth])
   {
-    if (currentSensorWallStates[sensor][usmt_smooth] == true) g_smoothWallChanges[sensor] = wallchange_approaching;
-    else g_smoothWallChanges[sensor] = wallchange_leaving;
+    if (currentSensorWallStates[sensor][usmt_smooth] == true)
+    {
+      g_smoothWallChanges[sensor] = wallchange_approaching;
+      // Serial.print(sensor);Serial.print(": SMOOTH APPR");Serial.println("");
+    }
+    else
+    {
+      g_smoothWallChanges[sensor] = wallchange_leaving;
+      // Serial.print(sensor);Serial.print(": SMOOTH LEAV");Serial.println("");
+    }
   }
   else g_smoothWallChanges[sensor] = wallchange_none;
 }
@@ -2152,19 +2170,37 @@ void checkAndUseWallChange(int sensor, WallChangeType wallChangeToCheck, Stoppin
   if (g_smoothWallChanges[sensor] == wallChangeToCheck)
   {
     double offset = 0;
+    double smoothOffset = 0;
     // Front wallchange
     if ((g_driveBack==false && ultrasonicGroup==ultrasonics_front) || (g_driveBack==true && ultrasonicGroup==ultrasonics_back))
     {
-      if (wallChangeToCheck == wallchange_approaching) offset = FRONT_WALLCHANGE_DISTANCE + wallChangeOffsets[wcoff_frontApproaching];
-      else offset = FRONT_WALLCHANGE_DISTANCE + wallChangeOffsets[wcoff_frontLeaving];
+      if (wallChangeToCheck == wallchange_approaching)
+      {
+        offset = FRONT_WALLCHANGE_DISTANCE + wallChangeOffsets[wcoff_frontApproaching];
+        smoothOffset = FRONT_WALLCHANGE_DISTANCE + wallChangeOffsetsSmooth[wcoff_frontApproaching];
+      } 
+      else
+      {
+        offset = FRONT_WALLCHANGE_DISTANCE + wallChangeOffsets[wcoff_frontLeaving];
+        smoothOffset = FRONT_WALLCHANGE_DISTANCE + wallChangeOffsetsSmooth[wcoff_frontLeaving];
+      }
     }
     // Back wallchange
     else
     {
-      if (wallChangeToCheck == wallchange_approaching) offset = BACK_WALLCHANGE_DISTANCE + wallChangeOffsets[wcoff_backApproaching];
-      else offset = BACK_WALLCHANGE_DISTANCE + wallChangeOffsets[wcoff_backLeaving];
+      if (wallChangeToCheck == wallchange_approaching)
+      {
+        offset = BACK_WALLCHANGE_DISTANCE + wallChangeOffsets[wcoff_backApproaching];
+        smoothOffset = BACK_WALLCHANGE_DISTANCE + wallChangeOffsetsSmooth[wcoff_backApproaching];
+      }
+      else
+      {
+        offset = BACK_WALLCHANGE_DISTANCE + wallChangeOffsets[wcoff_backLeaving];
+        smoothOffset = BACK_WALLCHANGE_DISTANCE + wallChangeOffsetsSmooth[wcoff_backLeaving];
+      }
     }
 
+    // Checking for potential wallchanges
     if (millis() - g_potWallChanges[sensor][wallChangeToCheck].timestamp < 500) // Time is not tuned!!!
     {
       // Successful detection using potential wallchange
@@ -2189,14 +2225,14 @@ void checkAndUseWallChange(int sensor, WallChangeType wallChangeToCheck, Stoppin
           angleCorrDistance *= -1;
         }
 
-        offset+=angleCorrDistance; // Set the distance to write to trueDistanceDriven
+        smoothOffset+=angleCorrDistance; // Set the distance to write to trueDistanceDriven
       }
       
       // Actually executing the wallchange
-      if (abs(g_trueDistanceDriven-offset) <= MAX_CORRECTION_DISTANCE) // Limit correction
+      if (abs(g_trueDistanceDriven-smoothOffset) <= MAX_CORRECTION_DISTANCE) // Limit correction
       {
-        if (g_driveBack==true) pose.yDist = g_targetDistance - offset;
-        else pose.yDist = offset;
+        if (g_driveBack==true) pose.yDist = g_targetDistance - smoothOffset;
+        else pose.yDist = smoothOffset;
       }
     }
 
@@ -2279,17 +2315,18 @@ void printPotWallChanges()
 
 void printWallchangeData(UltrasonicSensorEnum sensor)
 {
+  Serial.print(sensor);Serial.print("   ");
   Serial.print("POT  ");
   Serial.print("CurrentPresent:");Serial.print(currentSensorWallStates[sensor][usmt_raw]);Serial.print(" ");
   Serial.print("PreviousPresent:");Serial.print(previousSensorWallStates[sensor][usmt_raw]);Serial.print(" ");
-  Serial.println("");
+  Serial.print("   ");
 
   Serial.print("APPR: ");
   Serial.print("DETECT: ");
   Serial.print(g_potWallChanges[sensor][wallchange_approaching].detected);Serial.print(" ");
   Serial.print("ShadowDist: ");Serial.print(g_potWallChanges[sensor][wallchange_approaching].shadowDistanceDriven);Serial.print(" ");
   Serial.print("TIME: ");Serial.print(millis()-g_potWallChanges[sensor][wallchange_approaching].timestamp);Serial.print(" ");
-  Serial.println("");
+  Serial.print("   ");
 
   Serial.print("LEAV: ");
   Serial.print("DETECT: ");
@@ -2382,7 +2419,7 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
   if (onRamp == true)
   {
     useRampPID();
-    pose.updateOnRamp(wallToUse, dumbDistanceDriven);
+    pose.updateOnRamp(wallToUse, dumbDistanceIncrement);
     if (pose.distOnRamp > 10) rampDriven = true; // Could be moved to driveStep() ?
     // Serial.print(g_horizontalDistanceDrivenOnRamp);Serial.print("    ");Serial.print(g_verticalDistanceDrivenOnRamp);Serial.print("    ");Serial.println(-gyro.getAngleX());
 
@@ -2393,9 +2430,12 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
   {
     if (rampChange == true)
     {
-      pose.yDist = 15;
-      g_trueDistanceDriven = pose.yDist;
       lights::turnOff(); // Could cause problems?
+      if (rampDriven==true) // If it was in fact a ramp, update the pose
+      {
+        pose.yDist = 15;
+        g_trueDistanceDriven = pose.yDist;
+      }
     }
     useNormPID();
     // Checking if you are done
@@ -2500,6 +2540,8 @@ bool driveStepDriveLoop(WallSide& wallToUse, double& dumbDistanceDriven, Stoppin
     checkWallChanges(stopReason);
   }
   // printWallchangeData(ultrasonic_RF);
+  // printWallchangeData(ultrasonic_RB);
+  // Serial.println("");
   // Serial.println("");
 
   // Checking for interrupts
@@ -2574,6 +2616,7 @@ bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, To
   }
   g_trueDistanceDriven = g_startDistance;
   dumbDistanceDriven = 0;
+  pose.distOnRamp = 0;
 
   // For checking for blue and reflective tiles
   g_reflectiveIterations = 0;
