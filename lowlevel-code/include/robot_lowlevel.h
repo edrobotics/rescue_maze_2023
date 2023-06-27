@@ -386,7 +386,7 @@ void awareGyroTurn(double turnAngle, bool stopMoving, double turnSpeed, bool ult
 // direction - cw (clockwise) or ccw (counter-clockwise) turn.
 // steps - the amount of 90-degree turns to do in the chosen direction.
 // doCorrection - Whether or not you should correct for the lastWallAngle
-void gyroTurnSteps(TurningDirection direction, int steps, bool doCorrection, double turningSpeed);
+void gyroTurnSteps(TurningDirection direction, int steps, bool doCorrection, double turningSpeed, bool updatePose);
 
 // Aligns the robot to the grid (parallel/normal to the walls)
 void straighten();
