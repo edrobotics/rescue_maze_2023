@@ -57,7 +57,7 @@ void setup()
     delay(20);
     lights::turnOff();
   }
-  delay(500);
+  delay(100);
   sounds::startupSound();
   serialcomm::sendLOP();
 }

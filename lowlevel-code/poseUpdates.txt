@@ -1,0 +1,2 @@
+Pose updates should be done in the beginning of functions that require it.
+No function has to update the pose after it is done, as that is covered in the beginning of the next function.
