@@ -2653,7 +2653,7 @@ bool driveStepDriveLoop(WallSide &wallToUse, double &dumbDistanceDriven, Stoppin
       return true;
     }
 
-    if ((g_trueDistanceDriven >= g_targetDistance - 1.7 && abs(gyro.getAngleX()) < 3) || g_trueDistanceDriven >= g_targetDistance + 1) // Stopping due to dead reckoning. Only if robot flat enough or having driven further as a safeguard (if angle is wrong)
+    if ((g_trueDistanceDriven >= g_targetDistance - 1.7 && abs(gyro.getAngleX()) < 4) || g_trueDistanceDriven >= g_targetDistance) // Stopping due to dead reckoning. Only if robot flat enough or having driven further as a safeguard (if angle is wrong)
     {
       if (stopReason == stop_none)
         stopReason = stop_deadReckoning;
@@ -2702,6 +2702,7 @@ bool driveStepDriveLoop(WallSide &wallToUse, double &dumbDistanceDriven, Stoppin
         ++g_totalNewIterations;
         if (-gyro.getAngleX() > 1.5) // Does not use absolute value as i cannot drive down to an obstacle
         {
+          #warning untuned angle constant for bump detection
           ++g_onBumpIterations;
         }
         if (g_floorColour == ColourSensor::floor_reflective && (abs(gyro.getAngleX()) < 2 || abs(gyro.getAngleY()) < 2)) // Robot can be scewed in any direction
