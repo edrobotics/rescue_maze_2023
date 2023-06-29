@@ -1102,16 +1102,16 @@ void RobotPose::updateGyroOffset()
 
 void RobotPose::compensateRamp(double& rampXDistIncr, double& rampYDistIncr)
 {
-  double rampAngle = gyro.getAngleX();
+  double rampAngle = -gyro.getAngleX();
   if (rampAngle < 0) // Driving down a ramp
   {
-    rampXDistIncr*=1.0;
-    rampYDistIncr*=1.0;
+    rampXDistIncr*=1.1037;
+    rampYDistIncr*=1.1095;
   }
   else // Driving up a ramp
   {
-    rampXDistIncr*=1.0;
-    rampYDistIncr*=1.0;
+    rampXDistIncr*=0.8639;
+    rampYDistIncr*=0.9581;
   }
 }
 
@@ -2981,10 +2981,11 @@ bool driveStep(ColourSensor::FloorColour &floorColourAhead, bool &rampDriven, To
   {
     bumpDriven = true;
   }
-  Serial.print("OnBump: ");Serial.print(g_onBumpIterations);Serial.print("  ");
-  Serial.print("NewIterations: ");Serial.print(g_totalNewIterations);Serial.print("  ");
-  Serial.print("BumpDriven: ");Serial.print(bumpDriven);Serial.print("  ");
-  Serial.println("");
+  // Debugging for bumps
+  // Serial.print("OnBump: ");Serial.print(g_onBumpIterations);Serial.print("  ");
+  // Serial.print("NewIterations: ");Serial.print(g_totalNewIterations);Serial.print("  ");
+  // Serial.print("BumpDriven: ");Serial.print(bumpDriven);Serial.print("  ");
+  // Serial.println("");
 
   // Serial.print("Reflective share: ");Serial.println(double(g_reflectiveIterations)/double(g_totalNewIterations), 3); // Debugging
   // Check for blue
@@ -3014,7 +3015,8 @@ bool driveStep(ColourSensor::FloorColour &floorColourAhead, bool &rampDriven, To
   if (rampDriven == true)
   {
     lights::rampDriven();
-    delay(500);
+    pose.printRampVals();
+    // delay(500);
     lights::turnOff();
   }
 
