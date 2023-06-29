@@ -8,6 +8,7 @@ using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 using EnumCommand;
+using Mapping;
 
 namespace SerialConsole
 {
@@ -147,7 +148,7 @@ namespace SerialConsole
             }
             //Send command and recive data
             locationUpdated = false;
-            CheckAndDropKits(true);
+            CheckAndDropKits(true, true);
 
             if (reset)
                 return;
@@ -182,6 +183,8 @@ namespace SerialConsole
                 LogException(e);
                 
                 SensorCheck();
+                if (reset) return;
+
                 Log("There is " + (frontPresent ? "" : "not ") + "a wall in front", true);
                 Log($"(frontPresent = {frontPresent})", true);
                 if (!frontPresent && !ReadNextTo(BitLocation.blackTile, Directions.front))
@@ -196,7 +199,7 @@ namespace SerialConsole
                     UpdateMapFull(true);
                     if (driveWay.Count > 0)
                     {
-                        Log("Nav via driveWay failed");
+                        Log("Nav via driveWay failed", true);
                         //byte[] toPos = driveWay.Last();
                         //FindPathHere(toPos[0], toPos[1]);
                         driveWay.Clear(); //We will find new since crosstile was not removed and mapwayback will be updated
@@ -220,27 +223,8 @@ namespace SerialConsole
                 if (_driveInfo[2].Contains((char)TileFloors.Ramp) && _checkRamps && !_driveInfo[1].Contains((char)TileFloors.Black)) //Went up a ramp
                 {
                     Log($"recived ramp: {_recived}", true);//,horisontell,vertikal
-                    try
-                    {
-                        RampDriven(direction, int.Parse(_driveInfo[3]), int.Parse(_driveInfo[4])); //Handles the ramp, creates a new map and recalculates position and height
-                    }
-                    catch (Exception e)
-                    {
-                        LogException(e);
-                        Log("!!! Very bad, ramp floor handling failed !!!");
-                        throw new Exception("Floor handling ramp failed, which is very bad", e);
-                    }
+                    RampDriven(direction, int.Parse(_driveInfo[3]), int.Parse(_driveInfo[4])); //Handles the ramp, creates a new map and recalculates position and height
 
-                    if (_driveInfo[1].Contains((char)TileFloors.CheckPoint))
-                    {
-                        WriteHere(BitLocation.checkPointTile, true);
-                        Log("New Checkp", true);
-                        VisitedCheckpoint();
-                    }
-                    else if (_driveInfo[1].Contains((char)TileFloors.Blue))
-                    {
-                        WriteHere(BitLocation.blueTile, true);
-                    }
                     UpdateMap();
                 }
                 else
@@ -262,28 +246,27 @@ namespace SerialConsole
                     }
                     else //Moved a tile
                     {
-
                         UpdateLocation();
                         UpdateMap();
-
-                        if (_driveInfo[1].Contains((char)TileFloors.CheckPoint))
-                        {
-                            Log($"recived checkpoint: {_recived}", true);
-                            WriteHere(BitLocation.checkPointTile, true);
-
-                            VisitedCheckpoint();
-                        }
-                        else if (_driveInfo[1].Contains((char)TileFloors.Blue))
-                        {
-                            Log($"recived blue tile: {_recived}", true);
-                            WriteHere(BitLocation.blueTile, true);
-                        }
                     }
+                }
+
+                if (_driveInfo[1].Contains((char)TileFloors.CheckPoint))
+                {
+                    Log($"recived checkpoint: {_recived}", true);
+                    WriteHere(BitLocation.checkPointTile, true);
+
+                    VisitedCheckpoint();
+                }
+                else if (_driveInfo[1].Contains((char)TileFloors.Blue))
+                {
+                    Log($"recived blue tile: {_recived}", true);
+                    WriteHere(BitLocation.blueTile, true);
                 }
             }
             catch (Exception e)
             {
-                Log($"{_recived} -problem colour", true);
+                Log($"{_recived} -floor problem", true);
                 LogException(e);
             }
         }
@@ -293,8 +276,7 @@ namespace SerialConsole
 
         static void Turn(char _direction)
         {
-            if (reset)
-                return;
+            if (reset) return;
             if (_direction == 'l')
             {
                 Log("Turning left", true);
@@ -313,7 +295,6 @@ namespace SerialConsole
             {
                 Log("Turn - WRONG DIRECTION", true);
             }
-            //SensorCheck();
         }
 
         static void TurnTo(int _toDirection)
@@ -327,7 +308,7 @@ namespace SerialConsole
             {
                 while (_toDirection != direction)
                 {
-                    CheckAndDropKits(false);
+                    CheckAndDropKits(false, true);
                     if (_toDirection != direction)
                         Turn('r'); //turn right
                     if (reset) return;
@@ -337,14 +318,13 @@ namespace SerialConsole
             {
                 while (_toDirection != direction)
                 {
-                    CheckAndDropKits(false);
+                    CheckAndDropKits(false, true);
                     if (_toDirection != direction)
                         Turn('l'); //turn left
                     if (reset) return;
                 }
             }
-            //SensorCheck();
-            CheckAndDropKits(true);
+            CheckAndDropKits(true, true);
         }
 
 
@@ -352,10 +332,10 @@ namespace SerialConsole
 
         static void SensorCheck()
         {
-            if (reset)
-                return;
+            if (reset) return;
             Log("checking sensors", true);
             string _sensorInfo = SerialComm(SendCommands.SensorCheck.GetCommand(), false, false);
+            if (reset) return;
 
             try
             {
@@ -393,14 +373,14 @@ namespace SerialConsole
         /// Checks if there are kits to drop, and if so, it drops kits
         /// </summary>
         /// <param name="_turnBack">Whether we should turn back again</param>
-        static void CheckAndDropKits(bool _turnBack)
+        static void CheckAndDropKits(bool _turnBack, bool _useWallSafeguard)
         {
             if (reset)
                 return;
 
             if (dropKits && !ReadHere(BitLocation.victim))
             {
-                if (!CheckKitSide(dropSide)) //If there is not a wall on the kit side
+                if (!CheckKitSide(dropSide) && _useWallSafeguard) //If there is not a wall on the kit side
                 {
                     dropKits = false;
                     return;
@@ -412,6 +392,8 @@ namespace SerialConsole
                 Log($"Dropping {dropAmount} kits {dropSide}", true);
 
                 string _recived = SerialComm(SendCommands.DropKits.GetCommand($"{dropAmount},{dropSide},{(_turnBack ? '1' : '0')}"), true, false);
+                if (reset)
+                    return;
 
                 kitsLeft -= lastDropped;
                 Log($"Recived: {_recived}", false);
@@ -688,6 +670,7 @@ namespace SerialConsole
                 if (_checkDropAgain)
                 {
                     SensorCheck();
+                    if (reset) return RecivedCommands.LOP.GetCommand();
 
                     dropKits = true;
                     Log("Checking kit again, dropside checking", true);
@@ -695,14 +678,18 @@ namespace SerialConsole
                     {
                         case 'l':
                             if (leftPresent)
-                                CheckAndDropKits(true);
+                                CheckAndDropKits(true, false);
+                            else
+                                Log("Forgot kit l, no wall", true);
                             break;
                         case 'r':
                             if (rightPresent)
-                                CheckAndDropKits(true);
+                                CheckAndDropKits(true, false);
+                            else
+                                Log("Forgot kit r, no wall", true);
                             break;
                         default:
-                            Log("Error kit dir drop side");
+                            Log("Error kit dir drop side", true);
                             break;
                     }
                     dropKits = false;

@@ -1,5 +1,6 @@
 ﻿// |||| NAVIGATION - Code for the main navigation and stuff that did not belong anywhere else ||||
 using EnumCommand;
+using Mapping;
 using System.Diagnostics;
 using System.IO.Ports;
 
@@ -7,6 +8,7 @@ namespace SerialConsole
 {
     internal partial class Program
     {
+        #region Variables and objects
         //******** Navigation & Localization ********
 
         static int highestX = 25;
@@ -53,7 +55,7 @@ namespace SerialConsole
 
         static bool goingBack = false;
 
-#warning check before competition
+#warning remove config file before competition
         static double MINUTES = 8;
 
         /// <summary>
@@ -61,13 +63,15 @@ namespace SerialConsole
         /// if it is too high we use backup nav
         /// </summary>
         static int errors = 0;
+        static string logFileName = "log.txt";
 
+        #endregion Variables and objects
+
+        #region Main/Startup
         // ********************************** Main Loop & Startup ********************************** 
-        #region Main
 
         static void Main()
         {
-            File.WriteAllText("log.txt", ":::::::::: Program start ::::::::::\n-----------------------------------");
             Console.CancelKeyPress += delegate (object? o, ConsoleCancelEventArgs e)
             {
                 e.Cancel = false;
@@ -90,6 +94,7 @@ namespace SerialConsole
                         reset = false;
                         dropKits = false;
                     }
+
                     CheckTimer();
                     Turnlogic();
                     Drive(true, turboDrive);
@@ -111,10 +116,7 @@ namespace SerialConsole
 
         static void StartUp()
         {
-            string _config = File.ReadAllText("config.txt");
-            string _find = "MINUTES:";
-            MINUTES = double.Parse(_config.Substring(_config.IndexOf(_find) + _find.Length, 1));
-            Log($"MINUTES = {MINUTES}");
+            Config();
 
             listener.Start();
             Log("Waiting for connection...", true);
@@ -130,11 +132,11 @@ namespace SerialConsole
                 }
                 catch
                 {
-                    Log("Cannot open port, try these: ");
+                    Log("Cannot open port, try these: ", true);
                     string[] _ports = SerialPort.GetPortNames();
                     foreach (string _port in _ports)
                     {
-                        Log(_port);
+                        Log(_port, true);
                     }
 
                     foreach (string _port in _ports)
@@ -149,7 +151,7 @@ namespace SerialConsole
                         }
                         catch
                         {
-                            Log("Cannot open port " + _port);
+                            Log("Cannot open port " + _port, true);
                         }
                     }
 
@@ -207,26 +209,45 @@ namespace SerialConsole
 
             // Setup map and start info
 
+            posX = posZ = 25;
             currentMap = 0;
             direction = 0;
             maps.Capacity = 15;
-            maps.Add(new Map(50, 0, 25, 25));
+            maps.Clear();
+            maps.Add(new Map(50, 0, posX, posZ));
             maps[0].Clear();
 
-            Log("Updating first tile");
+            Log($"Area count: {maps[0].Areas.Count}", false);
+            maps[0].Areas.Clear();
             AddArea(posX, posZ);
             UpdateMapFull(true);
 
+
             AddTile();
             saveWayBack = new List<List<byte[]>>(mapWayBack);
-
+            
             Delay(100);
             Log("Done with startup", true);
         }
+
+        static void Config()
+        {
+            logFileName = $"log{DateTime.Now:MMddTHHmm}.txt";
+            if (Directory.Exists(@"../logs/"))
+            {
+                logFileName = @"../logs/" + logFileName;
+            }
+            File.WriteAllText(logFileName, DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss") + "\n-----------------------------------\n:::::::::: Program start ::::::::::\n-----------------------------------");
+
+            string _config = File.ReadAllText("config.txt");
+            string _find = "MINUTES:";
+            MINUTES = double.Parse(_config.Substring(_config.IndexOf(_find) + _find.Length, 1));
+            Log($"MINUTES = {MINUTES}", true);
+        }
         #endregion
 
+        #region Navigation
         // ********************************** Navigation ********************************** 
-        #region Nav
 
         static void Turnlogic()
         {
@@ -252,7 +273,6 @@ namespace SerialConsole
 
             Delay(20, true);
 
-            //+ all startpos stuff when ramps are done (or change startpos in map + add parameter in initializer)
             //CHANGE CODE BELOW WHEN RAMP STUFF IS CHANGED
             if (((driveWay.Count == 0 && maps[currentMap].CrossTiles.Count == 0 && _unExpTiles == 0) || goingBack) 
                   && posX == maps[currentMap].StartPosX && posZ == maps[currentMap].StartPosZ && currentMap == 0)
@@ -335,7 +355,9 @@ namespace SerialConsole
 
                         if (maps[currentMap].CrossTiles.Count == 0)
                         {
-                            FindPathHere(maps[currentMap].StartPosX, maps[currentMap].StartPosZ);
+                            driveWay = mapWayBack[^1];
+                            driveWay.RemoveAt(0);
+
                             if (driveWay.Count > 0)
                                 goto NavLogic;
                             throw new Exception($"DID NOT FIND PATH TO (map){currentMap} START XZ");
@@ -353,19 +375,29 @@ namespace SerialConsole
                         for (int i = maps[currentMap].CrossTiles.Count-1; i <= 0; i--)
                         {
                             //(maps[currentMap].CrossTiles[^i], maps[currentMap].CrossTiles[^1]) = (maps[currentMap].CrossTiles[^1], maps[currentMap].CrossTiles[^i]); //BAD SOLUTION, IF ONE IS BAD, BOTH ARE LIKELY BAD; travel up ramp instead?
-                            FindPathHere(maps[currentMap].CrossTiles[i][1], maps[currentMap].CrossTiles[i][1]);
+                            if (maps[currentMap].IsSameArea(maps[currentMap].CrossTiles[i], new byte[] { (byte)posX, (byte)posZ }))
+                                FindPathHere(maps[currentMap].CrossTiles[i][1], maps[currentMap].CrossTiles[i][1]);
                             if (driveWay.Count > 0) goto NavLogic;
                         }
                         Log("SOMETHING PROBABLY WRONG WITH RAMP OR MAP, MAYBE DUAL RAMP, trying to solve", true);
-                        GoToRamp(maps[currentMap].GetRampAt((byte)(rampCount-1)));
+
+                        driveWay = mapWayBack[^1];
+                        driveWay.RemoveAt(0);
+                        if (driveWay.Count > 0)
+                            goto NavLogic;
+                        throw new Exception($"DID NOT FIND PATH TO (map){currentMap} START XZ");
                     }
                     goto NavLogic;
                 }
                 else
                 {
-                    Log("Going back to start", true);
-                    FindPathHere(maps[currentMap].StartPosX, maps[currentMap].StartPosZ);
-                    goto NavLogic;
+                    Log("Going back a map", true);
+
+                    driveWay = mapWayBack[^1];
+                    driveWay.RemoveAt(0);
+                    if (driveWay.Count > 0)
+                        goto NavLogic;
+                    throw new Exception($"DID NOT FIND PATH TO (map){currentMap} START XZ");
                 }
             }
             else
@@ -391,41 +423,42 @@ namespace SerialConsole
                         return;
                     if (!leftPresent && !ReadNextTo(BitLocation.blackTile, Directions.left) /*&& !RampCheck(direction + 1)*/)
                     {
-                        CheckAndDropKits(true);
+                        CheckAndDropKits(true, true);
                         Turn('l');
-                        CheckAndDropKits(true);
+                        CheckAndDropKits(true, true);
                         Delay(100);
                         Drive(false, false);
                     }
                     else if (frontPresent || ReadNextTo(BitLocation.blackTile, Directions.front) /*|| RampCheck(direction)*/)
                     {
-                        CheckAndDropKits(true);
+                        CheckAndDropKits(true, true);
                         Turn('r');
                         Delay(50);
                     }
                     else
                     {
-                        CheckAndDropKits(true);
+                        CheckAndDropKits(true, true);
                         break;
                     }
                     Delay(10);
                 }
 
                 Drive(false, false); //Do not check for ramps, we want to have 'dumber' code so less can go wrong
-                CheckAndDropKits(true);
+                CheckAndDropKits(true, true);
             }
         }
 
-        #endregion
+        #endregion nav
 
+        #region Ramps
         // ********************************** Ramps ********************************** 
-
         static void RampDriven(int _rampDirection, int _length, int _height)
         {
             try
             {
                 UpdateWayBack(); //Update old way back, to make sure it is up to date
-                RampSizeFix(ref _length, ref _height);
+                //RampSizeFix(ref _length, ref _height);
+                bool _strange;
 
                 if (!maps[currentMap].FindRamp((byte)posX, (byte)posZ, (byte)direction)) //New ramp
                 {
@@ -442,7 +475,7 @@ namespace SerialConsole
                     Log($"Saved ramp: x:{posX}, z:{posZ}, dir:{_rampDirection}, rampCount:{rampCount}, map:{maps.Count - 1}", false);
 
                     currentHeight += _height;
-                    UpdateRampLocation(_length);
+                    _strange = UpdateRampLocation(_length, currentMap, direction);
                     Log($"new height {currentHeight}, map length = {_length}", true);
 
                     //Check if this seems to be a new map or an old map
@@ -450,48 +483,42 @@ namespace SerialConsole
 
                     if (_mapIndex != -1) //Old map but new ramp
                     {
-                        Log("____---- OLD MAP; NEW RAMP ----____");
+                        Log("____---- OLD MAP; NEW RAMP ----____", true);
                         currentMap = _mapIndex;
-                        maps[currentMap].AddRamp((byte)posX, (byte)posZ, (byte)FixDirection(_rampDirection - 2), (byte)rampCount, _fromMap, (byte)_length);
-                        rampCount++;
+                        maps[currentMap].UpdateHeight(currentHeight);
                         currentHeight = maps[currentMap].Height;
 
-                        WriteNextTo(BitLocation.ramp, true, Directions.back);
-
                         maps[_fromMap].UpdateCrossTiles();
-                        if (MarkMapAsVisited(_fromMap, currentMap))
-                        {
-                            WriteNextTo(BitLocation.explored, true, Directions.back);
-                        }
 
                         _rampTile = DirToTile(direction - 2, (byte)posX, (byte)posZ);
-
                     }
                     else //New map
                     {
-#warning (maybe save somewhere, then we can find shortest path)
-                        Log("____---- NEW MAP; NEW RAMP ----____");
+                        Log("____---- NEW MAP; NEW RAMP ----____", true);
 
                         //Setup new map
                         maps.Add(new Map(50, currentHeight, posX, posZ));
                         currentMap = maps.Count - 1;
-
-                        maps[currentMap].AddRamp((byte)posX, (byte)posZ, (byte)FixDirection(_rampDirection - 2), (byte)rampCount, _fromMap, (byte)_length);
                         maps[currentMap].Clear();
-                        rampCount++;
-                        Log($"NEW: x:{posX}, z:{posZ}, dir:{direction}, map:{currentMap}", true);
 
-                        WriteNextTo(BitLocation.ramp, true, Directions.back);
                         _rampTile = DirToTile(direction - 2, (byte)posX, (byte)posZ);
                     }
+                    maps[currentMap].AddRamp((byte)posX, (byte)posZ, (byte)FixDirection(_rampDirection - 2), (byte)rampCount, _fromMap, (byte)_length);
+                    rampCount++;
 
                     byte[] _newRampTile = DirToTile(direction - 2, (byte)posX, (byte)posZ);
                     AddSinceCheckpoint(_newRampTile[0], _newRampTile[1], (byte)currentMap);
 
-                    AddArea(_rampTile[0], _rampTile[1]);
+                    AddArea(_newRampTile[0], _newRampTile[1]);
+                    AddTile();
                     if (_mapIndex != -1) TileAreaCheck((byte)posX, (byte)posZ, (byte)currentArea, (byte)currentMap);
 
-                    AddTile();
+
+                    WriteNextTo(BitLocation.ramp, true, Directions.back);
+                    if (MarkMapAsVisited(_fromMap, currentMap, currentArea))
+                    {
+                        WriteNextTo(BitLocation.explored, true, Directions.back);
+                    }
 
                     Log($"NEW: x:{posX}, z:{posZ}, dir:{_rampDirection}, rampCount:{rampCount}, map:{maps.Count - 1}", false);
                 }
@@ -509,19 +536,21 @@ namespace SerialConsole
                     byte[] newMapInfo = maps[currentRamp[(int)RampStorage.ConnectedMap]].GetRampAt(currentRamp[(int)RampStorage.RampIndex]);
 
                     //Update data
+                    int _oldMap = currentMap;
                     currentMap = currentRamp[(int)RampStorage.ConnectedMap];
-                    UpdateRampLocation(_length);
+                    _strange = UpdateRampLocation(_length, _oldMap, direction);
                     currentHeight += _height;
 
                     //Check data
                     if (posX == newMapInfo[(int)RampStorage.XCoord] && posZ == newMapInfo[(int)RampStorage.ZCoord] && currentHeight < maps[currentMap].Height + 10 && currentHeight > maps[currentMap].Height - 10)
                     {
                         Log("Old ramp data is good", true);
+                        errors-=2; //This is a sign that we know where we are
                     }
                     else
                     {
                         Log($"Something is wrong with length = {_length}, or height = {_height}", true);
-                        errors += 4;
+                        errors += 4; //This is a sign that we do not know where we are
                     }
 
                     posX = newMapInfo[(int)RampStorage.XCoord];
@@ -529,10 +558,19 @@ namespace SerialConsole
                     currentHeight = maps[currentMap].Height;
                     currentArea = maps[currentMap].GetArea(new byte[] {(byte)posX, (byte)posZ});
 
-                    RemoveWayBack(currentArea); //We are back to this area, same shortest path back
+                    if (AreaInWayBack(currentArea))
+                    {
+                        RemoveWayBack(currentArea); //We are back to this area, same shortest path back
+                    }
+                    else
+                    {
+                        mapWayBack.Add(new List<byte[]>() { new byte[] { (byte)currentMap, (byte)currentArea },
+                                                            new byte[] { (byte)posX, (byte)posZ } });
+                    }
                     Log($"NEW: x:{posX}, z:{posZ}, dir:{direction}, map:{currentMap}", true);
                     Log($"new height {currentHeight}, map length = {_length}", true);
                 }
+                if (_strange) maps[currentMap].HasStrangeRamps[direction] = true;
                 locationUpdated = true;
             }
             catch (Exception e)
@@ -542,8 +580,31 @@ namespace SerialConsole
             }
         }
 
-        static void UpdateRampLocation(int _rampLength)
+        static bool UpdateRampLocation(int _rampLength, int _fromMap, int _direction)
         {
+            bool _isStrange = false;
+
+            if (maps[_fromMap].HasStrangeRamps[_direction])
+            {
+                if (_rampLength % 30 < 24 && _rampLength % 30 > 6)
+                {
+                    _rampLength -= _rampLength % 30; //Round down, since we rounded up last time if it is close to imperfect tile amount
+                }
+            }
+            else if (maps[_fromMap].HasStrangeRamps[FixDirection(_direction - 2)])
+            {
+                if (_rampLength % 30 < 25 && _rampLength % 30 > 5)
+                {
+                    _rampLength += 30 - (_rampLength % 30); //Round up, since we rounded up last time if it is close to imperfect tile amount
+                }
+            }
+            else if (_rampLength % 30 < 20 && _rampLength % 30 > 10)
+            {
+                Log($"_-!-_!_-!-_ UPDATED RAMP LENGTH = {_rampLength} WITH + 15cm _-!-_!_-!-_", true);
+                _isStrange = true;
+                _rampLength += 30 - (_rampLength % 30); //Add so that we "have travelled another tile", to make sure there i no error
+            }
+            
             float _totalLength = _rampLength + 30f; //Take into account that we drove a step as well
             switch (direction) //Update position with the help of the ramp length
             {
@@ -562,22 +623,24 @@ namespace SerialConsole
                 default:
                     throw new Exception("ERROR DIRECTION RAMP WHAT");
             }
+
+            return _isStrange;
         }
 
-        static void RampSizeFix(ref int _length, ref int _heigth)
-        {
-            if (_heigth == 0) return;
+        //static void RampSizeFix(ref int _length, ref int _heigth)
+        //{
+        //    if (_heigth == 0) return;
 
-            if (_heigth > 0)
-            {
-                _length = (int)(_length * 0.9);
-            }
-            else
-            {
-                _length = (int)(_length * 1.1);
-                _heigth = (int)(_heigth * 1.1);
-            }
-        }
+        //    if (_heigth > 0)
+        //    {
+        //        _length = (int)(_length * 0.9);
+        //    }
+        //    else
+        //    {
+        //        _length = (int)(_length * 1.1);
+        //        _heigth = (int)(_heigth * 1.1);
+        //    }
+        //}
 
         /// <summary>
         /// Finds a map depending on height
@@ -603,8 +666,10 @@ namespace SerialConsole
             return _closestMap;
         }
 
-        // ********************************** Timing & exiting ********************************** 
+        #endregion ramps
 
+        #region Timing
+        // ********************************** Timing & exiting ********************************** 
         /// <summary>
         /// Checks the timer and returns to start if time is close to out
         /// </summary>
@@ -654,16 +719,16 @@ namespace SerialConsole
             int _secounds = 0;
             for (int _area = mapWayBack.Count - 1; _area >= 0; _area--)
             {
+                Log($"StartPathSeconds: In mapwayback[{_area}]: ", false);
+                mapWayBack[_area].ForEach(_tile => Log($"*_*_*_* {_tile[0]},{_tile[1]} *_*_*_*", false));
                 double _driveTime = 0,
                        _turnTime = 0;
-
-                _turnTime += SecondsPerTurn * 2; //Assume that we are facing away from the first search for extra margin
 
                 for (int i = 1; i < mapWayBack[_area].Count; i++) //Forget about first tile since it is info
                 {
                     _driveTime += SecondsPerDrive;
 
-                    if (i > 1 && i < mapWayBack[_area].Count - 1) //Last tile has no turning from, since it is the final tile. First tile already added.
+                    if (i > 1 && i < mapWayBack[_area].Count - 1) //Last tile has no turning from, since it is the final tile.
                     {
                         if (TileToDirection(mapWayBack[_area][i], mapWayBack[_area][i + 1]) != 
                             TileToDirection(mapWayBack[_area][i - 1], mapWayBack[_area][i]))
@@ -673,15 +738,21 @@ namespace SerialConsole
                     }
                 }
                 _secounds += (int)Math.Round((_driveTime + _turnTime + 10) * 1,2); //Extra margin (for example dropping missed kits) and exit time
+
                 if (_area != 0)
                 {
-                    byte[] _ramp = maps[mapWayBack[_area][0][0]].GetRampAt(mapWayBack[_area][^2][0], mapWayBack[_area][^2][1], (byte)TileToDirection(mapWayBack[_area][^1], mapWayBack[_area][^2]));
+
+                    byte[] _ramp = RampByRamptile(mapWayBack[_area][^1][0], mapWayBack[_area][^1][1], mapWayBack[_area][0][0]);
                     _secounds += (int)(Math.Round(_ramp[(int)RampStorage.RampLength] / 30f + 1) * SecondsPerDrive); //Add ramp drive time
                 }
             }
 
             return _secounds;
         }
+
+        #endregion timing
+
+        #region Miscellaneous
 
         static void ErrorChecker()
         {
@@ -719,7 +790,7 @@ namespace SerialConsole
                 }
                 try
                 {
-                    File.AppendAllText("log.txt",$"map {m+1}/{maps.Count}\n" + string.Join('\n', _mapToText) + "\n\n"); // Writes map to log file
+                    File.AppendAllText(logFileName,$"\nmap {m+1}/{maps.Count}\n" + string.Join('\n', _mapToText) + "\n\n"); // Writes map to log file
                 }
                 catch (Exception e)
                 {
@@ -736,17 +807,15 @@ namespace SerialConsole
 
         // ********************************** Logging ********************************** 
 
-        public static void Log(string _message)
-        {
-#if DEBUG
-            Console.WriteLine(_message);
-#endif
-        }
-
+        /// <summary>
+        /// Writes a log message to the log file
+        /// </summary>
+        /// <param name="_message">The message that should be logged</param>
+        /// <param name="_consoleLog">Display message in console</param>
         public static void Log(string _message, bool _consoleLog)
         {
 #if DEBUG
-            File.AppendAllText("log.txt", $"\n{timer.ElapsedMilliseconds}: {_message}");
+            File.AppendAllText(logFileName, $"\n{timer.ElapsedMilliseconds}: {_message}");
             if (_consoleLog) Console.WriteLine(_message);
 #endif
         }
@@ -758,7 +827,8 @@ namespace SerialConsole
         {
             errors += 2;
             Log($"Exception: {e.Message} at {e.Source}:{e}", false);
-            Log($"Exception -- {e.Message}");
+            Console.WriteLine($"Exception -- {e.Message}");
         }
+        #endregion misc
     }
 }

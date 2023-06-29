@@ -6,7 +6,7 @@ using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace SerialConsole
+namespace Mapping
 {
     enum RampStorage
     {
@@ -35,6 +35,22 @@ namespace SerialConsole
         tileAdded
     }
 
+    [Serializable]
+    public class NonexistantRampException : Exception
+    {
+        public NonexistantRampException()
+            : base("This ramp does not exist")
+        { }
+
+        public NonexistantRampException(string message)
+            : base(message)
+        { }
+
+        public NonexistantRampException(string message, Exception innerException)
+            : base(message, innerException)
+        { }
+    }
+
     /// <summary>
     /// Class for storing map data, ramp data, and methods that use the map
     /// </summary>
@@ -48,14 +64,17 @@ namespace SerialConsole
             map = new ushort[_mazeLength, _mazeLength];
             StartPosX = _startPosX;
             StartPosZ = _startPosZ;
-            Height = _height;
+            height = _height;
         }
         /// <summary>The size of the map in tile amount</summary>
-        public int Length;
+        public int Length { get;}
+
+        private int height;
         /// <summary>The height of the map from the starting map in cm</summary>
-        public int Height;
-        public int StartPosX;
-        public int StartPosZ;
+        public int Height { get => height; }
+        public bool[] HasStrangeRamps { get; set; } = new bool[] {false, false, false, false};
+        public int StartPosX { get;}
+        public int StartPosZ { get;}
 
         ushort[,] map;
 
@@ -113,6 +132,11 @@ namespace SerialConsole
 
         // ********************************** Data - Methods ********************************** 
 
+        public void UpdateHeight(int _newHeight)
+        {
+            height = (_newHeight + height) / 2;
+        }
+
         public void UpdateCrossTiles()
         {
             for (int i = 0; i < crossTiles.Count; i++)
@@ -133,7 +157,7 @@ namespace SerialConsole
         public void MergeAreas(int _fromArea, int _toArea)
         {
             areas[_toArea].AddRange(areas[_fromArea]);
-            areas.RemoveAt(_fromArea);
+            areas[_fromArea].Clear();
         }
 
         public bool IsInArea(byte[] _tile, int _area)
@@ -165,7 +189,7 @@ namespace SerialConsole
                     }
                 }
             }
-            Program.Log("!_!-!| Current tile is not added to area |!-!_!", true);
+            SerialConsole.Program.Log("!_!-!| Current tile is not added to area |!-!_!", true);
             return -1;
         }
 
@@ -369,15 +393,15 @@ namespace SerialConsole
             }
 
             //driveWay.ForEach(num => Debug.Log(num.X + " , " + num.Z + " ; "));
-            Program.Log($"Found PathTo {_toX},{_toZ} from {_fromX},{_fromZ} at {foundPath.Count} length", true);
-            foundPath.ForEach(tile => Program.Log($"::{tile[0]},{tile[1]};", false));
+            SerialConsole.Program.Log($"Found PathTo {_toX},{_toZ} from {_fromX},{_fromZ} at {foundPath.Count} length", true);
+            foundPath.ForEach(tile => SerialConsole.Program.Log($"::{tile[0]},{tile[1]};", false));
 
             ClearBit(BitLocation.mapSearched);
             ClearBit(BitLocation.inDriveWay);
 
             if (foundPath.Count == 0)
             {
-                Program.Log("!!!!!!!!!Could not find path!!!!!!!!!", true);
+                SerialConsole.Program.Log("!!!!!!!!!Could not find path!!!!!!!!!", true);
                 Thread.Sleep(200);
             }
 
@@ -390,7 +414,7 @@ namespace SerialConsole
 
         void FindFrom(byte _onX, byte _onZ)
         {
-            Program.Log($":::: {_onX},{_onZ} ::::", false);
+            SerialConsole.Program.Log($":::: {_onX},{_onZ} ::::", false);
             WriteBit(_onX, _onZ, BitLocation.inDriveWay, true);
             if (Math.Abs(_onZ - toPosZ) >= Math.Abs(_onX - toPosX)) //All these if-statements are very ugly, but I do not have a better solution right now
             {
@@ -488,10 +512,10 @@ namespace SerialConsole
 
         void SearchCell(byte _onX, byte _onZ)
         {
-            Program.Log($":::: {_onX},{_onZ} ::::", false);
+            SerialConsole.Program.Log($":::: {_onX},{_onZ} ::::", false);
             if (_onX == toPosX && _onZ == toPosZ)
             {
-                Program.Log("Found " + foundPath.Count + " long", true);
+                SerialConsole.Program.Log("Found " + foundPath.Count + " long", true);
 
                 if (foundPath.Count <= savedPath.Count || savedPath.Count == 0) //If we found a better path, save it
                 {
@@ -617,8 +641,8 @@ namespace SerialConsole
             }
             catch (Exception e)
             {
-                Program.LogException(e);
-                for (int i = 0; i < 3; i++) Program.Log("!!!!!!FindTile -- index out of bounds(?)!!!!!!", true);
+                SerialConsole.Program.LogException(e);
+                for (int i = 0; i < 3; i++) SerialConsole.Program.Log("!!!!!!FindTile -- index out of bounds(?)!!!!!!", true);
             }
         }
 

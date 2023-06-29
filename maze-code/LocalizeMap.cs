@@ -5,11 +5,13 @@ using System.Linq;
 using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
+using Mapping;
 
 namespace SerialConsole
 {
     internal partial class Program
     {
+        #region Variables and objects
         //******** Mapping & Checkpoints ********
 
         /// <summary>
@@ -27,7 +29,9 @@ namespace SerialConsole
         static bool reset = false;
         static int savedMapCount = 1;
 
+        #endregion variables and objects
 
+        #region Map/Localization updates
         // ********************************** Map And Localization Updates ********************************** 
 
         static void UpdateDirection(int _leftTurns)
@@ -73,7 +77,7 @@ namespace SerialConsole
                 case 'r': //The kit is on the right
                     return FixDirection(direction - 1);
                 default:
-                    Log(_kitDirection + ": error with kit direction");
+                    Log(_kitDirection + ": error with kit direction", true);
                     dropKits = false;
                     return 0;
             }
@@ -81,13 +85,13 @@ namespace SerialConsole
 
         static bool CheckKitSide(char _side)
         {
-            Log("Victim here was " + (ReadHere((BitLocation)CharToDirection(_side)) ? "real" : "fake"));
+            Log("Victim here was " + (ReadHere((BitLocation)CharToDirection(_side)) ? "real" : "fake"), true);
             return ReadHere((BitLocation)CharToDirection(_side));
         }
 
         /// <summary>
         /// Subtracs or adds 4 until the int is 0<= int <= 3, to make sure that for example adding one to the direction 3 (right) will give the direction 0 (front).
-        /// Can also be used for map bits since I use the same system.
+        /// Can also be used for map bits since the same system is used; direction = wall in front.
         /// </summary>
         /// <returns>An int thats 0,1,2 or 3</returns>
         static int FixDirection(int _dir)
@@ -128,6 +132,7 @@ namespace SerialConsole
             }
 
             Log("********* ACHTUNG ACHTUNG, DAS IST NICHT GUT ************", true);
+            Log($" -- Between {_fromCell[0]},{_fromCell[1]} and {_toCell[0]},{_toCell[1]}", true);
             errors++;
             Delay(10);
             if (_toCell[0] == _fromCell[0] && _toCell[1] == _fromCell[1])
@@ -138,7 +143,7 @@ namespace SerialConsole
 
             if (driveWay.Count > 0)
             {
-                Log("Finding new path");
+                Log("Finding new path", true);
                 FindPathHere(driveWay.Last()[0], driveWay.Last()[1]);
                 return TileToDirection(driveWay[0], _fromCell);
             }
@@ -240,8 +245,8 @@ namespace SerialConsole
 
         static void UpdateMap()//Behind - Always false when driving normally
         {
-            if (reset) return;
             SensorCheck();
+            if (reset) return;
 
             bool wallNZ;
             bool wallNX;
@@ -330,16 +335,20 @@ namespace SerialConsole
 
         static void UpdateMapFull(bool _turnBack)
         {
+            if (reset) return;
             Log("Updating full map", true);
             UpdateMap();
             Turn('l');
             SensorCheck();
-            WriteHere((BitLocation)FixDirection(direction + 1), leftPresent); //wall locally behind set'
+            if (reset) return;
+            WriteHere((BitLocation)FixDirection(direction + 1), leftPresent); //wall locally behind set
             if (_turnBack)
                 Turn('r');
         }
 
+        #endregion
 
+        #region General data storage and checking
         // ********************************** Checkpoints ********************************** 
 
         /// <summary>
@@ -459,8 +468,8 @@ namespace SerialConsole
             maps[currentMap].AddArea();
             currentArea = maps[currentMap].Areas.Count - 1;
 
-            mapWayBack.Add(new List<byte[]>() { new byte[] { (byte)currentMap, (byte)currentArea } });
-            mapWayBack.Add(new List<byte[]>() { new byte[] { (byte)_firstX, (byte)_firstZ } });
+            mapWayBack.Add(new List<byte[]>() { new byte[] { (byte)currentMap, (byte)currentArea }, 
+                                                new byte[] { (byte)_firstX, (byte)_firstZ } });
         }
 
         /// <summary>
@@ -468,6 +477,15 @@ namespace SerialConsole
         /// </summary>
         static void UpdateWayBack()
         {
+            //if (currentMap == 0 && mapWayBack[^1].Count == 1)
+            //{
+            //    mapWayBack[^1].Add(new byte[] { (byte)maps[0].StartPosX, (byte)maps[0].StartPosZ });
+            //}
+            //if (currentMap != 0 && mapWayBack[^1].Count == 2)
+            //{
+            //    byte[] _ramp = RampByRamptile(mapWayBack[^1][^1][0], mapWayBack[^1][^1][1], currentMap);
+            //    mapWayBack[^1].Insert(mapWayBack[^1].Count - 1, new byte[] { _ramp[(int)RampStorage.XCoord], _ramp[(int)RampStorage.ZCoord] });
+            //}
             UpdateWayBack(posX, posZ, mapWayBack[^1][^1][0], mapWayBack[^1][^1][1], currentMap, currentArea);
         }
 
@@ -475,6 +493,19 @@ namespace SerialConsole
         {
             mapWayBack[^1] = maps[_map].PathTo(_toX, _toZ, _fromX, _fromZ);
             mapWayBack[^1].Insert(0, new byte[] { (byte)_map, (byte)_area });
+            mapWayBack[^1].Insert(1, new byte[] { (byte)_toX, (byte)_toZ });
+        }
+
+        static bool AreaInWayBack(int _area)
+        {
+            for (int i = mapWayBack.Count - 1; i >= 0; i--)
+            {
+                if (mapWayBack[i][0][1] == _area)
+                {
+                    return true;
+                }
+            }
+            return false;
         }
 
         static void RemoveWayBack(int _untilArea)
@@ -503,6 +534,7 @@ namespace SerialConsole
                 mapWayBack.RemoveAt(i);
             }
             mapWayBack[^1][0][1] = (byte)_toArea;
+            UpdateWayBack();
         }
 
         static int AreaCheck(byte _x, byte _z, int _area, int _map)
@@ -530,6 +562,13 @@ namespace SerialConsole
 
                 if (_tileArea != _area)
                 {
+#warning update mapwayback?
+#warning will area index change for other saved stuff? Clear instead of delete area to make sure??
+                    //To make sure that index does not change, we need to 
+                    if (_tileArea < _area)
+                    {
+                        (_tileArea, _area) = (_area, _tileArea);
+                    }
                     //Merge areas
                     Log($"MERGING AREA {_area} to {_tileArea}", true);
                     maps[_map].MergeAreas(_area, _tileArea);
@@ -537,6 +576,7 @@ namespace SerialConsole
                     return _tileArea;
                 }
             }
+            UpdateWayBack();
             return _area;
         }
 
@@ -553,7 +593,7 @@ namespace SerialConsole
             AddSinceCheckpoint();
         }
 
-        static bool MarkMapAsVisited(int _markMap, int _currMap)
+        static bool MarkMapAsVisited(int _markMap, int _currMap, int _currArea)
         {
             if (maps[_markMap].CrossTiles.Count == 0)
             {
@@ -566,7 +606,19 @@ namespace SerialConsole
                 {
                     return false;
                 }
-                if (RampByPlace(_crossTile[0], _crossTile[1], _markMap)[(int)RampStorage.ConnectedMap] != _currMap)
+            }
+
+            foreach (byte[] _crossTile in maps[_markMap].CrossTiles)
+            {
+                try
+                {
+                    byte[] _ramp = maps[_currMap].GetRampAt(RampByRamptile(_crossTile[0], _crossTile[1], _markMap)[(int)RampStorage.RampIndex]);
+                    if (maps[_currMap].GetArea(new byte[] { _ramp[(int)RampStorage.XCoord], _ramp[(int)RampStorage.ZCoord] }) != _currArea)
+                    {
+                        return false;
+                    }
+                }
+                catch (NonexistantRampException)
                 {
                     return false;
                 }
@@ -575,7 +627,7 @@ namespace SerialConsole
             return true;
         }
 
-        static byte[] RampByPlace(int _x, int _z, int _map)
+        static byte[] RampByRamptile(int _x, int _z, int _map)
         {
             for (int i = 0; i < maps[_map].Ramps.Count; i++)
             {
@@ -590,6 +642,10 @@ namespace SerialConsole
 
             throw new NonexistantRampException();
         }
+
+        #endregion general data
+
+        #region Map data
 
         // ********************************** Read And Write Map ********************************** 
 
@@ -645,6 +701,9 @@ namespace SerialConsole
             return maps[currentMap].ReadBit(posX, posZ, _read);
         }
 
+        #endregion map
+
+        #region Pathfinding
 
         /// <summary>Searches from this tile to another tile</summary><returns>The path to the tile</returns>
         static void FindPathHere(int _toX, int _toZ)
@@ -662,7 +721,7 @@ namespace SerialConsole
 
             for (int i = mapWayBack.Count - 1; i <= 0; i--)
             {
-                for (int j = 1; j < mapWayBack[i].Count; i++) //Do not add first as it is info
+                for (int j = 2; j < mapWayBack[i].Count; i++) //Do not add first as it is info, or second as it is 'this' tile
                 {
                     path.Add(mapWayBack[i][j]);
                 }
@@ -756,17 +815,18 @@ namespace SerialConsole
 //            return fullPath;
         }
 
-        static void GoToRamp(byte[] _ramp)
-        {
-            Log($"Going to ramp at {_ramp[(int)RampStorage.XCoord]},{_ramp[(int)RampStorage.ZCoord]}", false);
-            driveWay = maps[currentMap].PathTo(_ramp[(int)RampStorage.XCoord], _ramp[(int)RampStorage.ZCoord], posX, posZ); //Way to tile next to ramp
-            driveWay.Add(DirToTile(_ramp[(int)RampStorage.RampDirection], _ramp[(int)RampStorage.XCoord], _ramp[(int)RampStorage.ZCoord])); //Driving through the real ramp
-            
-            if (driveWay.Count <= 1 && _ramp[(int)RampStorage.XCoord] != posX && _ramp[(int)RampStorage.ZCoord] != posZ)
-            {
-                for (int i = 0; i < 5; i++) Log("!!Something is wrong in GoToRamp, possible ramp storage or mapping error!!", true);
-                throw new Exception("Going To Ramp failed");
-            }
-        }
+        //static void GoToRamp(byte[] _ramp)
+        //{
+        //    Log($"Going to ramp at {_ramp[(int)RampStorage.XCoord]},{_ramp[(int)RampStorage.ZCoord]}", false);
+        //    driveWay = maps[currentMap].PathTo(_ramp[(int)RampStorage.XCoord], _ramp[(int)RampStorage.ZCoord], posX, posZ); //Way to tile next to ramp
+        //    driveWay.Add(DirToTile(_ramp[(int)RampStorage.RampDirection], _ramp[(int)RampStorage.XCoord], _ramp[(int)RampStorage.ZCoord])); //Driving through the real ramp
+
+        //    if (driveWay.Count <= 1 && _ramp[(int)RampStorage.XCoord] != posX && _ramp[(int)RampStorage.ZCoord] != posZ)
+        //    {
+        //        for (int i = 0; i < 5; i++) Log("!!Something is wrong in GoToRamp, possible ramp storage or mapping error!!", true);
+        //        throw new Exception("Going To Ramp failed");
+        //    }
+        //}
+        #endregion path
     }
 }
