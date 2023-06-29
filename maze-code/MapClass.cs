@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 
 namespace Mapping
 {
+    #region Misc
     enum RampStorage
     {
         XCoord,
@@ -50,13 +51,14 @@ namespace Mapping
             : base(message, innerException)
         { }
     }
+    #endregion
 
     /// <summary>
     /// Class for storing map data, ramp data, and methods that use the map
     /// </summary>
     class Map
     {
-        // ********************************** Variables And Objects ********************************** 
+        #region Variables, objects, initializers and indexers
         //**Data, mapping**
         public Map (int _mazeLength, int _height, int _startPosX, int _startPosZ)
         {
@@ -66,6 +68,13 @@ namespace Mapping
             StartPosZ = _startPosZ;
             height = _height;
         }
+
+        public bool this[int _index1, int _index2, BitLocation _bit]
+        {
+            get => ReadBit(_index1, _index2, _bit);
+            set => WriteBit(_index1, _index2, _bit, value);
+        }
+
         /// <summary>The size of the map in tile amount</summary>
         public int Length { get;}
 
@@ -85,6 +94,7 @@ namespace Mapping
 
         List<List<byte[]>> areas = new();
         List<List<byte[]>> saveAreas = new();
+
 
         public ushort[,] GetMap
         {
@@ -123,13 +133,9 @@ namespace Mapping
         List<byte[]> savedPath = new();
 
         readonly List<byte[]> extraBits = new();
+        #endregion
 
-        public bool this[int _index1, int _index2, BitLocation _bit]
-        {
-            get => ReadBit(_index1, _index2, _bit);
-            set => WriteBit(_index1, _index2, _bit, value);
-        }
-
+        #region General data handling
         // ********************************** Data - Methods ********************************** 
 
         public void UpdateHeight(int _newHeight)
@@ -283,7 +289,9 @@ namespace Mapping
             }
             extraBits.Clear();
         }
+        #endregion
 
+        #region Map data handling
         // ********************************** Read And Write Map ********************************** 
 
         /// <summary>
@@ -362,8 +370,9 @@ namespace Mapping
                 map[_x, _z] = 0;
             }
         }
+        #endregion
 
-
+        #region Pathfinding
         // ********************************** Searching ********************************** 
 
         /// <summary>
@@ -645,6 +654,7 @@ namespace Mapping
                 for (int i = 0; i < 3; i++) SerialConsole.Program.Log("!!!!!!FindTile -- index out of bounds(?)!!!!!!", true);
             }
         }
+#endregion
 
     }
 }

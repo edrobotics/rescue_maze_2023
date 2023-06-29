@@ -562,8 +562,7 @@ namespace SerialConsole
 
                 if (_tileArea != _area)
                 {
-#warning update mapwayback?
-#warning will area index change for other saved stuff? Clear instead of delete area to make sure??
+#warning Will area index change for other saved stuff? Clear instead of delete area to make sure??
                     //To make sure that index does not change, we need to 
                     if (_tileArea < _area)
                     {
@@ -573,10 +572,10 @@ namespace SerialConsole
                     Log($"MERGING AREA {_area} to {_tileArea}", true);
                     maps[_map].MergeAreas(_area, _tileArea);
                     RemoveWayBack(_tileArea, _area);
+                    UpdateWayBack();
                     return _tileArea;
                 }
             }
-            UpdateWayBack();
             return _area;
         }
 

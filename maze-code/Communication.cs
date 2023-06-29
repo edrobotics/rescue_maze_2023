@@ -14,6 +14,8 @@ namespace SerialConsole
 {
     internal partial class Program
     {
+        #region Variables, enums and objects
+
         enum TileFloors
         {
             Blue = 'b',
@@ -68,6 +70,7 @@ namespace SerialConsole
         static volatile char dropSide = 'l';
         static volatile int kitsLeft = 12;
         static int lastDropped = 0;
+        #endregion vars, enums, objs
 
         #region VictimComm
         // ********************************** Socket server ********************************** 
@@ -391,7 +394,7 @@ namespace SerialConsole
                 lastDropped = dropAmount; //Save just in case vision sends a new
                 Log($"Dropping {dropAmount} kits {dropSide}", true);
 
-                string _recived = SerialComm(SendCommands.DropKits.GetCommand($"{dropAmount},{dropSide},{(_turnBack ? '1' : '0')}"), true, false);
+                string _recived = SerialComm(SendCommands.DropKits.GetCommand(""+dropAmount,""+dropSide,_turnBack ? "1" : "0"), true, false);
                 if (reset)
                     return;
 
@@ -450,8 +453,8 @@ namespace SerialConsole
 
                 try
                 {
-                    serialPort1.WriteLine(SendCommands.DropKits.GetCommand($"{dropAmount},{dropSide},1"));
-                    Log("Sending: " + SendCommands.DropKits.GetCommand($"{dropAmount},{dropSide},1"), false);
+                    serialPort1.WriteLine(SendCommands.DropKits.GetCommand(""+dropAmount,""+dropSide,"1"));
+                    Log("Sending: " + SendCommands.DropKits.GetCommand(""+dropAmount,""+dropSide,"1"), false);
                     kitsLeft -= lastDropped;
                     WriteHere(BitLocation.victim, true);
 
