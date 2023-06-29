@@ -1100,22 +1100,39 @@ void RobotPose::updateGyroOffset()
   }
 }
 
-void RobotPose::compensateRamp(double &rampXDistIncr, double &rampYDistIncr)
+void RobotPose::compensateRamp(double& rampXDistIncr, double& rampYDistIncr)
 {
   double rampAngle = gyro.getAngleX();
-  if (rampAngle < 0)
+  if (rampAngle < 0) // Driving down a ramp
   {
+    rampXDistIncr*=1.0;
+    rampYDistIncr*=1.0;
   }
-  else
+  else // Driving up a ramp
   {
+    rampXDistIncr*=1.0;
+    rampYDistIncr*=1.0;
   }
 }
 
 void RobotPose::updateOnRamp(WallSide wallToUse, double distanceIncrement)
 {
   distOnRamp += distanceIncrement * cos(angle * DEG_TO_RAD);
-  xDistOnRamp += distanceIncrement * cos(abs(gyro.getAngleX()) * DEG_TO_RAD);
-  yDistOnRamp += distanceIncrement * sin(-gyro.getAngleX() * DEG_TO_RAD);
+  double rampXDistInc = distanceIncrement * cos(abs(gyro.getAngleX()) * DEG_TO_RAD);
+  double rampYDistInc = distanceIncrement * sin(-gyro.getAngleX() * DEG_TO_RAD);
+  compensateRamp(rampXDistInc, rampYDistInc);
+  xDistOnRamp += rampXDistInc;
+  yDistOnRamp += rampYDistInc;
+  
+}
+
+void RobotPose::printRampVals()
+{
+  Serial.print("Rampangle: ");Serial.print(gyro.getAngleX());Serial.print("  ");
+  Serial.print("distOnRamp: ");Serial.print(distOnRamp);Serial.print("  ");
+  Serial.print("xDistOnRamp: ");Serial.print(xDistOnRamp);Serial.print("  ");
+  Serial.print("yDistOnRamp: ");Serial.print(yDistOnRamp);Serial.print("  ");
+  Serial.println("");
 }
 
 WallSide RobotPose::getNormalWallToUse()
@@ -1396,7 +1413,10 @@ void gyroTurn(double turnAngle, bool stopMoving, double turnSpeed, bool aware = 
   if (baseSpeed != 0)
   {
     if (aware == true)
+    {
       startDistanceMeasure(); // For aware gyro turn
+      dumbDistanceDriven = getDistanceDriven();
+    }
     runWheelSide(wheels_left, baseSpeed - speedToRun * gyroDriveCorrectionCoeff);
     runWheelSide(wheels_right, baseSpeed + speedToRun * gyroDriveCorrectionCoeff);
   }
@@ -2237,6 +2257,7 @@ void fillRampArrayFalse()
 
 void addOnRampValue(bool state)
 {
+  while (g_onRampPointer >= ON_RAMP_ARR_SIZE) {g_onRampPointer -= ON_RAMP_ARR_SIZE;}
   g_onRampPointer = g_onRampPointer % ON_RAMP_ARR_SIZE; // Could cause errors if g_onRampPointer goes negative, which it never should
   g_onRampIterations[g_onRampPointer] = state;
   ++g_onRampPointer;
@@ -2492,7 +2513,9 @@ void printWallchangeData(UltrasonicSensorEnum sensor)
 
 int g_reflectiveIterations = 0; // Iterations on new tile when colour was reflective
 int g_blueIterations = 0;       // Iterations on new tile when colour was blue
-int g_totalIterations = 0;      // Total iterations on new tile
+int g_onBumpIterations = 0;
+int g_totalNewIterations = 0;   // Total iterations on new tile
+int g_totalIterations = 0; // Total iterations for move
 
 // What to run inside of the driveStep loop (the driving forward-portion)
 // Arguments have the same names as the variables they should accept in driveStep.
@@ -2540,9 +2563,13 @@ bool driveStepDriveLoop(WallSide &wallToUse, double &dumbDistanceDriven, Stoppin
   double dumbDistanceIncrement = getDistanceDriven() - dumbDistanceDriven;
   pose.update(wallToUse, dumbDistanceIncrement);
   if (g_driveBack == true)
+  {
     g_trueDistanceDriven = 30 - pose.yDist;
+  }
   else
+  {
     g_trueDistanceDriven = pose.yDist;
+  }
   dumbDistanceDriven = getDistanceDriven();
   updateTheoreticalDistances();
   // pose.print();
@@ -2565,21 +2592,31 @@ bool driveStepDriveLoop(WallSide &wallToUse, double &dumbDistanceDriven, Stoppin
   // Checking for ramps (perhaps do running average?)
   // Need to handle when you get off the ramp, so that you don't stop immediately
   if (abs(gyro.getAngleX()) > 10)
+  {
     addOnRampValue(true);
+  }
   else
+  {
     addOnRampValue(false);
+  }
+  
 
   bool onRamp = getIsOnRamp();
   bool rampChange = false;
   if (onRamp != g_previousOnRampState)
     rampChange = true;
 
+  // Serial.print("onRamp: ");Serial.print(onRamp);Serial.print("  ");
+  // pose.printRampVals();
+
   if (onRamp == true)
   {
     useRampPID();
     pose.updateOnRamp(wallToUse, dumbDistanceIncrement);
     if (pose.distOnRamp > 10)
+    {
       rampDriven = true; // Could be moved to driveStep() ?
+    }
     // Serial.print(g_horizontalDistanceDrivenOnRamp);Serial.print("    ");Serial.print(g_verticalDistanceDrivenOnRamp);Serial.print("    ");Serial.println(-gyro.getAngleX());
 
     lights::onRamp();
@@ -2608,7 +2645,7 @@ bool driveStepDriveLoop(WallSide &wallToUse, double &dumbDistanceDriven, Stoppin
     // }
     // Serial.println(ultrasonicDistanceF); // Debugging
 
-    if (g_driveBack == false && g_trueDistanceDriven >= g_targetDistance + 15 - (ULTRASONIC_FRONT_OFFSET + FRONT_WALL_STOPPING_TRESHOLD) - 1 && g_frontUltrasonicUsed == true)
+    if (g_driveBack == false && g_trueDistanceDriven >= (g_targetDistance + 15 - (ULTRASONIC_FRONT_OFFSET + FRONT_WALL_STOPPING_TRESHOLD) - 1) && g_frontUltrasonicUsed == true)
     {
       if (stopReason == stop_none)
         stopReason = stop_frontWallPresent;
@@ -2657,10 +2694,17 @@ bool driveStepDriveLoop(WallSide &wallToUse, double &dumbDistanceDriven, Stoppin
         break; // Potential problem with the last break statement?
       }
 
-      if (g_trueDistanceDriven > 15 - 4)
+
+      
+      // Handling of bumps and some colours
+      if (g_trueDistanceDriven > 15 - 4) // If the colour sensor is on the next tile
       {
-        ++g_totalIterations;
-        if (g_floorColour == ColourSensor::floor_reflective)
+        ++g_totalNewIterations;
+        if (abs(gyro.getAngleX()) > 2)
+        {
+          ++g_onBumpIterations;
+        }
+        if (g_floorColour == ColourSensor::floor_reflective && abs(gyro.getAngleX()) < 2)
         {
           ++g_reflectiveIterations;
         }
@@ -2704,7 +2748,7 @@ bool driveStepDriveLoop(WallSide &wallToUse, double &dumbDistanceDriven, Stoppin
 // Serial.println("");
 // Serial.println("");
 
-#define PICODE
+#define PICODE // For debugging interrupts. When not defined, debugInterrupts will be used
 // Checking for interrupts
 #ifdef PICODE
   if (serialcomm::checkInterrupt() == true)
@@ -2764,7 +2808,7 @@ bool driveStep(ColourSensor::FloorColour &floorColourAhead, bool &rampDriven, To
     g_baseSpeed_CMPS = BASE_SPEED_CMPS;
   WallSide wallToUse = wall_none; // Initialize a variable for which wall to follow
   startDistanceMeasure();         // Starts the distance measuring (encoders)
-  double dumbDistanceDriven = 0;
+  double dumbDistanceDriven = getDistanceDriven();
   g_horizontalDistanceDrivenOnRamp = 0;
   g_verticalDistanceDrivenOnRamp = 0;
   g_targetDistance = 30; // The distance that you want to drive. Normally 30
@@ -2789,11 +2833,15 @@ bool driveStep(ColourSensor::FloorColour &floorColourAhead, bool &rampDriven, To
   // For checking for blue and reflective tiles
   g_reflectiveIterations = 0;
   g_blueIterations = 0;
+  g_onBumpIterations = 0;
+  g_totalNewIterations = 0;
   g_totalIterations = 0;
 
   // Get sensor data for initial values
   if (g_driveBack == false)
+  {
     flushDistanceArrays();
+  }
   checkWallPresence();
   setPreviousSensorWallStates();
   wallToUse = pose.getSafeWallToUse();
@@ -2926,13 +2974,20 @@ bool driveStep(ColourSensor::FloorColour &floorColourAhead, bool &rampDriven, To
   // Give back the floor colour
   // Should update/double-check this before sending (but not always?)
 
+  bool bumpDriven = false;
+  if (double(g_onBumpIterations) / double(g_totalNewIterations) > 0.2)
+  {
+    bumpDriven = true;
+  }
+
+  // Serial.print("Reflective share: ");Serial.println(double(g_reflectiveIterations)/double(g_totalNewIterations), 3); // Debugging
   // Check for blue
-  if (double(g_blueIterations) / double(g_totalIterations) > 0.85 && g_driveBack == false) // If the ground colour is blue
+  if (double(g_blueIterations) / double(g_totalNewIterations) > 0.85 && g_driveBack == false) // If the ground colour is blue
   {
     floorColourAhead = ColourSensor::floor_blue;
   }
   // Check for reflective
-  else if (double(g_reflectiveIterations) / double(g_totalIterations) > 0.85 && g_driveBack == false) // If the ground colour is reflective
+  else if (double(g_reflectiveIterations) / double(g_totalNewIterations) > 0.45 && g_driveBack == false && bumpDriven==false) // If the ground colour is reflective
   {
     floorColourAhead = ColourSensor::floor_reflective;
   }

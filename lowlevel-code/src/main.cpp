@@ -8,8 +8,8 @@
 #include <Wire.h>
 #include <SPI.h>
 
-// #define PICODE
-#define TESTING_NAV
+#define PICODE
+// #define TESTING_NAV
 // #define TESTING
 // #define COLSENS_CALIBRATION
 

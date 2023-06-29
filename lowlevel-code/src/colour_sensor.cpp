@@ -394,6 +394,10 @@ void ColourSensor::calibrationRoutineLoop()
     {
         readChar = Serial.read();
     }
+    else
+    {
+        // printValues();
+    }
     
     if (readChar == 's') //blackButton.isPressed()
     {

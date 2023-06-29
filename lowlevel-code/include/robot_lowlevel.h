@@ -327,6 +327,7 @@ class RobotPose
     void updateGyroOffset();
     void updateOnRamp(WallSide wallToUse, double distanceIncrement);
     void print();
+    void printRampVals();
     WallSide getSafeWallToUse();
     WallSide getNormalWallToUse();
     // Functions for determining which wall to follow. In here or outside?
@@ -334,10 +335,10 @@ class RobotPose
     void calculate2(WallSide wallSide, double& angle, bool useGyroAngle, double distanceIncrement);
     void calculate1(WallSide wallSide, double& angle, double& distance, bool useGyroAngle);
     void compensateRamp(double& rampXDistIncr, double& rampYDistIncr);
-    const double downwardXSlipCoef = 1;
-    const double downwardYSlipCoef = 1;
-    const double upwardXSlipCoef = 1;
-    const double upwardYSlipCoef = 1;
+    // const double downwardXSlipCoef = 1;
+    // const double downwardYSlipCoef = 1;
+    // const double upwardXSlipCoef = 1;
+    // const double upwardYSlipCoef = 1;
 };
 
 // // Sets the global variables for angles and distances.
