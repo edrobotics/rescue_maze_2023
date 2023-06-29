@@ -1128,7 +1128,7 @@ void RobotPose::updateOnRamp(WallSide wallToUse, double distanceIncrement)
 
 void RobotPose::printRampVals()
 {
-  Serial.print("Rampangle: ");Serial.print(gyro.getAngleX());Serial.print("  ");
+  Serial.print("Rampangle: ");Serial.print(-gyro.getAngleX());Serial.print("  ");
   Serial.print("distOnRamp: ");Serial.print(distOnRamp);Serial.print("  ");
   Serial.print("xDistOnRamp: ");Serial.print(xDistOnRamp);Serial.print("  ");
   Serial.print("yDistOnRamp: ");Serial.print(yDistOnRamp);Serial.print("  ");
@@ -2653,7 +2653,7 @@ bool driveStepDriveLoop(WallSide &wallToUse, double &dumbDistanceDriven, Stoppin
       return true;
     }
 
-    if (g_trueDistanceDriven >= g_targetDistance - 1.7) // Should not drive based on encoders if you have driven up the ramp // && rampDriven == false
+    if ((g_trueDistanceDriven >= g_targetDistance - 1.7 && abs(gyro.getAngleX()) < 3) || g_trueDistanceDriven >= g_targetDistance + 1) // Stopping due to dead reckoning. Only if robot flat enough or having driven further as a safeguard (if angle is wrong)
     {
       if (stopReason == stop_none)
         stopReason = stop_deadReckoning;
@@ -2695,17 +2695,18 @@ bool driveStepDriveLoop(WallSide &wallToUse, double &dumbDistanceDriven, Stoppin
       }
 
 
-      
+      // Serial.println(gyro.getAngleX());
       // Handling of bumps and some colours
       if (g_trueDistanceDriven > 15 - 4) // If the colour sensor is on the next tile
       {
         ++g_totalNewIterations;
-        if (abs(gyro.getAngleX()) > 2)
+        if (-gyro.getAngleX() > 1.5) // Does not use absolute value as i cannot drive down to an obstacle
         {
           ++g_onBumpIterations;
         }
-        if (g_floorColour == ColourSensor::floor_reflective && abs(gyro.getAngleX()) < 2)
+        if (g_floorColour == ColourSensor::floor_reflective && (abs(gyro.getAngleX()) < 2 || abs(gyro.getAngleY()) < 2)) // Robot can be scewed in any direction
         {
+          #warning angle threshold for reflective detection untuned
           ++g_reflectiveIterations;
         }
         if (g_floorColour == ColourSensor::floor_blue)
@@ -2979,6 +2980,10 @@ bool driveStep(ColourSensor::FloorColour &floorColourAhead, bool &rampDriven, To
   {
     bumpDriven = true;
   }
+  Serial.print("OnBump: ");Serial.print(g_onBumpIterations);Serial.print("  ");
+  Serial.print("NewIterations: ");Serial.print(g_totalNewIterations);Serial.print("  ");
+  Serial.print("BumpDriven: ");Serial.print(bumpDriven);Serial.print("  ");
+  Serial.println("");
 
   // Serial.print("Reflective share: ");Serial.println(double(g_reflectiveIterations)/double(g_totalNewIterations), 3); // Debugging
   // Check for blue
