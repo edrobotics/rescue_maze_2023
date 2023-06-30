@@ -27,34 +27,39 @@ namespace SerialConsole
 
         enum SendCommands
         {
+            /// <summary>!d, turboSpeed('1'/'0')</summary>
             [Command("!d")]
-            Drive,
+            Drive = 'd',
+            /// <summary>!w</summary>
             [Command("!w")]
-            SensorCheck,
+            SensorCheck = 'w',
+            ///<summary>!k, amount(int), side('l'/'r'), turnBack('1'/'0')</summary>
             [Command("!k")]
-            DropKits,
+            DropKits = 'k',
+            /// <summary>!t, direction('l'/'r')</summary>
             [Command("!t")]
-            Turn,
+            Turn = 't',
+            /// <summary>!i </summary>
             [Command("!i")]
-            Interrupt
+            Interrupt = 'i'
         }
 
         enum RecivedCommands
         {
             [Command("!a")]
-            Answer,
+            Answer = 'a',
             [Command("!s")]
-            Success,
+            Success = 's',
             [Command("!l")]
-            LOP,
+            LOP = 'l',
             [Command(",i")]
-            Interrupt,
+            Interrupt = 'i',
             [Command("!c")]
-            Cancelled,
+            Cancelled = 'c',
             [Command("!f")]
-            Failed,
+            Failed = 'f',
             [Command(",c")]
-            Calibration
+            Calibration = 'c'
         }
 
         //******** Communication ********
@@ -131,11 +136,12 @@ namespace SerialConsole
         }
         #endregion
 
-        #region SerialComm
+        #region MotionComm
         // ********************************** Driving ********************************** 
 
         static void Drive(bool _checkRamps, bool _turboDrive)
         {
+            if (!ReadNextTo(BitLocation.explored, Directions.front)) _turboDrive = false;
             if (ReadHere(BitLocation.checkPointTile)) //Update checkpoint direction upon leaving
             {
                 try
@@ -159,7 +165,7 @@ namespace SerialConsole
             Log("Driving", true);
 
             //Raw, as drive has higher risk of failure and failures need to be handled differently to avoid getting stuck
-            string _recived = SerialRaw(SendCommands.Drive.GetCommand(_turboDrive ? "1" : "0"), true, true);
+            string _recived = SerialRaw(SendCommands.Drive.GetCommand(_turboDrive ? '1' : '0'), true, true);
 
             if (reset)
                 return;
@@ -280,24 +286,27 @@ namespace SerialConsole
         static void Turn(char _direction)
         {
             if (reset) return;
+            int _startDir = direction;
             if (_direction == 'l')
             {
                 Log("Turning left", true);
-                SerialComm(SendCommands.Turn.GetCommand("l"), true, false); //turn left
+                SerialComm(SendCommands.Turn.GetCommand('l'), true, false); //turn left
                 if (!reset)
                     UpdateDirection(1);
             }
             else if (_direction == 'r')
             {
                 Log("Turning right", true);
-                SerialComm(SendCommands.Turn.GetCommand("r"), true, false); //turn right
+                SerialComm(SendCommands.Turn.GetCommand('r'), true, false); //turn right
                 if (!reset)
                     UpdateDirection(-1);
             }
             else
             {
-                Log("Turn - WRONG DIRECTION", true);
+                Log($"Turn - WRONG DIRECTION; {_direction}", true);
             }
+
+            dropKits = CheckKitSides(dropSide, _startDir, _direction);
         }
 
         static void TurnTo(int _toDirection)
@@ -329,8 +338,9 @@ namespace SerialConsole
             }
             CheckAndDropKits(true, true);
         }
+        #endregion
 
-
+        #region MiscComm
         // ********************************** Other Serial Commands ********************************** 
 
         static void SensorCheck()
@@ -394,7 +404,7 @@ namespace SerialConsole
                 lastDropped = dropAmount; //Save just in case vision sends a new
                 Log($"Dropping {dropAmount} kits {dropSide}", true);
 
-                string _recived = SerialComm(SendCommands.DropKits.GetCommand(""+dropAmount,""+dropSide,_turnBack ? "1" : "0"), true, false);
+                string _recived = SerialComm(SendCommands.DropKits.GetCommand(dropAmount, dropSide, _turnBack ? '1' : '0'), true, false);
                 if (reset)
                     return;
 
@@ -453,8 +463,8 @@ namespace SerialConsole
 
                 try
                 {
-                    serialPort1.WriteLine(SendCommands.DropKits.GetCommand(""+dropAmount,""+dropSide,"1"));
-                    Log("Sending: " + SendCommands.DropKits.GetCommand(""+dropAmount,""+dropSide,"1"), false);
+                    serialPort1.WriteLine(SendCommands.DropKits.GetCommand(dropAmount, dropSide, '1'));
+                    Log("Sending: " + SendCommands.DropKits.GetCommand(dropAmount, dropSide, '1'), false);
                     kitsLeft -= lastDropped;
                     WriteHere(BitLocation.victim, true);
 
@@ -489,7 +499,9 @@ namespace SerialConsole
             Delay(100, true);
             return _recived;
         }
+        #endregion
 
+        #region BaseComm
         // ********************************** Serial Communication ********************************** 
 
         /// <summary>
@@ -666,8 +678,8 @@ namespace SerialConsole
                     }
 
                     _recived = serialPort1.ReadLine();
-                    if (dropKits) Log("! _ ! _ ! _ FORGOT A KIT _ ! _ ! _ !", true);
-                    dropKits = false;
+                    //if (dropKits) Log("! _ ! _ ! _ FORGOT A KIT _ ! _ ! _ !", true);
+                    //dropKits = false;
                 }
 
                 if (_checkDropAgain)

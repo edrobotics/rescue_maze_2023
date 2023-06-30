@@ -89,6 +89,17 @@ namespace SerialConsole
             return ReadHere((BitLocation)CharToDirection(_side));
         }
 
+        static bool CheckKitSides(char _side, int _dir1, int _dir2)
+        {
+            if (!dropKits) return false;
+            return _side switch
+            {
+                'l' => ReadHere((BitLocation)FixDirection(_dir1 + 1)) && ReadHere((BitLocation)FixDirection(_dir2 + 1)),
+                'r' => ReadHere((BitLocation)FixDirection(_dir1 - 1)) && ReadHere((BitLocation)FixDirection(_dir2 - 1)),
+                _ => false,
+            };
+        }
+
         /// <summary>
         /// Subtracs or adds 4 until the int is 0<= int <= 3, to make sure that for example adding one to the direction 3 (right) will give the direction 0 (front).
         /// Can also be used for map bits since the same system is used; direction = wall in front.
@@ -493,7 +504,7 @@ namespace SerialConsole
         {
             mapWayBack[^1] = maps[_map].PathTo(_toX, _toZ, _fromX, _fromZ);
             mapWayBack[^1].Insert(0, new byte[] { (byte)_map, (byte)_area });
-            mapWayBack[^1].Insert(1, new byte[] { (byte)_toX, (byte)_toZ });
+            mapWayBack[^1].Insert(1, new byte[] { (byte)_fromX, (byte)_fromZ });
         }
 
         static bool AreaInWayBack(int _area)
@@ -562,7 +573,7 @@ namespace SerialConsole
 
                 if (_tileArea != _area)
                 {
-#warning Will area index change for other saved stuff? Clear instead of delete area to make sure??
+#warning Will area index change for other saved stuff? Does clear instead of delete work??
                     //To make sure that index does not change, we need to 
                     if (_tileArea < _area)
                     {

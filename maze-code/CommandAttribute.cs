@@ -34,10 +34,10 @@ namespace EnumCommand
         }
 
         /// <summary>
-        /// Will get the command for a certain enum value that has been assigned the command attribute
+        /// Will get the command for a certain enum value that has been assigned the command attribute, and add the parameters
         /// </summary>
         ///<param name="_extras">Additional info to the command</param>
-        public static string GetCommand(this Enum value, params string[] _extras)
+        public static string GetCommand(this Enum value, params object[] _parameters)
         {
             // Get the type
             Type type = value.GetType();
@@ -51,9 +51,9 @@ namespace EnumCommand
                 attribs = fieldInfo.GetCustomAttributes(typeof(CommandAttribute), false) as CommandAttribute[];
 
             string _add = "";
-            foreach (string _s in _extras)
+            foreach (object _s in _parameters)
             {
-                _add += ',' + _s;
+                _add += "," +_s;
             }
 
             // Return the first if there was a match.

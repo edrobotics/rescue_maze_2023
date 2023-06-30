@@ -402,8 +402,8 @@ namespace Mapping
             }
 
             //driveWay.ForEach(num => Debug.Log(num.X + " , " + num.Z + " ; "));
-            SerialConsole.Program.Log($"Found PathTo {_toX},{_toZ} from {_fromX},{_fromZ} at {foundPath.Count} length", true);
-            foundPath.ForEach(tile => SerialConsole.Program.Log($"::{tile[0]},{tile[1]};", false));
+            //SerialConsole.Program.Log($"Found PathTo {_toX},{_toZ} from {_fromX},{_fromZ} at {foundPath.Count} length", true);
+            //foundPath.ForEach(tile => SerialConsole.Program.Log($"::{tile[0]},{tile[1]};", false));
 
             ClearBit(BitLocation.mapSearched);
             ClearBit(BitLocation.inDriveWay);
@@ -423,7 +423,7 @@ namespace Mapping
 
         void FindFrom(byte _onX, byte _onZ)
         {
-            SerialConsole.Program.Log($":::: {_onX},{_onZ} ::::", false);
+            //SerialConsole.Program.Log($":::: {_onX},{_onZ} ::::", false);
             WriteBit(_onX, _onZ, BitLocation.inDriveWay, true);
             if (Math.Abs(_onZ - toPosZ) >= Math.Abs(_onX - toPosX)) //All these if-statements are very ugly, but I do not have a better solution right now
             {
@@ -521,10 +521,10 @@ namespace Mapping
 
         void SearchCell(byte _onX, byte _onZ)
         {
-            SerialConsole.Program.Log($":::: {_onX},{_onZ} ::::", false);
+            //SerialConsole.Program.Log($":::: {_onX},{_onZ} ::::", false);
             if (_onX == toPosX && _onZ == toPosZ)
             {
-                SerialConsole.Program.Log("Found " + foundPath.Count + " long", true);
+                //SerialConsole.Program.Log("Found " + foundPath.Count + " long", true);
 
                 if (foundPath.Count <= savedPath.Count || savedPath.Count == 0) //If we found a better path, save it
                 {

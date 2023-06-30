@@ -57,6 +57,7 @@ namespace SerialConsole
 
 #warning remove config file before competition
         static double MINUTES = 8;
+        static int MAXERRORS = 10;
 
         /// <summary>
         /// Keep track of the amount of errors, add an amount for each error depending on severity, 
@@ -239,10 +240,25 @@ namespace SerialConsole
             }
             File.WriteAllText(logFileName, DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss") + "\n-----------------------------------\n:::::::::: Program start ::::::::::\n-----------------------------------");
 
-            string _config = File.ReadAllText("config.txt");
-            string _find = "MINUTES:";
-            MINUTES = double.Parse(_config.Substring(_config.IndexOf(_find) + _find.Length, 1));
-            Log($"MINUTES = {MINUTES}", true);
+            try
+            {
+#warning Read lines and separate, now i can only read 1 digit
+                string _config = File.ReadAllText("config.txt");
+
+                string _findMins = "MINUTES:";
+                MINUTES = double.Parse(_config.Substring(_config.IndexOf(_findMins) + _findMins.Length, 1));
+                Log($"MINUTES = {MINUTES}", true);
+
+                string _findErrors = "MAXERRORS:";
+                MAXERRORS = int.Parse(_config.Substring(_config.IndexOf(_findErrors) + _findErrors.Length));
+                Log($"MAXERRORS = {MAXERRORS}", true);
+            }
+            catch
+            {
+                Log("++-- Config failed --++", true);
+                MINUTES = 8;
+                MAXERRORS = 12;
+            }
         }
         #endregion
 
@@ -677,11 +693,14 @@ namespace SerialConsole
         {
             UpdateWayBack();
             secondsToStart = StartPathSeconds();
+            //Log("Seconds back: " + secondsToStart, true);
+            Log($"{timer.ElapsedMilliseconds/1000 +  secondsToStart} vs {(MINUTES - 0.5) * 60} goingback:{goingBack}", true);
 
             if (timer.ElapsedMilliseconds/1000 +  secondsToStart > (MINUTES - 0.5) * 60 && !goingBack)
             {
-                Console.WriteLine("Time passed, returning");
+                for (int i = 0; i < 3; i++) Log("!%!%! Time passed, returning !%!%!", true);
                 driveWay = PathToStart();
+                driveWay.ForEach(_tile => Log($"WMWMW {_tile[0]},{_tile[1]} WMWMW", false));
                 goingBack = true;
             }
         }
@@ -756,7 +775,7 @@ namespace SerialConsole
 
         static void ErrorChecker()
         {
-            if (errors >= 10)
+            if (errors >= MAXERRORS)
             {
                 throw new Exception("Too many small errors");
             }
