@@ -2678,10 +2678,18 @@ bool driveStepDriveLoop(WallSide &wallToUse, double &dumbDistanceDriven, Stoppin
         // Drive back to last point and exit the loop
         // Serial.println("Black");
         // sounds::tone(440, 20);
+        if (-gyro.getAngleX() > -4 && -gyro.getAngleX() < 2)
+        {
         stopWheels();
-        // sounds::tone(440, 20);
         stopReason = stop_floorColour;
         return true; // Exit the loop
+        }
+        else
+        {
+          lights::setColour(3, colourRed, true);
+          g_floorColour = ColourSensor::floor_unknown;
+        }
+        // sounds::tone(440, 20);
         break;
       case ColourSensor::floor_blue:
         // Do nothing here. Is handled below.
@@ -2849,6 +2857,8 @@ bool driveStep(ColourSensor::FloorColour &floorColourAhead, bool &rampDriven, To
   wallToUse = pose.getSafeWallToUse();
 
   // Update pose
+  pose.xDistOnRamp = 0;
+  pose.yDistOnRamp = 0;
   pose.update(wallToUse, 0);
   pose.updateGyroOffset();
 
@@ -3015,9 +3025,9 @@ bool driveStep(ColourSensor::FloorColour &floorColourAhead, bool &rampDriven, To
   if (rampDriven == true)
   {
     lights::rampDriven();
-    pose.printRampVals();
+    // pose.printRampVals();
     // delay(500);
-    lights::turnOff();
+    // lights::turnOff();
   }
 
   if (stoppingReason == stop_frontTouchBoth || stoppingReason == stop_frontTouchLeft || stoppingReason == stop_frontTouchRight)
@@ -3214,7 +3224,7 @@ void handleVictim(double fromInterrupt)
   // Reset variables
   g_dropDirection = ' ';
   g_kitsToDrop = 0;
-  lights::turnOff();
+  // lights::turnOff();
 }
 
 // Deprecated

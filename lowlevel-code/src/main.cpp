@@ -8,8 +8,8 @@
 #include <Wire.h>
 #include <SPI.h>
 
-// #define PICODE
-#define TESTING_NAV
+#define PICODE
+// #define TESTING_NAV
 // #define TESTING
 // #define COLSENS_CALIBRATION
 
@@ -160,6 +160,7 @@ void loop()
   if (Serial.available() != 0)
   {
     Command command = serialcomm::readCommand(false);
+    lights::turnOff();
     // sounds::errorBeep();
     #endif
     switch (command)
