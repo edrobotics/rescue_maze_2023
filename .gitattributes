@@ -1,1 +1,3 @@
 lowlevel-code/lib/** linguist-vendored
+*.gcode linguist-vendored
+*.gx linguist-vendored
