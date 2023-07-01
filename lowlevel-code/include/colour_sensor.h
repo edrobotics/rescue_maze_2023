@@ -97,10 +97,22 @@ const int MAX_COLOUR_SAMPLES = 8; // Outside of class due to error
 class ColourSampleCollection
 {
     public:
+        ColourSampleCollection()
+        {
+            ColourSampleCollection(false);
+        }
+        ColourSampleCollection(bool isReflective)
+        {
+            isReflective = isReflective;
+        }
         bool enterSample(ColourSample sample); // For inputting the coloursamples
         void calculate(); // Calculate the thresholds
+        void updateReflective();
+        void write(int addresses[REFLECTIVE_REFERENCE_NUM]); // For reflective tiles
         void write(int address); // Should maybe be done outside of the class
         ColourStorageData read(int address); // Should maybe be done outside of the class
+        int readReflectiveNum(int addr);
+        ColourStorageData readReflective(int addr);
         void resetIndex();
         int getIndex();
         ColourStorageData thresholds {}; // Calculated thresholds
@@ -111,6 +123,7 @@ class ColourSampleCollection
 
         const double stdDevsToUse = 1; // How many standard deviations that should be used when computing the thresholds
 
+        bool isReflective;
         
         // Functions to aid in computation of the thresholds
         // I want to be able to give rg, rb or gb as an argument (or equivalent) and iterate through an array of colour samples while keeping the ending the same. I do not know how to do this.
@@ -122,10 +135,19 @@ class ColourSampleCollection
 
 };
 
+const int REFLECTIVE_REFERENCE_NUM = 5;
 
 class ColourSensor
 {   
     public:
+        ColourSensor()
+        {
+            reflectiveAddresses[0] = reflectiveNumAddr + sizeof(reflectiveNumAddr);
+            for (int i=1;i<REFLECTIVE_REFERENCE_NUM;++i)
+            {
+                reflectiveAddresses[i] = reflectiveAddresses[i-1]+sizeof(ColourStorageData);
+            }
+        }
         void init();
         enum FloorColour {
             floor_white,
@@ -167,6 +189,7 @@ class ColourSensor
         // Colour distances
         double getColDistance(ColourSample ref, ColourSample comp);
         double getColDistance(FloorColour ref, ColourSample comp);
+        double getColDistance(FloorColour ref, ColourSample comp, int reflectiveIndex);
         int getMinValIndex(double val1, double val2, double val3, double val4);
         FloorColour getClosestColour(ColourSample compare);
         double maxDetectionDistance = 50;
@@ -186,21 +209,25 @@ class ColourSensor
         // Colour sample collections for calibration routine
         ColourSampleCollection blackSamples;
         ColourSampleCollection blueSamples;
-        ColourSampleCollection reflectiveSamples;
+        ColourSampleCollection reflectiveSamples {true};
         ColourSampleCollection whiteSamples;
 
         // Thresholds for colour recognition
         // ColourStorageData blackReference {1.5, 6 , 1.7, 6 , 1.05, 2.0 , 0, 100};
         // ColourStorageData blueReference {0, 1.05 , 0, 1 , 0, 0.99 , 0, 2000};
-        // ColourStorageData reflectiveReference {1.0, 1.4 , 1.1, 1.45 , 1.1, 1.3 , 200, 500};
+        // ColourStorageData reflectiveReference1 {1.0, 1.4 , 1.1, 1.45 , 1.1, 1.3 , 200, 500};
         // ColourStorageData whiteReference {0.9, 1.1 , 1.0, 1.3 , 1.0, 1.2 , 500, 2000};
         const int blackAddr = 0;
         const int blueAddr = sizeof(ColourStorageData);
-        const int reflectiveAddr = 2*sizeof(ColourStorageData);
-        const int whiteAddr = 3*sizeof(ColourStorageData);
+        const int whiteAddr = 2*sizeof(ColourStorageData);
+        const int reflectiveNumAddr = 3*sizeof(ColourStorageData);
+        int reflectiveAddresses[REFLECTIVE_REFERENCE_NUM];
         ColourStorageData blackReference;
         ColourStorageData blueReference;
-        ColourStorageData reflectiveReference;
+        // ColourStorageData reflectiveReference1;
+        int usedReflectiveReferences = 0;
+        int minReflectiveIndex = 0; // The index for the closest reflective colour
+        ColourStorageData reflectiveReferences[REFLECTIVE_REFERENCE_NUM];
         ColourStorageData whiteReference;
 };
 

@@ -168,6 +168,11 @@ double ColourSensor::getColDistance(ColourSample ref, ColourSample comp)
 
 double ColourSensor::getColDistance(FloorColour ref, ColourSample comp)
 {
+    return getColDistance(ref, comp, 0);   
+}
+
+double ColourSensor::getColDistance(FloorColour ref, ColourSample comp, int reflectiveIndex)
+{
     ColourSample refSample;
 
     switch (ref)
@@ -179,7 +184,7 @@ double ColourSensor::getColDistance(FloorColour ref, ColourSample comp)
             return getColDistance(blueReference.s, comp);
             break;
         case floor_reflective:
-            return getColDistance(reflectiveReference.s, comp);
+            return getColDistance(reflectiveReferences[reflectiveIndex].s, comp);
             break;
         case floor_white:
             return getColDistance(whiteReference.s, comp);
@@ -195,13 +200,38 @@ ColourSensor::FloorColour ColourSensor::getClosestColour(ColourSample compare)
     double distances[4];
     distances[floor_black] = getColDistance(blackReference.s, compare) - blackReference.radius;
     distances[floor_blue] = getColDistance(blueReference.s, compare) - blueReference.radius;
-    distances[floor_reflective] = getColDistance(reflectiveReference.s, compare) - reflectiveReference.radius;
     distances[floor_white] = getColDistance(whiteReference.s, compare) - whiteReference.radius;
+    
+    double reflectiveDistances[REFLECTIVE_REFERENCE_NUM];
+    for (int i=0; i<usedReflectiveReferences; ++i)
+    {
+        reflectiveDistances[i] = getColDistance(reflectiveReferences[i].s, compare) - reflectiveReferences[i].radius;
+    }
+    // distances[floor_reflective] = getColDistance(reflectiveReference1.s, compare) - reflectiveReference1.radius;
     
     FloorColour minCol = floor_black;
     if (distances[floor_blue] < distances[minCol]) minCol = floor_blue;
-    if (distances[floor_reflective] < distances[minCol]) minCol = floor_reflective;
     if (distances[floor_white] < distances[minCol]) minCol = floor_white;
+
+    for (int i=0; i<usedReflectiveReferences; ++i)
+    {
+        if (minCol != floor_reflective)
+        {
+            if (reflectiveDistances[i] < distances[minCol])
+            {
+                minCol = floor_reflective;
+                minReflectiveIndex = i;
+            }
+        }
+        else
+        {
+            if (reflectiveDistances[i] < reflectiveDistances[minCol])
+            {
+                minCol = floor_reflective;
+                minReflectiveIndex = i;
+            }
+        }
+    }
 
     return minCol;
 }
@@ -256,12 +286,12 @@ ColourSensor::FloorColour ColourSensor::identifyColour()
 
     // int boolSumBlack = lowerUpperEval(rgRatio, blackReference.rgLower, blackReference.rgUpper) + lowerUpperEval(rbRatio, blackReference.rbLower, blackReference.rbUpper) + lowerUpperEval(gbRatio, blackReference.gbLower, blackReference.gbUpper) + (sensorClear < blackReference.clearUpper);
     // int boolSumBlue = lowerUpperEval(rgRatio, blueReference.rgLower, blueReference.rgUpper) + lowerUpperEval(rbRatio, blueReference.rbLower, blueReference.rbUpper) + lowerUpperEval(gbRatio, blueReference.gbLower, blueReference.gbUpper);
-    // int boolSumReflective = lowerUpperEval(rgRatio, reflectiveReference.rgLower, reflectiveReference.rgUpper) + lowerUpperEval(rbRatio, reflectiveReference.rbLower, reflectiveReference.rbUpper) + lowerUpperEval(gbRatio, reflectiveReference.gbLower, reflectiveReference.gbUpper);
+    // int boolSumReflective = lowerUpperEval(rgRatio, reflectiveReference1.rgLower, reflectiveReference1.rgUpper) + lowerUpperEval(rbRatio, reflectiveReference1.rbLower, reflectiveReference1.rbUpper) + lowerUpperEval(gbRatio, reflectiveReference1.gbLower, reflectiveReference1.gbUpper);
     // int boolSumWhite = lowerUpperEval(rgRatio, whiteReference.rgLower, whiteReference.rgUpper) + lowerUpperEval(rbRatio, whiteReference.rbLower, whiteReference.rbUpper) + lowerUpperEval(gbRatio, whiteReference.gbLower, whiteReference.gbUpper) + (sensorClear > whiteReference.clearLower);
 
     // if (boolSumBlack >= 3) return floor_black;
     // else if (boolSumBlue >=3) return floor_blue; // Could be lower (0.85?) for both
-    // else if (boolSumReflective >= 3 && (sensorClear > reflectiveReference.clearLower && sensorClear < reflectiveReference.clearUpper)) return floor_reflective;
+    // else if (boolSumReflective >= 3 && (sensorClear > reflectiveReference1.clearLower && sensorClear < reflectiveReference1.clearUpper)) return floor_reflective;
     // else if (boolSumWhite >= 3) return floor_white; // reflective falls (partly) into the same span, but because reflective would have returned all that is left in this area should be white
     // else return floor_unknown;
     
@@ -282,7 +312,7 @@ ColourSensor::FloorColour ColourSensor::identifyColour()
             reference = blueReference;
             break;
         case floor_reflective:
-            reference = reflectiveReference;
+            reference = reflectiveReferences[minReflectiveIndex];
             break;
         case floor_white:
             reference = whiteReference;
@@ -298,7 +328,7 @@ ColourSensor::FloorColour ColourSensor::identifyColour()
     // Old colour distance matching
     // if (getColDistance(blackReference.s, reading) <= maxDetectionDistance + blackReference.radius) return floor_black;
     // else if (getColDistance(blueReference.s, reading) <= maxDetectionDistance + blueReference.radius) return floor_blue;
-    // else if (getColDistance(reflectiveReference.s, reading) <= maxDetectionDistance + reflectiveReference.radius) return floor_reflective;
+    // else if (getColDistance(reflectiveReference1.s, reading) <= maxDetectionDistance + reflectiveReference1.radius) return floor_reflective;
     // else if (getColDistance(whiteReference.s, reading) <= maxDetectionDistance + whiteReference.radius) return floor_white;
     // else return floor_unknown;
 
@@ -371,8 +401,13 @@ void ColourSensor::refreshReferences()
 {
     blackReference = blackSamples.read(blackAddr);
     blueReference = blueSamples.read(blueAddr);
-    reflectiveReference = reflectiveSamples.read(reflectiveAddr);
     whiteReference = whiteSamples.read(whiteAddr);
+
+    usedReflectiveReferences = reflectiveSamples.readReflectiveNum(reflectiveNumAddr);
+    for (int i=0;i<usedReflectiveReferences;++i)
+    {
+        reflectiveReferences[i] = reflectiveSamples.readReflective(reflectiveAddresses[i]);
+    }
 }
 
 // Resets the indecies for samples
@@ -447,8 +482,9 @@ void ColourSensor::calibrationRoutineLoop()
         }
         else
         {
-        reflectiveSamples.calculate();
-        reflectiveSamples.write(reflectiveAddr);
+        reflectiveSamples.updateReflective();
+        EEPROM.put(reflectiveNumAddr, reflectiveSamples.getIndex()); // Write the number of reflective samples stored
+        reflectiveSamples.write(reflectiveAddresses); // Write the samples themselves
         changeDetected = true;
         for (int i=0;i<reflectiveSamples.getIndex();++i)
             {
@@ -552,6 +588,18 @@ void ColourSensor::calibrationRoutineLoop()
 //     Serial.print("clear: ");Serial.print(printData.clearLower, 4);Serial.print(" - ");Serial.print(printData.clearUpper, 4);Serial.println("");
 // }
 
+// For reflective colour
+void ColourSampleCollection::write(int addresses[REFLECTIVE_REFERENCE_NUM])
+{
+    if (isReflective==true)
+    {
+        EEPROM.put(addresses[sampleIndex], thresholds);
+    }
+    else
+    {
+        // Do nothing
+    }
+}
 
 // Write threshold data to the specified address
 void ColourSampleCollection::write(int address)
@@ -575,9 +623,23 @@ ColourStorageData ColourSampleCollection::read(int address)
     return readData;
 }
 
+int ColourSampleCollection::readReflectiveNum(int addr)
+{
+    int num = 0;
+    EEPROM.get(addr, num);
+    return num;
+}
+
+ColourStorageData ColourSampleCollection::readReflective(int addr)
+{
+    ColourStorageData readData;
+    EEPROM.get(addr, readData);
+    return readData;
+}
+
 bool ColourSampleCollection::enterSample(ColourSample sample)
 {
-    if ( 0 <= sampleIndex && sampleIndex < MAX_COLOUR_SAMPLES)
+    if ( 0 <= sampleIndex && ((sampleIndex < MAX_COLOUR_SAMPLES && isReflective==false) || (sampleIndex < REFLECTIVE_REFERENCE_NUM && isReflective==true)))
     {
         samples[sampleIndex] = sample;
         ++sampleIndex;
@@ -621,6 +683,19 @@ void ColourSampleCollection::calculate()
     //  - Generally, special cases should be handled where I know that the tolerances are looser so that we don't have thresholds that are stricter than they need to be
 
 
+}
+
+void ColourSampleCollection::updateReflective()
+{
+    if (sampleIndex==0) return;
+
+    thresholds.s.values[ColourSample::r] = samples[sampleIndex].values[ColourSample::r];
+    thresholds.s.values[ColourSample::g] = samples[sampleIndex].values[ColourSample::g];
+    thresholds.s.values[ColourSample::b] = samples[sampleIndex].values[ColourSample::b];
+    thresholds.s.values[ColourSample::clear] = samples[sampleIndex].values[ColourSample::clear];
+
+    #warning untuned constant (check what a typical stored constant is)
+    thresholds.radius = 10;
 }
 
 void ColourSampleCollection::resetIndex()
