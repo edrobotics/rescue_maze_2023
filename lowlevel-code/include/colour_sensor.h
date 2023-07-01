@@ -92,19 +92,18 @@ struct ColourStorageData
     double radius; // Maybe for how close it has to be.
 };
 
+void printColSample(ColourSample printSample, bool newLine);
+void printColStorData(ColourStorageData printData);
+
+
 const int MAX_COLOUR_SAMPLES = 8; // Outside of class due to error
+const int REFLECTIVE_REFERENCE_NUM = 5;
+
 
 class ColourSampleCollection
 {
     public:
-        ColourSampleCollection()
-        {
-            ColourSampleCollection(false);
-        }
-        ColourSampleCollection(bool isReflective)
-        {
-            isReflective = isReflective;
-        }
+        void setReflective(bool newReflectiveState);
         bool enterSample(ColourSample sample); // For inputting the coloursamples
         void calculate(); // Calculate the thresholds
         void updateReflective();
@@ -123,7 +122,7 @@ class ColourSampleCollection
 
         const double stdDevsToUse = 1; // How many standard deviations that should be used when computing the thresholds
 
-        bool isReflective;
+        bool isReflective = false;
         
         // Functions to aid in computation of the thresholds
         // I want to be able to give rg, rb or gb as an argument (or equivalent) and iterate through an array of colour samples while keeping the ending the same. I do not know how to do this.
@@ -135,8 +134,6 @@ class ColourSampleCollection
 
 };
 
-const int REFLECTIVE_REFERENCE_NUM = 5;
-
 class ColourSensor
 {   
     public:
@@ -146,6 +143,10 @@ class ColourSensor
             for (int i=1;i<REFLECTIVE_REFERENCE_NUM;++i)
             {
                 reflectiveAddresses[i] = reflectiveAddresses[i-1]+sizeof(ColourStorageData);
+            }
+            for (int i=0;i<REFLECTIVE_REFERENCE_NUM;++i)
+            {
+                reflectiveSamples.setReflective(true);
             }
         }
         void init();
@@ -181,6 +182,7 @@ class ColourSensor
         // int calcColourDistance(int sensorRed, int sensorGreen, int sensorBlue, int referenceRed, int referenceGreen, int referenceBlue);
         bool readSensor();
         FloorColour identifyColour();
+        bool blockReflective = false;
         
         // Ratios
         bool lowerUpperEval(double val, double lower, double upper);
@@ -192,7 +194,7 @@ class ColourSensor
         double getColDistance(FloorColour ref, ColourSample comp, int reflectiveIndex);
         int getMinValIndex(double val1, double val2, double val3, double val4);
         FloorColour getClosestColour(ColourSample compare);
-        double maxDetectionDistance = 50;
+        double MAX_DETECTION_DISTANCE = 70;
 
         unsigned long lastReadTime = 0; // Keep track of the last time you read from the sensor
         int INTEGRATION_TIME = 60; // The integration time in milliseconds
@@ -209,7 +211,7 @@ class ColourSensor
         // Colour sample collections for calibration routine
         ColourSampleCollection blackSamples;
         ColourSampleCollection blueSamples;
-        ColourSampleCollection reflectiveSamples {true};
+        ColourSampleCollection reflectiveSamples;
         ColourSampleCollection whiteSamples;
 
         // Thresholds for colour recognition
@@ -227,7 +229,7 @@ class ColourSensor
         // ColourStorageData reflectiveReference1;
         int usedReflectiveReferences = 0;
         int minReflectiveIndex = 0; // The index for the closest reflective colour
-        ColourStorageData reflectiveReferences[REFLECTIVE_REFERENCE_NUM];
+        ColourStorageData reflectiveReferences[REFLECTIVE_REFERENCE_NUM] {true};
         ColourStorageData whiteReference;
 };
 

@@ -270,19 +270,9 @@ ColourSensor::FloorColour ColourSensor::identifyColour()
     // // Calculation using thresholds
 
     // calcColourRatios(rgRatio, rbRatio, gbRatio);
-    
-    
-    // For debugging/tuning¨
-    // printValues();
-    // printRatios();
 
     // For debugging/tuning¨
     // printValues();
-    // printRatios();
-    
-    // // For debugging/tuning¨
-    // // printValues();
-    // // printRatios();
 
     // int boolSumBlack = lowerUpperEval(rgRatio, blackReference.rgLower, blackReference.rgUpper) + lowerUpperEval(rbRatio, blackReference.rbLower, blackReference.rbUpper) + lowerUpperEval(gbRatio, blackReference.gbLower, blackReference.gbUpper) + (sensorClear < blackReference.clearUpper);
     // int boolSumBlue = lowerUpperEval(rgRatio, blueReference.rgLower, blueReference.rgUpper) + lowerUpperEval(rbRatio, blueReference.rbLower, blueReference.rbUpper) + lowerUpperEval(gbRatio, blueReference.gbLower, blueReference.gbUpper);
@@ -313,6 +303,17 @@ ColourSensor::FloorColour ColourSensor::identifyColour()
             break;
         case floor_reflective:
             reference = reflectiveReferences[minReflectiveIndex];
+            // If both white and reflective are detected, make sure to detect white
+            if (getColDistance(whiteReference.s, reading)-whiteReference.radius <= MAX_DETECTION_DISTANCE)
+            {
+                newLights::setColour(3, newColourWhite, true);
+                closestCol = floor_white;
+                reference = whiteReference;
+            }
+            else
+            {
+                // Change nothing, as you should detect reflective
+            }
             break;
         case floor_white:
             reference = whiteReference;
@@ -322,14 +323,14 @@ ColourSensor::FloorColour ColourSensor::identifyColour()
             break;
     }
     double colDistance = getColDistance(reference.s, reading);
-    if (colDistance <= maxDetectionDistance + reference.radius) return closestCol;
+    if (colDistance <= MAX_DETECTION_DISTANCE + reference.radius) return closestCol;
     else return floor_unknown;
     
     // Old colour distance matching
-    // if (getColDistance(blackReference.s, reading) <= maxDetectionDistance + blackReference.radius) return floor_black;
-    // else if (getColDistance(blueReference.s, reading) <= maxDetectionDistance + blueReference.radius) return floor_blue;
-    // else if (getColDistance(reflectiveReference1.s, reading) <= maxDetectionDistance + reflectiveReference1.radius) return floor_reflective;
-    // else if (getColDistance(whiteReference.s, reading) <= maxDetectionDistance + whiteReference.radius) return floor_white;
+    // if (getColDistance(blackReference.s, reading) <= MAX_DETECTION_DISTANCE + blackReference.radius) return floor_black;
+    // else if (getColDistance(blueReference.s, reading) <= MAX_DETECTION_DISTANCE + blueReference.radius) return floor_blue;
+    // else if (getColDistance(reflectiveReference1.s, reading) <= MAX_DETECTION_DISTANCE + reflectiveReference1.radius) return floor_reflective;
+    // else if (getColDistance(whiteReference.s, reading) <= MAX_DETECTION_DISTANCE + whiteReference.radius) return floor_white;
     // else return floor_unknown;
 
 
@@ -399,14 +400,20 @@ ColourSample ColourSensor::getColourSample()
 // Reads thresholds from EEPROM
 void ColourSensor::refreshReferences()
 {
+    Serial.println("---Refreshing---");
     blackReference = blackSamples.read(blackAddr);
+    Serial.print("Black: ");printColStorData(blackReference);
     blueReference = blueSamples.read(blueAddr);
+    Serial.print("Blue: ");printColStorData(blueReference);
     whiteReference = whiteSamples.read(whiteAddr);
+    Serial.print("White: ");printColStorData(whiteReference);
 
     usedReflectiveReferences = reflectiveSamples.readReflectiveNum(reflectiveNumAddr);
+    Serial.print("Used reflective references is: ");Serial.println(usedReflectiveReferences);
     for (int i=0;i<usedReflectiveReferences;++i)
     {
         reflectiveReferences[i] = reflectiveSamples.readReflective(reflectiveAddresses[i]);
+        Serial.print("Reflective");Serial.print(i);Serial.print(" ");printColStorData(reflectiveReferences[i]);
     }
 }
 
@@ -428,6 +435,10 @@ void ColourSensor::calibrationRoutineLoop()
     if (Serial.available()>0)
     {
         readChar = Serial.read();
+        Serial.println("");
+        Serial.println("");
+        Serial.println("");
+        Serial.println("");
     }
     else
     {
@@ -484,6 +495,7 @@ void ColourSensor::calibrationRoutineLoop()
         {
         reflectiveSamples.updateReflective();
         EEPROM.put(reflectiveNumAddr, reflectiveSamples.getIndex()); // Write the number of reflective samples stored
+        Serial.print("Writing reflective number: ");Serial.println(reflectiveSamples.getIndex());
         reflectiveSamples.write(reflectiveAddresses); // Write the samples themselves
         changeDetected = true;
         for (int i=0;i<reflectiveSamples.getIndex();++i)
@@ -515,6 +527,14 @@ void ColourSensor::calibrationRoutineLoop()
         delay(buttonDebounceDelay);
         newLights::turnOff();
         }
+    }
+    else if (readChar==' ')
+    {
+        delay(20);
+    }
+    else
+    {
+        newLights::errorBlink();
     }
 
     // Set new thresholds in the identifying code (maybe only if previous step done?)
@@ -588,16 +608,23 @@ void ColourSensor::calibrationRoutineLoop()
 //     Serial.print("clear: ");Serial.print(printData.clearLower, 4);Serial.print(" - ");Serial.print(printData.clearUpper, 4);Serial.println("");
 // }
 
+void ColourSampleCollection::setReflective(bool newReflectiveState)
+{
+    isReflective = newReflectiveState;
+}
+
 // For reflective colour
 void ColourSampleCollection::write(int addresses[REFLECTIVE_REFERENCE_NUM])
 {
     if (isReflective==true)
     {
-        EEPROM.put(addresses[sampleIndex], thresholds);
+        EEPROM.put(addresses[sampleIndex-1], thresholds);
+        Serial.print("Writing reflective number: ");Serial.print(sampleIndex);Serial.print(" With data: ");printColStorData(thresholds);
     }
     else
     {
         // Do nothing
+        Serial.println("Not reflective!");
     }
 }
 
@@ -607,7 +634,7 @@ void ColourSampleCollection::write(int address)
     // Serial.println("Writing...");
     // I need to be able to set the startic address of writing and also know the total of what I store in the EEPROM
     ColourStorageData writeData = thresholds; // The data being written
-    // printColourStorageData(writeData);
+    Serial.print("Writing: ");printColStorData(writeData);
     EEPROM.put(address, writeData);
     // Serial.println("Done");
 }
@@ -618,7 +645,7 @@ ColourStorageData ColourSampleCollection::read(int address)
     // Serial.println("Reading...");
     ColourStorageData readData; // The data beign read
     EEPROM.get(address, readData);
-    // printColourStorageData(readData); // Does not seem to print the data - just empty. Maybe what I put in is empty? (division by 0?)
+    // printColStorData(readData);
     // Serial.println("Done");
     return readData;
 }
@@ -627,6 +654,7 @@ int ColourSampleCollection::readReflectiveNum(int addr)
 {
     int num = 0;
     EEPROM.get(addr, num);
+    // Serial.println("Reflective num is: ");Serial.print(num);Serial.println("");
     return num;
 }
 
@@ -634,11 +662,13 @@ ColourStorageData ColourSampleCollection::readReflective(int addr)
 {
     ColourStorageData readData;
     EEPROM.get(addr, readData);
+    // printColStorData(readData);
     return readData;
 }
 
 bool ColourSampleCollection::enterSample(ColourSample sample)
 {
+    Serial.print("Sample entered: ");printColSample(sample, true);
     if ( 0 <= sampleIndex && ((sampleIndex < MAX_COLOUR_SAMPLES && isReflective==false) || (sampleIndex < REFLECTIVE_REFERENCE_NUM && isReflective==true)))
     {
         samples[sampleIndex] = sample;
@@ -689,13 +719,13 @@ void ColourSampleCollection::updateReflective()
 {
     if (sampleIndex==0) return;
 
-    thresholds.s.values[ColourSample::r] = samples[sampleIndex].values[ColourSample::r];
-    thresholds.s.values[ColourSample::g] = samples[sampleIndex].values[ColourSample::g];
-    thresholds.s.values[ColourSample::b] = samples[sampleIndex].values[ColourSample::b];
-    thresholds.s.values[ColourSample::clear] = samples[sampleIndex].values[ColourSample::clear];
+    thresholds.s.values[ColourSample::r] = samples[sampleIndex-1].values[ColourSample::r];
+    thresholds.s.values[ColourSample::g] = samples[sampleIndex-1].values[ColourSample::g];
+    thresholds.s.values[ColourSample::b] = samples[sampleIndex-1].values[ColourSample::b];
+    thresholds.s.values[ColourSample::clear] = samples[sampleIndex-1].values[ColourSample::clear];
 
     #warning untuned constant (check what a typical stored constant is)
-    thresholds.radius = 10;
+    thresholds.radius = 16;
 }
 
 void ColourSampleCollection::resetIndex()
@@ -764,6 +794,21 @@ double ColourSampleCollection::maxValue(ColourSample::Values value)
 }
 
 
+void printColStorData(ColourStorageData printData)
+{
+    printColSample(printData.s, false);
+    Serial.print("Radius: ");Serial.print(printData.radius);Serial.print("  ");
+    Serial.println("");
+}
+
+void printColSample(ColourSample printSample, bool newLine)
+{
+    Serial.print("R: "); Serial.print(printSample.values[ColourSample::r], 1); Serial.print(" ");
+    Serial.print("G: "); Serial.print(printSample.values[ColourSample::g], 1); Serial.print(" ");
+    Serial.print("B: "); Serial.print(printSample.values[ColourSample::b], 1); Serial.print(" ");
+    Serial.print("C: "); Serial.print(printSample.values[ColourSample::clear], 1); Serial.print(" ");
+    if (newLine) Serial.println(" ");
+}
 
 
 void HardwareButton::init()

@@ -8,9 +8,9 @@
 #include <Wire.h>
 #include <SPI.h>
 
-#define PICODE
+// #define PICODE
 // #define TESTING_NAV
-// #define TESTING
+#define TESTING
 // #define COLSENS_CALIBRATION
 
 #ifdef COLSENS_CALIBRATION
@@ -85,17 +85,6 @@ void loop()
   // delay(20);
   // serialcomm::clearBuffer();
 
-  #ifdef COLSENS_CALIBRATION
-  ColourSensor::FloorColour identifiedColour = colSensor.checkFloorColour();
-  colSensor.printRatios();
-  colSensor.printClearVal();
-  colSensor.printColourName(identifiedColour);
-  // colSensor.printValues();
-  Serial.println("");
-  delay(200);
-
-  #else
-
   // deployRescueKit();
   // delay(2000);
 
@@ -121,19 +110,26 @@ void loop()
   // }
   // delay(2000);
   // lights::turnOff();
-  int multiplier = 1;
-  bool stopMoving = true;
-  double turnStepAngle = 10;
-  awareGyroTurn(-multiplier*turnStepAngle/2.0, stopMoving, 20, false, 0);
-  awareGyroTurn(-multiplier*turnStepAngle/2.0, stopMoving, 11, false, 15);
-  awareGyroTurn(multiplier*turnStepAngle*1.5, stopMoving, 20, false, 0);
-  awareGyroTurn(multiplier*turnStepAngle/2.0, stopMoving, 11, false, -15);
-  awareGyroTurn(-multiplier*turnStepAngle, true, 30, false, 0);
-  delay(1000);
 
+  // int multiplier = 1;
+  // bool stopMoving = true;
+  // double turnStepAngle = 10;
+  // awareGyroTurn(-multiplier*turnStepAngle/2.0, stopMoving, 20, false, 0);
+  // awareGyroTurn(-multiplier*turnStepAngle/2.0, stopMoving, 11, false, 15);
+  // awareGyroTurn(multiplier*turnStepAngle*1.5, stopMoving, 20, false, 0);
+  // awareGyroTurn(multiplier*turnStepAngle/2.0, stopMoving, 11, false, -15);
+  // awareGyroTurn(-multiplier*turnStepAngle, true, 30, false, 0);
+  // delay(1000);
 
-  #endif
-  
+  // getUltrasonics();
+  // printUltrasonics();
+  startDistanceMeasure();
+  while(true)
+  {
+    delay(20);
+    loopEncoders();
+    Serial.println(getDistanceDriven());
+  }
   
 
   #else

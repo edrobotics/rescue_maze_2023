@@ -924,6 +924,8 @@ void letWheelsTurn(bool stopWhenDone)
 void gyroInit()
 {
   gyro.begin();
+  gyro.update();
+  pose.gyroOffset = gyroAngleToMathAngle(gyro.getAngleZ()); // The robot angle is presumed to be 0 when the robot starts
 }
 
 // Info: the gyro gives values between -180 and 180. Positive is clockwise.
@@ -1387,11 +1389,13 @@ void gyroTurn(double turnAngle, bool stopMoving, double turnSpeed, bool aware = 
   {
     turnAngle = 90;
     sounds::errorBeep();
+    // Serial.println(turnAngle);
   }
   if (turnAngle < -170)
   {
     turnAngle = -90;
     sounds::errorBeep();
+    // Serial.println(turnAngle);
   }
 
   gyro.update();
@@ -1506,6 +1510,7 @@ void awareGyroTurn(double turnAngle, bool stopMoving, double turnSpeed, bool ult
   double angleDiff = endGyroAngle - startGyroAngle;
 #warning Offset used wrong! (?)
   pose.gyroOffset = gyroAngleToMathAngle(gyro.getAngleZ()) - pose.angle; // The angle measured by the gyro (absolute angle) in the beginning.
+
 
   // if (ultrasonicUpdate==true)
   // {
@@ -1738,9 +1743,8 @@ void printUltrasonics()
 {
 
   Serial.print("RAW:    ");
-  // Serial.print("F:");Serial.print(ultrasonicCurrentDistances[ultrasonic_F][usmt_raw]);
-  Serial.print(" LF:");
-  Serial.print(ultrasonicCurrentDistances[ultrasonic_LF][usmt_raw]);
+  Serial.print("F:");Serial.print(ultrasonicCurrentDistances[ultrasonic_F][usmt_raw]);
+  // Serial.print(" LF:");Serial.print(ultrasonicCurrentDistances[ultrasonic_LF][usmt_raw]);
   // Serial.print(" LB:");Serial.print(ultrasonicCurrentDistances[ultrasonic_LB][usmt_raw]);
   // Serial.print(" RF:");Serial.print(ultrasonicCurrentDistances[ultrasonic_RF][usmt_raw]);
   // Serial.print(" RB:");Serial.print(ultrasonicCurrentDistances[ultrasonic_RB][usmt_raw]);
@@ -1748,9 +1752,8 @@ void printUltrasonics()
   Serial.print("    ");
 
   Serial.print("SMOOTH: ");
-  // Serial.print("F:");Serial.print(ultrasonicCurrentDistances[ultrasonic_F][usmt_smooth]);
-  Serial.print(" LF:");
-  Serial.print(ultrasonicCurrentDistances[ultrasonic_LF][usmt_smooth]);
+  Serial.print("F:");Serial.print(ultrasonicCurrentDistances[ultrasonic_F][usmt_smooth]);
+  // Serial.print(" LF:");Serial.print(ultrasonicCurrentDistances[ultrasonic_LF][usmt_smooth]);
   // Serial.print(" LB:");Serial.print(ultrasonicCurrentDistances[ultrasonic_LB][usmt_smooth]);
   // Serial.print(" RF:");Serial.print(ultrasonicCurrentDistances[ultrasonic_RF][usmt_smooth]);
   // Serial.print(" RB:");Serial.print(ultrasonicCurrentDistances[ultrasonic_RB][usmt_smooth]);
@@ -2680,9 +2683,12 @@ bool driveStepDriveLoop(WallSide &wallToUse, double &dumbDistanceDriven, Stoppin
         // sounds::tone(440, 20);
         if (-gyro.getAngleX() > -4 && -gyro.getAngleX() < 2)
         {
-        stopWheels();
-        stopReason = stop_floorColour;
-        return true; // Exit the loop
+          stopWheels();
+          double dumbDistanceIncrement = getDistanceDriven() - dumbDistanceDriven;
+          pose.update(wallToUse, dumbDistanceIncrement);
+          g_trueDistanceDriven = pose.yDist;
+          stopReason = stop_floorColour;
+          return true; // Exit the loop
         }
         else
         {
@@ -2828,7 +2834,7 @@ bool driveStep(ColourSensor::FloorColour &floorColourAhead, bool &rampDriven, To
     // g_targetDistance = g_trueDistanceDriven + 2;
     // g_targetDistance = 15;
     g_startDistance = g_targetDistance - g_trueDistanceDriven;
-    pose.yDist = g_trueDistanceDriven; // Needed? Problematic?
+    // pose.yDist = g_trueDistanceDriven; // Needed? Problematic?
     // g_targetDistance += 3;
   }
   if (continuing == true)
