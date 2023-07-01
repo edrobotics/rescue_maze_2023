@@ -305,7 +305,6 @@ namespace SerialConsole
                 Log($"Turn - WRONG DIRECTION; {_direction}", true);
             }
 
-#warning check this
             dropKits = CheckKitSides(dropSide, _startDir, _direction);
         }
 

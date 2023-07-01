@@ -233,7 +233,7 @@ namespace SerialConsole
 
         static void Config()
         {
-            logFileName = $"log{DateTime.Now:MMddTHHmm}.txt";
+            logFileName = $"log{DateTime.Now:MMddTHHmm}.log";
             if (Directory.Exists(@"../logs/"))
             {
                 logFileName = @"../logs/" + logFileName;
@@ -242,7 +242,7 @@ namespace SerialConsole
 
             try
             {
-                string _config = File.ReadAllText("config.txt");
+                string _config = File.ReadAllText("config.cfg");
 
                 string _findMins = "MINUTES:";
                 MINUTES = double.Parse(_config[(_config.IndexOf(_findMins) + _findMins.Length).._config.IndexOf(';', _config.IndexOf(_findMins))].Trim());
@@ -597,10 +597,11 @@ namespace SerialConsole
                     else
                     {
                         mapWayBack.Add(new List<byte[]>() { new byte[] { (byte)currentMap, (byte)currentArea },
-                                                            new byte[] { (byte)posX, (byte)posZ } });
+                                                            DirToTile(direction - 2, (byte)posX, (byte)posZ) });
                     }
                     Log($"NEW: x:{posX}, z:{posZ}, dir:{direction}, map:{currentMap}", true);
                     Log($"new height {currentHeight}, map length = {_length}", true);
+
                 }
                 if (_strange) maps[currentMap].HasStrangeRamps[direction] = true;
                 locationUpdated = true;
