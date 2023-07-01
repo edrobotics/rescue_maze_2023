@@ -55,32 +55,6 @@ class imgproc:
         "green": [None, -10, 0],
     }
 
-    blacklist = [] #possible safety feature in case the colour code gets messed up by the lightning(not active)
-    def detected(self,msg, victim): #makes the victim only send once every victim detection
-        if self.info: print(f"{victim} detected")
-        notblacklisted = True
-        for key in self.lastdetected:
-            if self.lastdetected[key][1] == self.fnum:
-                self.blacklist.append(victim)
-                if self.info: print(f"{victim} was blackliste. on {self.fnum}")
-                logging.info(f"{victim} was blacklisted")
-                notblacklisted = False
-
-        if notblacklisted or True: #debug 
-            try:
-                list = self.lastdetected[victim]
-                if list[1] + 2 < self.fnum:
-                    self.sendMessage(msg)
-
-                else:
-                    if self.info: print("alredy detected")
-            except Exception as e:
-                print(e)
-                print(self.lastdetected[victim])
-
-        #updates last detected
-        new_list = (msg, self.fnum, list[2]+ 1)
-        self.lastdetected[victim] = new_list
 
 
 
@@ -162,6 +136,7 @@ class imgproc:
 
 
     def do_the_work(self, image, fnum):
+        self.framedetected = {}
         self.original_image = np.copy(image)
         self.log("E")
         self.image = self.adjust_white_balance(self.original_image)
@@ -179,7 +154,44 @@ class imgproc:
         if self.showsource:
             cv2.imshow("image_clone",self.image_clone)
 
-   
+        self.evaluate_detected()
+
+
+    def detected(self,msg, victim): #makes the victim only send once every victim detection
+        if self.info: print(f"{victim} detected")
+        self.framedetected[victim] = msg
+
+
+
+
+    def evaluate_detected(self): #does not update lastdetected[1] would be horrible if one is bdetected all the time
+        send = False
+        if len(self.framedetected) > 0:
+            for victim in self.framedetected:
+                msg = self.framedetected[victim]
+                
+                list = self.lastdetected[victim]
+                if list[1] + 2 < self.fnum:
+                    send = True
+                else:
+                    if self.info: print("alredy detected")
+                #updates last detected
+                new_list = (msg, self.fnum, list[2]+ 1)
+                self.lastdetected[victim] = new_list
+                break
+        if send:
+            if len(self.framedetected) == 1:
+                self.sendMessage(msg)
+            elif len(self.framedetected) > 1:
+                if len(victim) == 1:
+                    self.sendMessage(msg)
+
+
+            
+
+         
+
+
     def blank_out(self, img33):
         #blanks out pixels that can't be poi but can still make problems
         if img33.ndim >= 3:
@@ -283,60 +295,6 @@ class imgproc:
 
         return result 
 
-
-
-    def identify_victim(self,ivictim): #compares binary poi with binary sample images 
-
-        x = -1
-        identified = False
-        victim = None
-        kits = None
-        for key in self.Dictand:
-            x = x + 1 
-            sample = self.Dictand[key]
-
-            for i in range(2):
-                if i == 1: ivictim = cv2.rotate(ivictim,cv2.ROTATE_180)
-                M_AND = cv2.bitwise_and(sample, ivictim)
-                M_AND_C = np.count_nonzero(M_AND)
-                M_OR = cv2.bitwise_and(self.Dictor[key], ivictim)
-                M_OR_C = np.count_nonzero(M_OR)
-                MIN_and = np.count_nonzero(sample)
-                MIN_and = MIN_and * 0.98
-                MIN_or = np.count_nonzero(ivictim) * 0.98
-                if self.debugidentification:
-                    cv2.imshow("M_AND", M_AND)                
-                    cv2.imshow("ivictim",ivictim)                
-                    cv2.imshow("M_OR",M_OR)                
-                    cv2.imshow("dictand",sample)                
-                    cv2.imshow("dictor",self.Dictor[key])                
-                    print(MIN_and)
-                    print(M_AND_C)
-                    print(MIN_or)
-                    print(M_OR_C)
-                    cv2.waitKey(0)
-
-                
-            #  print(f"victim size: {M_AND_C}")
-                if MIN_and < M_AND_C and M_OR_C > MIN_or:
-                    if x == 0: 
-                        victim = "H"
-                        kits = 3
-                    if x == 1: 
-                        victim = "S"
-                        kits = 2
-                    if x == 2: 
-                        kits = 0 
-                        victim = "U"
-                # if i == 1: side = "left"
-                    if self.info: print(f"identified: {victim}")
-                    logging.info(f"identified victim: {victim}")
-                    self.log(victim, img= ivictim)
-                    break
-        if victim:
-            identified = True
-
-        return (identified,kits, victim)
 
     def identify_victim2(self,ivictim): #compares binary poi with binary sample images different way to count similarities          
         x = -1
