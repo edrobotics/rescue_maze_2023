@@ -58,7 +58,7 @@ namespace Mapping
     /// </summary>
     class Map
     {
-        #region Variables, objects, initializers and indexers
+        #region Variables, objects, and class stuff
         //**Data, mapping**
         public Map (int _mazeLength, int _height, int _startPosX, int _startPosZ)
         {
@@ -75,8 +75,28 @@ namespace Mapping
             set => WriteBit(_index1, _index2, _bit, value);
         }
 
+        /// <summary>
+        /// For expanding a map, to increase its size, whilst indexing stays the same, which means that it is only possible when x or z is over the limit, not below
+        /// </summary>
+        /// <param name="_addSize">How much to increase map length by</param>
+        public static Map operator +(Map expandMap, int _addSize)
+        {
+            ushort[,] _oldMap = expandMap.map;
+            expandMap.Length += _addSize;
+            expandMap.map = new ushort[expandMap.Length, expandMap.Length];
+
+            for (int i = 0; i < _oldMap.Length; i++)
+            {
+                for (int j = 0; j < _oldMap.Length; j++)
+                {
+                    expandMap.map[i,j] = _oldMap[i,j];
+                }
+            }
+            return expandMap;
+        }
+
         /// <summary>The size of the map in tile amount</summary>
-        public int Length { get;}
+        public int Length { get; private set; }
 
         private int height;
         /// <summary>The height of the map from the starting map in cm</summary>
@@ -319,19 +339,19 @@ namespace Mapping
             }
         }
 
-        /// <summary>
-        /// Sets all bits in the map to 0
-        /// </summary>
-        public void Clear()
-        {
-            for (int i = 0; i < Length; i++)
-            {
-                for (int j = 0; j < Length; j++)
-                {
-                    map[i, j] = 0;
-                }
-            }
-        }
+        ///// <summary>
+        ///// Sets all bits in the map to 0
+        ///// </summary>
+        //public void Clear()
+        //{
+        //    for (int i = 0; i < map.Length; i++)
+        //    {
+        //        for (int j = 0; j < map.Length; j++)
+        //        {
+        //            map[i, j] = 0;
+        //        }
+        //    }
+        //}
 
         /// <summary>
         /// Clears one bit from the entire map
@@ -402,7 +422,7 @@ namespace Mapping
             }
 
             //driveWay.ForEach(num => Debug.Log(num.X + " , " + num.Z + " ; "));
-            //SerialConsole.Program.Log($"Found PathTo {_toX},{_toZ} from {_fromX},{_fromZ} at {foundPath.Count} length", true);
+            SerialConsole.Program.Log($"Found PathTo {_toX},{_toZ} from {_fromX},{_fromZ} at {foundPath.Count} length", true);
             //foundPath.ForEach(tile => SerialConsole.Program.Log($"::{tile[0]},{tile[1]};", false));
 
             ClearBit(BitLocation.mapSearched);

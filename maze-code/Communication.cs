@@ -59,7 +59,7 @@ namespace SerialConsole
             [Command("!f")]
             Failed = 'f',
             [Command(",c")]
-            Calibration = 'c'
+            Calibration
         }
 
         //******** Communication ********
@@ -141,7 +141,6 @@ namespace SerialConsole
 
         static void Drive(bool _checkRamps, bool _turboDrive)
         {
-            if (!ReadNextTo(BitLocation.explored, Directions.front)) _turboDrive = false;
             if (ReadHere(BitLocation.checkPointTile)) //Update checkpoint direction upon leaving
             {
                 try
@@ -306,6 +305,7 @@ namespace SerialConsole
                 Log($"Turn - WRONG DIRECTION; {_direction}", true);
             }
 
+#warning check this
             dropKits = CheckKitSides(dropSide, _startDir, _direction);
         }
 
@@ -435,12 +435,8 @@ namespace SerialConsole
                     LogException(e);
                     Log($"{_recived} --WRONG", true);
                 }
-                dropKits = false;
             }
-            else if (dropKits)
-            {
-                dropKits = false;
-            }
+            dropKits = false;
         }
 
         static void DropInterrupt()
@@ -469,7 +465,6 @@ namespace SerialConsole
                     WriteHere(BitLocation.victim, true);
 
                     Delay(5);
-                    dropKits = false;
                 }
                 catch (Exception e)
                 {
@@ -480,13 +475,13 @@ namespace SerialConsole
             else if (dropKits)
             {
                 Log("Already discovered victim here", false);
-                dropKits = false;
             }
             else
             {
                 Log("NO DROPKIT IN DROP INTERRUPT", false);
                 errors++;
             }
+            dropKits = false;
         }
 
         static string Interrupt()

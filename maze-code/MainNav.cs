@@ -29,7 +29,7 @@ namespace SerialConsole
 
         static List<byte[]> driveWay = new();
         /// <summary>
-        /// The way back, FIRST BYTE[]: 0=map,1=area
+        /// The way back, FIRST BYTE[]: 0=map,1=area; SECOND BYTE[] = Current Pos
         /// </summary>
         static List<List<byte[]>> mapWayBack = new();
         static List<List<byte[]>> saveWayBack = new();
@@ -176,7 +176,7 @@ namespace SerialConsole
                     Delay(20);
                 }
                 _commandRecived = serialPort1.ReadLine();
-
+                Log("Recived: " + _commandRecived, false);
                 if (_commandRecived.Contains(RecivedCommands.LOP.GetCommand()) && !_commandRecived.Contains(RecivedCommands.Calibration.GetCommand()))
                 {
                     _recivedReset = true;
@@ -199,6 +199,7 @@ namespace SerialConsole
                         Delay(20);
                     }
                     _commandRecived = serialPort1.ReadLine();
+                    Log("Recived: " + _commandRecived, false);
                 } while (!_commandRecived.Contains(RecivedCommands.LOP.GetCommand()) || _commandRecived.Contains(RecivedCommands.Calibration.GetCommand()));
             }
 
@@ -216,7 +217,6 @@ namespace SerialConsole
             maps.Capacity = 15;
             maps.Clear();
             maps.Add(new Map(50, 0, posX, posZ));
-            maps[0].Clear();
 
             Log($"Area count: {maps[0].Areas.Count}", false);
             maps[0].Areas.Clear();
@@ -242,15 +242,14 @@ namespace SerialConsole
 
             try
             {
-#warning Read lines and separate, now i can only read 1 digit
                 string _config = File.ReadAllText("config.txt");
 
                 string _findMins = "MINUTES:";
-                MINUTES = double.Parse(_config.Substring(_config.IndexOf(_findMins) + _findMins.Length, 1));
+                MINUTES = double.Parse(_config[(_config.IndexOf(_findMins) + _findMins.Length).._config.IndexOf(';', _config.IndexOf(_findMins))].Trim());
                 Log($"MINUTES = {MINUTES}", true);
 
                 string _findErrors = "MAXERRORS:";
-                MAXERRORS = int.Parse(_config.Substring(_config.IndexOf(_findErrors) + _findErrors.Length));
+                MAXERRORS = int.Parse(_config[(_config.IndexOf(_findErrors) + _findErrors.Length).._config.IndexOf(';', _config.IndexOf(_findErrors))].Trim());
                 Log($"MAXERRORS = {MAXERRORS}", true);
             }
             catch
@@ -287,18 +286,22 @@ namespace SerialConsole
         NavLogic:
             if (reset) return;
 
-            Delay(20, true);
+            Delay(10, true);
 
-            //CHANGE CODE BELOW WHEN RAMP STUFF IS CHANGED
-            if (((driveWay.Count == 0 && maps[currentMap].CrossTiles.Count == 0 && _unExpTiles == 0) || goingBack) 
-                  && posX == maps[currentMap].StartPosX && posZ == maps[currentMap].StartPosZ && currentMap == 0)
+            if (posX == maps[0].StartPosX && posZ == maps[0].StartPosZ && currentMap == 0)
             {
-                timer.Stop();
-                Log("DONE", true);
-                Delay(20_000);
-                Exit();
-                return;
+                Log($"ON START TILE WITH DW:{driveWay.Count},CT:{maps[0].CrossTiles.Count},UET:{_unExpTiles}", true);
+
+                if ((driveWay.Count == 0 && maps[0].CrossTiles.Count == 0 && _unExpTiles == 0) || goingBack)
+                {
+                    if (timer.ElapsedMilliseconds < 10) return;
+                    timer.Stop();
+                    Log("DONE", true);
+                    Delay(20_000);
+                    Exit();
+                    return;
                 
+                }
             }
 
             if (driveWay.Count > 0)
@@ -316,13 +319,14 @@ namespace SerialConsole
                 while (driveWay[0][0] == posX && driveWay[0][1] == posZ)
                 {
                     driveWay.RemoveAt(0);
+                    if (driveWay.Count == 0) goto NavLogic;
                 }
                 Log($"Is turning to {driveWay[0][0]},{driveWay[0][1]}", true);
                 TurnTo(TileToDirection(driveWay[0]));
 
                 if (!reset)
                 {
-                    turboDrive = !ReadNextTo(BitLocation.ramp, Directions.front); //If there is not a ramp in front, we turbo drive
+                    turboDrive = !ReadNextTo(BitLocation.ramp, Directions.front) && ReadNextTo(BitLocation.explored, Directions.front); //If there is explored, not a ramp in front, we turbo drive
                     driveWay.RemoveAt(0);
                 }
             }
@@ -354,12 +358,14 @@ namespace SerialConsole
             }
             else if (_unExpTiles == 0)
             {
-                if (maps[currentMap].CrossTiles.Count > 1)
+                if (maps[currentMap].CrossTiles.Count > 0)
                 {
                     byte[] _currentCoords = new byte[] { (byte)posX, (byte)posZ };
                     while (maps[currentMap].CrossTiles.Contains(_currentCoords))
                     {
                         maps[currentMap].CrossTiles.Remove(_currentCoords);
+                        if (maps[currentMap].CrossTiles.Count == 0)
+                            goto NavLogic;
                     }
 
                     int _crossX = maps[currentMap].CrossTiles.Last()[0];
@@ -371,12 +377,7 @@ namespace SerialConsole
 
                         if (maps[currentMap].CrossTiles.Count == 0)
                         {
-                            driveWay = mapWayBack[^1];
-                            driveWay.RemoveAt(0);
-
-                            if (driveWay.Count > 0)
-                                goto NavLogic;
-                            throw new Exception($"DID NOT FIND PATH TO (map){currentMap} START XZ");
+                            goto NavLogic;
                         }
 
                         _crossX = maps[currentMap].CrossTiles.Last()[0];
@@ -397,8 +398,9 @@ namespace SerialConsole
                         }
                         Log("SOMETHING PROBABLY WRONG WITH RAMP OR MAP, MAYBE DUAL RAMP, trying to solve", true);
 
-                        driveWay = mapWayBack[^1];
+                        driveWay = new List<byte[]>(mapWayBack[^1]);
                         driveWay.RemoveAt(0);
+                        driveWay.RemoveAt(1);
                         if (driveWay.Count > 0)
                             goto NavLogic;
                         throw new Exception($"DID NOT FIND PATH TO (map){currentMap} START XZ");
@@ -407,10 +409,19 @@ namespace SerialConsole
                 }
                 else
                 {
-                    Log("Going back a map", true);
+                    if (currentMap == 0)
+                    {
+                        goingBack = true;
+                        Log("Going to start due to tile shortage", true);
+                    }
+                    else
+                    {
+                        Log("Going back a map", true);
+                    }
 
-                    driveWay = mapWayBack[^1];
+                    driveWay = new List<byte[]>(mapWayBack[^1]);
                     driveWay.RemoveAt(0);
+                    driveWay.RemoveAt(1);
                     if (driveWay.Count > 0)
                         goto NavLogic;
                     throw new Exception($"DID NOT FIND PATH TO (map){currentMap} START XZ");
@@ -487,8 +498,8 @@ namespace SerialConsole
                     AddSinceCheckpoint(_rampTile[0], _rampTile[1], (byte)currentMap);
 
                     byte _fromMap = (byte)currentMap;
-                    maps[currentMap].AddRamp((byte)posX, (byte)posZ, (byte)_rampDirection, (byte)rampCount, (byte)(maps.Count - 1), (byte)_length);
-                    Log($"Saved ramp: x:{posX}, z:{posZ}, dir:{_rampDirection}, rampCount:{rampCount}, map:{maps.Count - 1}", false);
+                    byte _fromX = (byte)posX, 
+                         _fromZ = (byte)posZ;
 
                     currentHeight += _height;
                     _strange = UpdateRampLocation(_length, currentMap, direction);
@@ -499,6 +510,9 @@ namespace SerialConsole
 
                     if (_mapIndex != -1) //Old map but new ramp
                     {
+                        maps[_fromMap].AddRamp(_fromX, _fromZ, (byte)_rampDirection, (byte)rampCount, (byte)(_mapIndex), (byte)_length);
+                        Log($"Saved ramp: x:{_fromX}, z:{_fromZ}, dir:{_rampDirection}, rampCount:{rampCount}, map:{_mapIndex}", false);
+
                         Log("____---- OLD MAP; NEW RAMP ----____", true);
                         currentMap = _mapIndex;
                         maps[currentMap].UpdateHeight(currentHeight);
@@ -510,12 +524,14 @@ namespace SerialConsole
                     }
                     else //New map
                     {
+                        maps[_fromMap].AddRamp(_fromX, _fromZ, (byte)_rampDirection, (byte)rampCount, (byte)(maps.Count - 1), (byte)_length);
+                        Log($"Saved ramp: x:{_fromX}, z:{_fromZ}, dir:{_rampDirection}, rampCount:{rampCount}, map:{maps.Count - 1}", false);
+
                         Log("____---- NEW MAP; NEW RAMP ----____", true);
 
                         //Setup new map
                         maps.Add(new Map(50, currentHeight, posX, posZ));
                         currentMap = maps.Count - 1;
-                        maps[currentMap].Clear();
 
                         _rampTile = DirToTile(direction - 2, (byte)posX, (byte)posZ);
                     }
@@ -536,7 +552,7 @@ namespace SerialConsole
                         WriteNextTo(BitLocation.explored, true, Directions.back);
                     }
 
-                    Log($"NEW: x:{posX}, z:{posZ}, dir:{_rampDirection}, rampCount:{rampCount}, map:{maps.Count - 1}", false);
+                    Log($"NEW: x:{posX}, z:{posZ}, dir:{direction}, rampCount:{rampCount}, map:{currentMap}", false);
                 }
                 else //Used ramp
                 {
@@ -718,7 +734,6 @@ namespace SerialConsole
 
                 sw.Stop();
 
-                Log($"Delay first part took {sw.ElapsedMilliseconds} ms", false);
                 Delay(_millis - (int)sw.ElapsedMilliseconds);
             }
             else

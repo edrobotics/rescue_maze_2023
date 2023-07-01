@@ -191,60 +191,55 @@ namespace SerialConsole
             locationUpdated = true;
 
             UpdateDirection(0);
-            if (direction == 0)
+            switch (direction)
             {
-                posZ--;
-                if (posZ < lowestZ)
-                    lowestZ = posZ;
-            }
-            else if (direction == 1)
-            {
-                posX--;
-                if (posX < lowestX)
-                    lowestX = posX;
-            }
-            else if (direction == 2)
-            {
-                posZ++;
-                if (posZ > highestZ)
-                    highestZ = posZ;
-            }
-            else if (direction == 3)
-            {
-                posX++;
-                if (posX > highestX)
-                    highestX = posX;
-            }
-            else
-            {
-                errors++;
-                for (int i = 0; i < 5; i++) Log("Something wrong with direction in UpdateLocation!!!", true);
-                throw new Exception("HOW IS THIS EVEN POSSIBLE, SOMEHING VERY WRONG WITH UPDATE LOCATION");
+                case 0:
+                    posZ--;
+                    if (posZ < lowestZ)
+                        lowestZ = posZ;
+                    break;
+                case 1:
+                    posX--;
+                    if (posX < lowestX)
+                        lowestX = posX;
+                    break;
+                case 2:
+                    posZ++;
+                    if (posZ > highestZ)
+                        highestZ = posZ;
+                    break;
+                case 3:
+                    posX++;
+                    if (posX > highestX)
+                        highestX = posX;
+                    break;
+                default:
+                    throw new Exception("HOW IS THIS EVEN POSSIBLE, SOMEHING VERY WRONG WITH UPDATE LOCATION");
             }
 
-            if (posX > maps[currentMap].Length)
+            if (posX >= maps[currentMap].Length)
             {
-                posX = maps[currentMap].Length;
-                for (int i = 0; i < 5; i++) Log("!!!Error PosX hi", true);
-                errors+=2;
+                Log("!!!Error PosX hi, expanding", true);
+                errors+=4;
+                maps[currentMap] += 2;
             }
             if (posX < 0)
             {
                 posX = 0;
                 for (int i = 0; i < 5; i++) Log("!!!Error posX lo", true);
-                errors+=2;
+                errors+=7;
             }
-            if (posZ > maps[currentMap].Length)
+            if (posZ >= maps[currentMap].Length)
             {
-                posZ = maps[currentMap].Length;
-                for (int i = 0; i < 5; i++) Log("!!!Error PosZ hi", true);
-                errors+=2;
+                Log("!!!Error PosZ hi, expanding", true);
+                errors += 4;
+                maps[currentMap] += 2;
             }
             if (posZ < 0)
             {
                 posZ = 0;
                 for (int i = 0; i < 5; i++) Log("!!!Error posZ lo", true);
-                errors+=2;
+                errors+=7;
             }
             AddTile();
 
@@ -488,15 +483,6 @@ namespace SerialConsole
         /// </summary>
         static void UpdateWayBack()
         {
-            //if (currentMap == 0 && mapWayBack[^1].Count == 1)
-            //{
-            //    mapWayBack[^1].Add(new byte[] { (byte)maps[0].StartPosX, (byte)maps[0].StartPosZ });
-            //}
-            //if (currentMap != 0 && mapWayBack[^1].Count == 2)
-            //{
-            //    byte[] _ramp = RampByRamptile(mapWayBack[^1][^1][0], mapWayBack[^1][^1][1], currentMap);
-            //    mapWayBack[^1].Insert(mapWayBack[^1].Count - 1, new byte[] { _ramp[(int)RampStorage.XCoord], _ramp[(int)RampStorage.ZCoord] });
-            //}
             UpdateWayBack(posX, posZ, mapWayBack[^1][^1][0], mapWayBack[^1][^1][1], currentMap, currentArea);
         }
 
@@ -531,14 +517,14 @@ namespace SerialConsole
             }
         }
 
-        static void RemoveWayBack(int _fromArea, int _toArea)
+        static void RemoveWayBack(int _fromArea, int _toArea, int _map)
         {
             bool _a1 = false, _a2 = false;
             for (int i = mapWayBack.Count - 1; i >= 0; i--)
             {
-                if (mapWayBack[i][0][1] == _fromArea)
+                if (mapWayBack[i][0][1] == _fromArea && mapWayBack[i][0][0] == _map)
                     _a1 = true;
-                if (mapWayBack[i][0][1] == _toArea)
+                if (mapWayBack[i][0][1] == _toArea && mapWayBack[i][0][0] == _map)
                     _a2 = true;
                 if (_a1 && _a2)
                     break;
@@ -573,17 +559,16 @@ namespace SerialConsole
 
                 if (_tileArea != _area)
                 {
-#warning Will area index change for other saved stuff? Does clear instead of delete work??
+#warning Will area index change for other saved stuff?
                     //To make sure that index does not change, we need to 
                     if (_tileArea < _area)
                     {
                         (_tileArea, _area) = (_area, _tileArea);
                     }
                     //Merge areas
-                    Log($"MERGING AREA {_area} to {_tileArea}", true);
+                    Log($"MERGING AREA {_tileArea} to {_area}", true);
                     maps[_map].MergeAreas(_area, _tileArea);
-                    RemoveWayBack(_tileArea, _area);
-                    UpdateWayBack();
+                    RemoveWayBack(_tileArea, _area, _map);
                     return _tileArea;
                 }
             }
@@ -603,26 +588,26 @@ namespace SerialConsole
             AddSinceCheckpoint();
         }
 
-        static bool MarkMapAsVisited(int _markMap, int _currMap, int _currArea)
+        static bool MarkMapAsVisited(int _checkMap, int _currMap, int _currArea)
         {
-            if (maps[_markMap].CrossTiles.Count == 0)
+            if (maps[_checkMap].CrossTiles.Count == 0)
             {
                 return true;
             }
 
-            foreach (byte[] _crossTile in maps[_markMap].CrossTiles)
+            foreach (byte[] _crossTile in maps[_checkMap].CrossTiles)
             {
-                if (!maps[_markMap].ReadBit(_crossTile[0], _crossTile[1], BitLocation.ramp))
+                if (!maps[_checkMap].ReadBit(_crossTile[0], _crossTile[1], BitLocation.ramp))
                 {
                     return false;
                 }
             }
 
-            foreach (byte[] _crossTile in maps[_markMap].CrossTiles)
+            foreach (byte[] _crossTile in maps[_checkMap].CrossTiles)
             {
                 try
                 {
-                    byte[] _ramp = maps[_currMap].GetRampAt(RampByRamptile(_crossTile[0], _crossTile[1], _markMap)[(int)RampStorage.RampIndex]);
+                    byte[] _ramp = maps[_currMap].GetRampAt(RampByRamptile(_crossTile[0], _crossTile[1], _checkMap)[(int)RampStorage.RampIndex]);
                     if (maps[_currMap].GetArea(new byte[] { _ramp[(int)RampStorage.XCoord], _ramp[(int)RampStorage.ZCoord] }) != _currArea)
                     {
                         return false;
@@ -736,7 +721,12 @@ namespace SerialConsole
                     path.Add(mapWayBack[i][j]);
                 }
             }
-
+            Log("[Begin to start]", false);
+            foreach (byte[] _tile in path)
+            {
+                Log($"## {_tile[0]},{_tile[1]} ##", false);
+            }
+            Log("[End to start]", false);
             return path;
 
 //#warning update
