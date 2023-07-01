@@ -57,23 +57,27 @@ class imgproc:
 
     blacklist = [] #possible safety feature in case the colour code gets messed up by the lightning(not active)
     def detected(self,msg, victim): #makes the victim only send once every victim detection
-        
+        if self.info: print(f"{victim} detected")
         notblacklisted = True
         for key in self.lastdetected:
             if self.lastdetected[key][1] == self.fnum:
                 self.blacklist.append(victim)
-                print(f"{victim} was blackliste. on {self.fnum}")
+                if self.info: print(f"{victim} was blackliste. on {self.fnum}")
                 logging.info(f"{victim} was blacklisted")
                 notblacklisted = False
 
-        if notblacklisted:
+        if notblacklisted or True: #debug 
+            try:
+                list = self.lastdetected[victim]
+                if list[1] + 2 < self.fnum:
+                    self.sendMessage(msg)
 
-            list = self.lastdetected[victim]
-            if list[1] + 2 < self.fnum:
-                self.sendMessage(msg)
+                else:
+                    if self.info: print("alredy detected")
+            except Exception as e:
+                print(e)
+                print(self.lastdetected[victim])
 
-            else:
-                print("alredy detected")
         #updates last detected
         new_list = (msg, self.fnum, list[2]+ 1)
         self.lastdetected[victim] = new_list
@@ -82,7 +86,7 @@ class imgproc:
 
 #sends message to navigaion code using sockets
     def sendMessage(self,msg):
-        print("sending message", msg)
+        if self.info: print("sending message", msg)
         logging.info(f"sending: {msg}")
 
         try:
@@ -90,8 +94,8 @@ class imgproc:
             msg_length = len(message).to_bytes(self.HEADER, "big")
             self.client.send(msg_length)
             self.client.send(message)
-        except:
-            print("failed to send messsage")
+        except Exception as e:
+            if self.info: print("failed to send messsage")
 #connects to navigation code
     def connect(self):
         while True:
@@ -126,38 +130,52 @@ class imgproc:
     
 
     
-    def adjust_white_balance(self, image, percent_red=0, percent_blue=0):
-        image = self.blank_out(image)
-        b, g, r = cv2.split(image)
-
-        avg_b = np.mean(b)
-        avg_g = np.mean(g)
-        avg_r = np.mean(r)
-        
-        adj_b = b * (avg_g / avg_b) * (100 - percent_blue) / 100
-        adj_r = r * (avg_g / avg_r) * (100 - percent_red) / 100
-        
-        adj_b = np.clip(adj_b, 0, 255).astype(np.uint8)
-        adj_r = np.clip(adj_r, 0, 255).astype(np.uint8)
     
-        adjusted_image = cv2.merge([adj_b, g, adj_r])
-        return adjusted_image
-        
+    def adjust_white_balance(self, image_s, percent_red=0, percent_blue=0):
+        image = image_s.copy()
+        image = self.blank_out(image)
+
+        half1 = image.copy()
+        half2 = image.copy()
+        half1[:,:320] = (0,0,0)
+        half2[:,320:] = (0,0,0)
+        timg = (half1, half2)
+        adjusted_image = np.zeros((480,640,3), np.uint8)
+        for half in timg:
+            b, g, r = cv2.split(half)
+            avg_b = np.mean(b)
+            avg_g = np.mean(g)
+            avg_r = np.mean(r)
+            
+            adj_b = b * (avg_g / avg_b) * (100 - percent_blue) / 100
+            adj_r = r * (avg_g / avg_r) * (100 - percent_red) / 100
+            
+            adj_b = np.clip(adj_b, 0, 255).astype(np.uint8)
+            adj_r = np.clip(adj_r, 0, 255).astype(np.uint8)
+
+            half = cv2.merge([adj_b, g, adj_r])
+            adjusted_image = adjusted_image + half
+            
+        if self.showsource:
+            cv2.imshow("adjusted",adjusted_image)
+        return adjusted_image       
 
 
     def do_the_work(self, image, fnum):
         self.original_image = np.copy(image)
-        self.image = self.adjust_white_balance(self.original_image)
-        self.image_clone = self.image.copy()
-        self.fnum = fnum
         self.log("E")
+        self.image = self.adjust_white_balance(self.original_image)
+        self.image_clone = self.image.copy()#image where lines and contours will be showed to
+        self.fnum = fnum
 
         try:
             self.find_victim()
             self.Color_victim2()
-        except: 
-            print("something went wrong")
-            logging.info("something went wrong")
+        except Exception as e: 
+            print(e)
+            print("something went wrong in do the work")
+            logging.exception("something went wrong")
+
         if self.showsource:
             cv2.imshow("image_clone",self.image_clone)
 
@@ -169,8 +187,8 @@ class imgproc:
             if x == 3:
                 n = (0,0,0)
             else:
-                print("something wrong in blankout")
-                print(x)
+                if self.info: print("something wrong in blankout")
+                if self.info: print(x)
                 n = (0)
         else: 
             n = (0)
@@ -246,6 +264,9 @@ class imgproc:
                 imgCnt = self.binary[miny:maxy, minx:maxx]
                 width = maxx - minx
                 height = maxy - miny
+                if width < 42: continue
+                if height < 42: continue
+
                 dsize = (200,200)
                 RImgCnt = cv2.resize(imgCnt, dsize)
                 if self.show_visual:
@@ -254,7 +275,9 @@ class imgproc:
                 if maxx < 320: self.side ="r"
                 else: self.side = "l"
 
-                result = self.identify_victim(RImgCnt)
+                self.putTextPos = (minx, maxy + 5)
+                result = self.identify_victim2(RImgCnt)
+#                self.identify_victim2(RImgCnt)
                 if result[0]:
                     break
 
@@ -315,6 +338,68 @@ class imgproc:
 
         return (identified,kits, victim)
 
+    def identify_victim2(self,ivictim): #compares binary poi with binary sample images different way to count similarities          
+        x = -1
+        identified = False
+        victim = None
+        kits = None
+        sim = [0,0]
+        for key in self.Dictand:
+            x = x + 1 
+            sample = self.Dictand[key]
+
+            for i in range(2):
+                if i == 1: ivictim = cv2.rotate(ivictim,cv2.ROTATE_180)
+                M_AND = cv2.bitwise_and(sample, ivictim)
+                M_AND_C = np.count_nonzero(M_AND)
+                M_OR = cv2.bitwise_and(self.Dictor[key], ivictim)
+                M_OR_C = np.count_nonzero(M_OR)
+                Max_and = np.count_nonzero(sample)
+                Max_or = np.count_nonzero(ivictim)
+                sim_and = M_AND_C/Max_and
+                sim_or = M_OR_C/Max_or
+                if sim_and > sim[0] and sim_or > sim[1]:
+                    sim[0] = sim_and
+                    sim[1] = sim_or
+                    victim = key
+
+                if self.debugidentification: # show masks
+                    cv2.imshow("M_AND", M_AND)                
+                    cv2.imshow("ivictim",ivictim)                
+                    cv2.imshow("M_OR",M_OR)                
+                    cv2.imshow("dictand",sample)                
+                    cv2.imshow("dictor",self.Dictor[key])                
+                    cv2.waitKey(0)
+
+  
+        if sim[0] + sim[1] > 1.95:
+            identified = True
+
+        kits = self.how_many_kits(victim)
+        
+        self.putText(f"{sim[0]:.2f}, {sim[1]:.2f}")
+
+        return (identified,kits, victim)
+    
+    def how_many_kits(self,victim):
+        dict = {
+            "H": 3,
+            "S": 2,
+            "U": 0
+        }
+        kits = dict[victim]
+        return kits
+    
+    def putText(self, text, pos = None):
+        bottomLeftCornerOfText = self.putTextPos
+
+        font                   = cv2.FONT_HERSHEY_SIMPLEX
+        fontScale              =  1/2
+        color                  = (255,255,255)
+        thickness              =   1
+        cv2.putText(self.image_clone,text,bottomLeftCornerOfText,font,fontScale,color,thickness)
+    
+
     
     def safeguards_color(self, contour, victim,mask):#reducing false identified colour victims
         correct = False
@@ -324,9 +409,14 @@ class imgproc:
 
         if self.find_edges(contour, mask, x,y,w,h):
             if self.check_position(x,y,w,h):
-                if self.check_movement(victim,x,y,w,h):
+                if self.check_movement(victim,x,y,w,h): #evaluate and remove
                     correct = True
-        
+                else: print("something of in multiframe safeguard")
+
+            elif self.info: print("to high or low")
+
+        else: 
+            if self.info: print("no edges")
         return correct
 
 
@@ -334,7 +424,7 @@ class imgproc:
     def check_position(self, x,y,w,h): # makes sure the victim is on the right height
         b_position = None
         victimheight = 142
-        victimheight2 = 442
+        victimheight2 = 450
         if victimheight > x and victimheight - 20 < x + w:
             b_position = True
         elif victimheight2 > x and victimheight2 - 20 < x + w:
@@ -349,13 +439,12 @@ class imgproc:
             if self.is_close(x, pos[2]) and self.is_close(w,pos[4]) and self.is_close(h,pos[5]):
                 same_height = True
 #                b_movement = True #only for testing
-                print("keeping shape")
                 if y < pos[3]:
                     b_movement = True
-                    print("moving")
-                else: print("not moving ;)")
+                else: 
+                    if self.info: print("not moving ;)")
             else: 
-                print("change in position/shape")
+                if self.info: print("change in position/shape")
 
 
         self.victim_pos = (victim,self.fnum, x,y,w,h)
@@ -384,55 +473,54 @@ class imgproc:
     def find_edges(self,contour,mask, x,y,w,h):
         contours_match = False
         image = np.copy(self.image)
-            
-        try: 
-            aoi = image[y -20 : y+h+20 ,x-20: x+w+ 20]
-            aoi2 = np.copy(aoi)
-            aoi3 = np.copy(aoi)
-            binary = mask[y -20 : y+h+20 ,x-20: x+w+ 20]
-            kernel =np.ones((9,9),np.uint8)
-            img_gray = cv2.cvtColor(aoi, cv2.COLOR_BGR2GRAY)
-            img_blur = cv2.GaussianBlur(img_gray, (7,7), 1) 
-            img_blur = cv2.morphologyEx(img_blur, cv2.MORPH_CLOSE, kernel)
-            edges = cv2.Canny(image=img_blur, threshold1=10, threshold2=20)
-            edges = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel)
+        if x < 20:
+            x = 20
+        if y < 20:
+            y = 20
 
-            contours, hierarchy = cv2.findContours(edges,cv2.RETR_LIST,cv2.CHAIN_APPROX_SIMPLE)
-            contours2, hierarchy = cv2.findContours(binary,cv2.RETR_LIST,cv2.CHAIN_APPROX_SIMPLE)
-            for cnt in contours2: #loops trough all contours on the mask (should only be one)
+        aoi = image[y -20 : y+h+20 ,x-20: x+w+ 20]
+        aoi2 = np.copy(aoi)
+        aoi3 = np.copy(aoi)
+        binary = mask[y -20 : y+h+20 ,x-20: x+w+ 20]
+        kernel =np.ones((9,9),np.uint8)
+        img_gray = cv2.cvtColor(aoi, cv2.COLOR_BGR2GRAY)
+        img_blur = cv2.GaussianBlur(img_gray, (7,7), 1) 
+        img_blur = cv2.morphologyEx(img_blur, cv2.MORPH_CLOSE, kernel)
+        edges = cv2.Canny(image=img_blur, threshold1=10, threshold2=20)
+        edges = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel)
+
+        contours, hierarchy = cv2.findContours(edges,cv2.RETR_LIST,cv2.CHAIN_APPROX_SIMPLE)
+        contours2, hierarchy = cv2.findContours(binary,cv2.RETR_LIST,cv2.CHAIN_APPROX_SIMPLE)
+        for cnt in contours2: #loops trough all contours on the mask (should only be one)
 
 
-                #gets approximation points 
+            #gets approximation points 
+            epsilon = 0.05*cv2.arcLength(cnt,True)
+            approx = cv2.approxPolyDP(cnt,epsilon,True)
+            points = len(approx)
+            if points <3:
+                continue
+            cv2.drawContours(aoi2, [approx], -1, (0,0,255), 3)
+
+            for cnt in contours :
+
                 epsilon = 0.05*cv2.arcLength(cnt,True)
-                approx = cv2.approxPolyDP(cnt,epsilon,True)
-                points = len(approx)
-                cv2.drawContours(aoi2, [approx], -1, (0,0,255), 3)
+                approx2 = cv2.approxPolyDP(cnt,epsilon,True)
+                cv2.drawContours(aoi3, [approx2], -1, (0,0,255), 3)
 
-                for cnt in contours :
+                #compares approximation points with canny image
+                ct = 0 
+                for point in approx:
 
-                    epsilon = 0.05*cv2.arcLength(cnt,True)
-                    approx2 = cv2.approxPolyDP(cnt,epsilon,True)
-                    cv2.drawContours(aoi3, [approx2], -1, (0,0,255), 3)
+                    for point2 in approx2:
+                        if self.is_close(point[0][0], point2[0][0], marginal=20) and self.is_close(point[0][1], point2[0][1], marginal=20):
 
-                    #compares approximation points with canny image
-                    ct = 0 
-                    for point in approx:
-
-                        for point2 in approx2:
-                            if self.is_close(point[0][0], point2[0][0], marginal=20) and self.is_close(point[0][1], point2[0][1], marginal=20):
-
-                                ct += 1
-                    if ct > points -2:
-                        print("should be victim")
-                        contours_match = True
-                        break
+                            ct += 1
+                if ct > points -2:
+                    contours_match = True
+                    break
 
 
-        except:
-
-            print("error in contours")
-            print(x,y,w,h)
-            logging.info(f"error in safeguard {x}, {y}, {w}, {h} ")
 
         return contours_match
 
@@ -444,14 +532,16 @@ class imgproc:
         #    image = image.copy
         status = 0
         hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+        self.hsv = hsv.copy()
+        self.masks = {}
 
         lower_range = {
-            "green": np.array([50,70,70]), 
-            "yellow": np.array([15,90,100]),      
-            "red" : np.array([130,90,60]) 
+            "green": np.array([50,60,70]), 
+            "yellow": np.array([12,90,100]),      
+            "red" : np.array([130,60,100]) #increase saturation >100
             }
         upper_range = {
-            "green" : np.array([95,255,255]),
+            "green" : np.array([85,255,255]),
             "yellow" : np.array([50,255,255]),
             "red" : np.array([180,255,255])
             }
@@ -460,7 +550,7 @@ class imgproc:
             upper = upper_range[color]
             mask = cv2.inRange(hsv,lower,upper)
             if color == "red":
-                red2_lower =np.array([0,140,60]) 
+                red2_lower =np.array([0,120,60]) #0,100,100?
                 red2_upper =np.array([7,255,255]) 
                 mask2 = cv2.inRange(hsv,red2_lower,red2_upper)
                 mask = np.bitwise_or(mask,mask2)
@@ -481,19 +571,20 @@ class imgproc:
             contours, hierarchy = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
             c = max(contours, key = cv2.contourArea)
             if cv2.contourArea(c) > 5000:
+                if self.info: print("possible vicitm detcted")
 
                 if self.safeguards_color(c, color, mask):
 
 
-                    print(f"{color}: {cv2.contourArea(c)}")
+                    if self.info: print(f"{color}: {cv2.contourArea(c)}")
                     if color == "green": k = "k0"
                     else: k = "k1"
                     self.detected(k+self.side,victim=color)
                     logging.info(f"found {color}, image {self.fnum}")
-                    print(f"found {color}, image {self.fnum}")
+                    if self.info: print(f"found {color}, image {self.fnum}")
                     self.log(color,img = log_mask)
                 else: 
-                    print("stoped by safeguard")
+                    if self.info: print("stoped by safeguard")
                     self.log(f"F{color}",img = log_mask)
                     logging.info(f"found {color}, image {self.fnum}, but was stopped by safeguards")
 
@@ -501,6 +592,7 @@ class imgproc:
 
 
         if self.showcolor: cv2.imshow(color, log_mask)
+        self.masks[color] = log_mask
 
 
 
