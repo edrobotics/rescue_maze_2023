@@ -435,8 +435,9 @@ namespace SerialConsole
 
             Delay(300, true);
 
-            AddTile();
+            if (maps[currentMap].Areas.Count == 0) AddArea(posX, posZ);
             UpdateMapFull(true);
+            AddTile();
             currentArea = maps[currentMap].GetArea(new byte[] {(byte)posX, (byte)posZ});
             if (currentArea == -1)
             {
