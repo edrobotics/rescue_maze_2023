@@ -77,7 +77,7 @@ namespace SerialConsole
         static int lastDropped = 0;
         #endregion vars, enums, objs
 
-        #region VictimComm
+        #region VisionComm
         // ********************************** Socket server ********************************** 
 
         static void ServerLoop()
@@ -97,7 +97,7 @@ namespace SerialConsole
                     }
 
                     byte[] _buffer = new byte[128];
-                    stream.Read(_buffer, 0, _buffer.Length);
+                    int _read = stream.Read(_buffer);
                     int _recv = 0;
 
                     foreach (byte _b in _buffer)
@@ -108,6 +108,7 @@ namespace SerialConsole
                         }
                     }
 
+                    if (_read == 0) throw new Exception("Connection reset");
                     string _recivedData = Encoding.UTF8.GetString(_buffer, 0, _recv);
 
                     if (_recivedData.Contains('k') && !dropKits) //Danger as these might be modified and read at the same time, which is why they are volatile
@@ -117,9 +118,6 @@ namespace SerialConsole
                         dropSide = _recivedData[_recivedData.IndexOf('k') + 2];
                         Log($"_server_: found {dropAmount}", true);
                     }
-                    _recivedData = "";
-                    //sw.WriteLine("Done");
-                    //sw.Flush();
                 }
                 catch (Exception e)
                 {

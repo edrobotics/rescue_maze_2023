@@ -75,7 +75,7 @@ namespace EnumCommand
         /// </summary>
         public CommandAttribute(string _command)
         {
-            this.CommandValue = _command;
+            CommandValue = _command;
         }
 
         /// <summary>

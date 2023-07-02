@@ -433,7 +433,10 @@ namespace SerialConsole
             UpdateMapFull(true);
             currentArea = maps[currentMap].GetArea(new byte[] {(byte)posX, (byte)posZ});
             if (currentArea == -1)
+            {
+                errors += 5;
                 currentArea = 0;
+            }
             Delay(10);
             reset = true;
         }

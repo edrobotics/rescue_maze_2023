@@ -855,7 +855,7 @@ namespace SerialConsole
         /// </summary>
         public static void LogException(Exception e)
         {
-            errors += 2;
+            errors += 5;
             Log($"Exception: {e.Message} at {e.Source}:{e}", false);
             Console.WriteLine($"Exception -- {e.Message}");
         }
