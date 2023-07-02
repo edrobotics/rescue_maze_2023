@@ -441,19 +441,19 @@ namespace SerialConsole
         /// <summary>Make sure we always add to sincecheckpoint the same way</summary>
         static void AddSinceCheckpoint()
         {
-            if (sinceCheckpoint.Count == 0)
-            {
-                sinceCheckpoint.Add(new byte[] { (byte)posX, (byte)posZ, (byte)currentMap, (byte)direction });
-            }
-            else if (!ReadHere(BitLocation.explored))
-            {
-                AddSinceCheckpoint((byte)posX, (byte)posZ, (byte)currentMap);
-            }
+            AddSinceCheckpoint((byte)posX, (byte)posZ, (byte)currentMap);
         }
 
         static void AddSinceCheckpoint(byte _x, byte _z, byte _map)
         {
-            sinceCheckpoint.Add(new byte[] { _x, _z, _map });
+            if (sinceCheckpoint.Count == 0)
+            {
+                sinceCheckpoint.Add(new byte[] { _x, _z, _map, (byte)direction });
+            }
+            else if (!ReadHere(BitLocation.explored))
+            {
+                sinceCheckpoint.Add(new byte[] { _x, _z, _map });
+            }
         }
 
         /// <summary>Add this tile to sincecheckpoint, mapwayback and areas</summary>
@@ -469,10 +469,24 @@ namespace SerialConsole
             }
         }
 
+        /// <summary>Add this tile to sincecheckpoint, mapwayback and areas</summary>
+        static void AddTile(byte _x, byte _z, int _map, int _area)
+        {
+            AddSinceCheckpoint(_x, _z, (byte)_map);
+
+            if (!maps[_map].ReadBit(_x, _z, BitLocation.tileAdded))
+            {
+                Log($"Adding {_x},{_z}", false);
+                maps[_map].Areas[_area].Add(new byte[] { _x, _z });
+                maps[_map].WriteBit(_x, _z, BitLocation.tileAdded, true);
+            }
+        }
+
         static void AddArea(int _firstX, int _firstZ)
         {
             maps[currentMap].AddArea();
             currentArea = maps[currentMap].Areas.Count - 1;
+            maps[currentMap].Areas[currentArea].Add(new byte[] { (byte)_firstX, (byte)_firstZ });
 
             mapWayBack.Add(new List<byte[]>() { new byte[] { (byte)currentMap, (byte)currentArea }, 
                                                 new byte[] { (byte)_firstX, (byte)_firstZ } });
@@ -549,12 +563,13 @@ namespace SerialConsole
 
         static int TileAreaCheck(byte _x, byte _z, int _area, int _map)
         {
-            if (maps[_map].ReadBit(_x, _z, BitLocation.explored) && !maps[_map].ReadBit(_x, _z, BitLocation.blackTile))
+            if (maps[_map].ReadBit(_x, _z, BitLocation.explored) && !maps[_map].ReadBit(_x, _z, BitLocation.blackTile) && !maps[_map].ReadBit(_x, _z, BitLocation.ramp))
             {
                 int _tileArea = maps[_map].GetArea(new byte[] { _x, _z });
                 if (_tileArea == -1)
                 {
                     Log($"{_x},{_z} is not added, why???", false);
+                    return _area;
                 }
 
                 if (_tileArea != _area)
@@ -714,9 +729,9 @@ namespace SerialConsole
         {
             List<byte[]> path = new();
 
-            for (int i = mapWayBack.Count - 1; i <= 0; i--)
+            for (int i = mapWayBack.Count - 1; i >= 0; i--)
             {
-                for (int j = 2; j < mapWayBack[i].Count; i++) //Do not add first as it is info, or second as it is 'this' tile
+                for (int j = 2; j < mapWayBack[i].Count; j++) //Do not add first as it is info, or second as it is 'this' tile
                 {
                     path.Add(mapWayBack[i][j]);
                 }

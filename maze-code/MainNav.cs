@@ -481,6 +481,12 @@ namespace SerialConsole
         // ********************************** Ramps ********************************** 
         static void RampDriven(int _rampDirection, int _length, int _height)
         {
+            if (Math.Abs(_height - currentHeight) < 4)
+            {
+                currentHeight += _height;
+                return;
+            }
+
             try
             {
                 UpdateWayBack(); //Update old way back, to make sure it is up to date
@@ -492,10 +498,9 @@ namespace SerialConsole
                     Log("-_-_-_-_-_-_-_-_-_-_ Travelled ramp, was a new ramp _-_-_-_-_-_-_-_-_-_-", true);
                     //Update and save this map
                     WriteNextTo(BitLocation.ramp, true, Directions.front);
-                    WriteNextTo(BitLocation.explored, true, Directions.front);
 
                     byte[] _rampTile = DirToTile(direction, (byte)posX, (byte)posZ);
-                    AddSinceCheckpoint(_rampTile[0], _rampTile[1], (byte)currentMap);
+                    AddTile(_rampTile[0], _rampTile[1], currentMap, currentArea);
 
                     byte _fromMap = (byte)currentMap;
                     byte _fromX = (byte)posX, 
@@ -515,8 +520,7 @@ namespace SerialConsole
 
                         Log("____---- OLD MAP; NEW RAMP ----____", true);
                         currentMap = _mapIndex;
-                        maps[currentMap].UpdateHeight(currentHeight);
-                        currentHeight = maps[currentMap].Height;
+                        currentHeight = maps[currentMap].UpdateHeight(currentHeight);
 
                         maps[_fromMap].UpdateCrossTiles();
 
@@ -557,12 +561,7 @@ namespace SerialConsole
                 else //Used ramp
                 {
                     Log("-_-_-_-_-_-_-_-_-_-_ Ramp was a previously used ramp _-_-_-_-_-_-_-_-_-_-", true);
-                    if (!ReadNextTo(BitLocation.explored, Directions.front))
-                    { 
-                        WriteNextTo(BitLocation.explored, true, Directions.front);
-                        maps[currentMap].AddBitInfo(DirToTile(direction, (byte)posX, (byte)posZ), BitLocation.explored);
-                    }
-
+                    
                     //Get data
                     byte[] currentRamp = maps[currentMap].GetRampAt((byte)posX, (byte)posZ, (byte)direction);
                     byte[] newMapInfo = maps[currentRamp[(int)RampStorage.ConnectedMap]].GetRampAt(currentRamp[(int)RampStorage.RampIndex]);
@@ -587,7 +586,7 @@ namespace SerialConsole
 
                     posX = newMapInfo[(int)RampStorage.XCoord];
                     posZ = newMapInfo[(int)RampStorage.ZCoord];
-                    currentHeight = maps[currentMap].Height;
+                    currentHeight = maps[currentMap].UpdateHeight(currentHeight);
                     currentArea = maps[currentMap].GetArea(new byte[] {(byte)posX, (byte)posZ});
 
                     if (AreaInWayBack(currentArea))
@@ -660,21 +659,6 @@ namespace SerialConsole
             return _isStrange;
         }
 
-        //static void RampSizeFix(ref int _length, ref int _heigth)
-        //{
-        //    if (_heigth == 0) return;
-
-        //    if (_heigth > 0)
-        //    {
-        //        _length = (int)(_length * 0.9);
-        //    }
-        //    else
-        //    {
-        //        _length = (int)(_length * 1.1);
-        //        _heigth = (int)(_heigth * 1.1);
-        //    }
-        //}
-
         /// <summary>
         /// Finds a map depending on height
         /// </summary>
@@ -728,9 +712,20 @@ namespace SerialConsole
             {
                 Stopwatch sw = Stopwatch.StartNew();
 
-                foreach (Map map in maps)
+                for (int i = 0; i < maps.Count; i++)
                 {
-                    map.UpdateCrossTiles();
+                    maps[i].UpdateCrossTiles();
+                    foreach (byte[] _ramp in maps[i].Ramps)
+                    {
+                        bool _write = MarkMapAsVisited(_ramp[(int)RampStorage.ConnectedMap], i, maps[i].GetArea(new byte[] { _ramp[(int)RampStorage.XCoord], _ramp[(int)RampStorage.ZCoord] }));
+                        byte[] _tile = DirToTile(_ramp[(int)RampStorage.RampDirection], _ramp[(int)RampStorage.XCoord], _ramp[(int)RampStorage.ZCoord]);
+
+                        if (_write != maps[i][_tile[0], _tile[1], BitLocation.explored])
+                        {
+                            maps[i][_tile[0], _tile[1], BitLocation.explored] = _write;
+                            if (_write) maps[currentMap].AddBitInfo(DirToTile(direction, (byte)posX, (byte)posZ), BitLocation.explored);
+                        }
+                    }
                 }
 
                 sw.Stop();

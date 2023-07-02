@@ -101,6 +101,8 @@ namespace Mapping
         private int height;
         /// <summary>The height of the map from the starting map in cm</summary>
         public int Height { get => height; }
+        ///<summary>Whether any of the four directions on this map have had any strangeness with length, i.e., 
+        ///whether any of the ramps facing this direction had ramp lengths that were not dividable or close to dividable by a tile</summary>
         public bool[] HasStrangeRamps { get; set; } = new bool[] {false, false, false, false};
         public int StartPosX { get;}
         public int StartPosZ { get;}
@@ -158,9 +160,10 @@ namespace Mapping
         #region General data handling
         // ********************************** Data - Methods ********************************** 
 
-        public void UpdateHeight(int _newHeight)
+        public int UpdateHeight(int _newHeight)
         {
             height = (_newHeight + height) / 2;
+            return height;
         }
 
         public void UpdateCrossTiles()
@@ -215,7 +218,7 @@ namespace Mapping
                     }
                 }
             }
-            SerialConsole.Program.Log("!_!-!| Current tile is not added to area |!-!_!", true);
+            SerialConsole.Program.Log($"!_!-!| Tile {_tile[0]},{_tile[1]} is not added to area |!-!_!", true);
             return -1;
         }
 
@@ -339,19 +342,19 @@ namespace Mapping
             }
         }
 
-        ///// <summary>
-        ///// Sets all bits in the map to 0
-        ///// </summary>
-        //public void Clear()
-        //{
-        //    for (int i = 0; i < map.Length; i++)
-        //    {
-        //        for (int j = 0; j < map.Length; j++)
-        //        {
-        //            map[i, j] = 0;
-        //        }
-        //    }
-        //}
+        /// <summary>
+        /// Sets all bits in the map to 0
+        /// </summary>
+        public void Clear()
+        {
+            for (int i = 0; i < map.Length; i++)
+            {
+                for (int j = 0; j < map.Length; j++)
+                {
+                    map[i, j] = 0;
+                }
+            }
+        }
 
         /// <summary>
         /// Clears one bit from the entire map
