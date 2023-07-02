@@ -28,6 +28,7 @@ namespace SerialConsole
 
         static bool reset = false;
         static int savedMapCount = 1;
+        static int savedArea = 0;
 
         #endregion variables and objects
 
@@ -396,6 +397,7 @@ namespace SerialConsole
                     posZ = _checkpointXZ[1];
                     currentMap = _checkpointXZ[2];
                     direction = _checkpointXZ[3];
+                    currentArea = savedArea;
 
                     Log($"reset pos: {posX},{posZ}, dir: {direction}, map: {currentMap}", true);
                     for (int i = sinceCheckpoint.Count-1; i >= 0; i--)
@@ -602,6 +604,7 @@ namespace SerialConsole
             sinceCheckpoint.Clear();
             savedMapCount = maps.Count;
             savedRampCount = rampCount;
+            savedArea = currentArea;
             foreach (Map map in maps)
             {
                 map.SaveInfo();
