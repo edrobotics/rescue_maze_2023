@@ -595,10 +595,11 @@ namespace SerialConsole
                     }
                     else
                     {
+                        Log("Added mapwayback, unmapwaybacked area", true);
                         mapWayBack.Add(new List<byte[]>() { new byte[] { (byte)currentMap, (byte)currentArea },
                                                             DirToTile(direction - 2, (byte)posX, (byte)posZ) });
                     }
-                    Log($"NEW: x:{posX}, z:{posZ}, dir:{direction}, map:{currentMap}", true);
+                    Log($"NEW: x:{posX}, z:{posZ}, dir:{direction}, map:{currentMap}, area: {currentArea}", true);
                     Log($"new height {currentHeight}, map length = {_length}", true);
 
                 }
