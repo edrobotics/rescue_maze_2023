@@ -55,7 +55,7 @@ namespace SerialConsole
 
         static bool goingBack = false;
 
-#warning remove config file before competition
+#warning check config file before competition
         static double MINUTES = 8;
         static int MAXERRORS = 10;
 
@@ -856,7 +856,7 @@ namespace SerialConsole
         public static void LogException(Exception e)
         {
             errors += 5;
-            Log($"Exception: {e.Message} at {e.Source}:{e}", false);
+            Log($"Exception: {e}", false);
             Console.WriteLine($"Exception -- {e.Message}");
         }
         #endregion misc

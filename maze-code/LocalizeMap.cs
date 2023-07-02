@@ -581,7 +581,6 @@ namespace SerialConsole
 
                 if (_tileArea != _area)
                 {
-#warning Will area index change for other saved stuff?
                     //To make sure that index does not change, we need to 
                     if (_tileArea < _area)
                     {

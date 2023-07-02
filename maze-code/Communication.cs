@@ -97,7 +97,7 @@ namespace SerialConsole
                     }
 
                     byte[] _buffer = new byte[128];
-                    int _read = stream.Read(_buffer);
+                    stream.Read(_buffer);
                     int _recv = 0;
 
                     foreach (byte _b in _buffer)
@@ -108,7 +108,7 @@ namespace SerialConsole
                         }
                     }
 
-                    if (_read == 0) throw new Exception("Connection reset");
+                    //if (_read == 0) throw new Exception("Connection reset");
                     string _recivedData = Encoding.UTF8.GetString(_buffer, 0, _recv);
 
                     if (_recivedData.Contains('k') && !dropKits) //Danger as these might be modified and read at the same time, which is why they are volatile
@@ -128,6 +128,7 @@ namespace SerialConsole
                         client = listener.AcceptTcpClient();
                         stream = client.GetStream();
                     }
+                    Thread.Sleep(1000);
                 }
                 //listener.Stop();
             }
