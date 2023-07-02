@@ -195,12 +195,14 @@ namespace SerialConsole
                 Log($"(frontPresent = {frontPresent})", true);
                 if (!frontPresent && !ReadNextTo(BitLocation.blackTile, Directions.front))
                 {
+                    errors-=2; //I was right
                     Log("Retrying", true);
                     Drive(_checkRamps, false);
                     return;
                 }
                 else
                 {
+                    errors+=2; //I was wrong
                     Log("Updating map", true);
                     UpdateMapFull(true);
                     if (driveWay.Count > 0)
@@ -210,13 +212,12 @@ namespace SerialConsole
                         //FindPathHere(toPos[0], toPos[1]);
                         driveWay.Clear(); //We will find new since crosstile was not removed and mapwayback will be updated
                     }
-                    return;
                 }
             }
 
             FloorHandler(_recived, _checkRamps);
 
-            Delay(10);
+            Delay(10, true);
         }
 
         static void FloorHandler(string _recived, bool _checkRamps)

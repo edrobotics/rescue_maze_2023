@@ -303,6 +303,10 @@ namespace SerialConsole
                 {
                     for (int i = 0; i < 5; i++) Log("!!! Error in mapping, probably !!!", true);
                     errors += 4;
+                    if (driveWay.Count == 0 && !goingBack)
+                    {
+                        driveWay = maps[currentMap].PathTo(driveWay[^1][0], driveWay[^1][1], posX, posZ);
+                    }
                 }
             }
 

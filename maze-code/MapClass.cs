@@ -69,6 +69,9 @@ namespace Mapping
             height = _height;
         }
 
+        /// <summary>
+        /// Read and write by setting and getting bits
+        /// </summary>
         public bool this[int _index1, int _index2, BitLocation _bit]
         {
             get => ReadBit(_index1, _index2, _bit);
