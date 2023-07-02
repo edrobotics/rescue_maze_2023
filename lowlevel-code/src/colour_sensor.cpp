@@ -184,7 +184,11 @@ double ColourSensor::getColDistance(FloorColour ref, ColourSample comp, int refl
             return getColDistance(blueReference.s, comp);
             break;
         case floor_reflective:
+            #ifdef REFLECTIVE_SPLIT
             return getColDistance(reflectiveReferences[reflectiveIndex].s, comp);
+            #else
+            return getColDistance(reflectiveReference.s, comp);
+            #endif
             break;
         case floor_white:
             return getColDistance(whiteReference.s, comp);
@@ -202,17 +206,21 @@ ColourSensor::FloorColour ColourSensor::getClosestColour(ColourSample compare)
     distances[floor_blue] = getColDistance(blueReference.s, compare) - blueReference.radius;
     distances[floor_white] = getColDistance(whiteReference.s, compare) - whiteReference.radius;
     
+    #ifdef REFLECTIVE_SPLIT
     double reflectiveDistances[REFLECTIVE_REFERENCE_NUM];
     for (int i=0; i<usedReflectiveReferences; ++i)
     {
         reflectiveDistances[i] = getColDistance(reflectiveReferences[i].s, compare) - reflectiveReferences[i].radius;
     }
-    // distances[floor_reflective] = getColDistance(reflectiveReference1.s, compare) - reflectiveReference1.radius;
+    #else
+    distances[floor_reflective] = getColDistance(reflectiveReference.s, compare) - reflectiveReference.radius;
+    #endif
     
     FloorColour minCol = floor_black;
     if (distances[floor_blue] < distances[minCol]) minCol = floor_blue;
     if (distances[floor_white] < distances[minCol]) minCol = floor_white;
 
+    #ifdef REFLECTIVE_SPLIT
     for (int i=0; i<usedReflectiveReferences; ++i)
     {
         if (minCol != floor_reflective)
@@ -232,6 +240,9 @@ ColourSensor::FloorColour ColourSensor::getClosestColour(ColourSample compare)
             }
         }
     }
+    #else
+    if (distances[floor_reflective] < distances[minCol]) minCol = floor_reflective;
+    #endif
 
     return minCol;
 }
@@ -302,7 +313,11 @@ ColourSensor::FloorColour ColourSensor::identifyColour()
             reference = blueReference;
             break;
         case floor_reflective:
+            #ifdef REFLECTIVE_SPLIT
             reference = reflectiveReferences[minReflectiveIndex];
+            #else
+            reference = reflectiveReference;
+            #endif
             // If both white and reflective are detected, make sure to detect white
             if (getColDistance(whiteReference.s, reading)-whiteReference.radius <= MAX_DETECTION_DISTANCE)
             {
@@ -408,6 +423,7 @@ void ColourSensor::refreshReferences()
     whiteReference = whiteSamples.read(whiteAddr);
     Serial.print("White: ");printColStorData(whiteReference);
 
+    #ifdef REFLECTIVE_SPLIT
     usedReflectiveReferences = reflectiveSamples.readReflectiveNum(reflectiveNumAddr);
     Serial.print("Used reflective references is: ");Serial.println(usedReflectiveReferences);
     for (int i=0;i<usedReflectiveReferences;++i)
@@ -415,6 +431,10 @@ void ColourSensor::refreshReferences()
         reflectiveReferences[i] = reflectiveSamples.readReflective(reflectiveAddresses[i]);
         Serial.print("Reflective");Serial.print(i);Serial.print(" ");printColStorData(reflectiveReferences[i]);
     }
+    #else
+    reflectiveReference = reflectiveSamples.read(reflectiveAddr);
+    Serial.print("Reflective: ");printColStorData(reflectiveReference);
+    #endif;
 }
 
 // Resets the indecies for samples
@@ -493,18 +513,24 @@ void ColourSensor::calibrationRoutineLoop()
         }
         else
         {
-        reflectiveSamples.updateReflective();
-        EEPROM.put(reflectiveNumAddr, reflectiveSamples.getIndex()); // Write the number of reflective samples stored
-        Serial.print("Writing reflective number: ");Serial.println(reflectiveSamples.getIndex());
-        reflectiveSamples.write(reflectiveAddresses); // Write the samples themselves
-        changeDetected = true;
-        for (int i=0;i<reflectiveSamples.getIndex();++i)
-            {
-                newLights::setColour(i+1, newColourPurple, false);
-            }
-        newLed.show();
-        delay(buttonDebounceDelay);
-        newLights::turnOff();
+            #ifdef REFLECTIVE_SPLIT
+            reflectiveSamples.updateReflective();
+            EEPROM.put(reflectiveNumAddr, reflectiveSamples.getIndex()); // Write the number of reflective samples stored
+            Serial.print("Writing reflective number: ");Serial.println(reflectiveSamples.getIndex());
+            reflectiveSamples.write(reflectiveAddresses); // Write the samples themselves
+            #else
+            reflectiveSamples.calculate();
+            reflectiveSamples.write(reflectiveAddr);
+            #endif
+
+            changeDetected = true;
+            for (int i=0;i<reflectiveSamples.getIndex();++i)
+                {
+                    newLights::setColour(i+1, newColourPurple, false);
+                }
+            newLed.show();
+            delay(buttonDebounceDelay);
+            newLights::turnOff();
         }
     }
     else if (readChar == 'v') // whiteButton.isPressed() || 

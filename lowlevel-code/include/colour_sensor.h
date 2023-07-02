@@ -82,7 +82,6 @@ struct ColourStorageData
     ColourStorageData()
     {
         radius = 0;
-        s;
     }
     ColourStorageData(double rad)
     {
@@ -99,6 +98,10 @@ void printColStorData(ColourStorageData printData);
 const int MAX_COLOUR_SAMPLES = 8; // Outside of class due to error
 const int REFLECTIVE_REFERENCE_NUM = 5;
 
+// #define REFLECTIVE_SPLIT // Using individual reflective samples
+#ifndef REFLECTIVE_SPLIT
+#define REFLECTIVE_COMBINED // Using a single calculated threshold sample like all the other colours do
+#endif
 
 class ColourSampleCollection
 {
@@ -139,6 +142,7 @@ class ColourSensor
     public:
         ColourSensor()
         {
+            #ifdef REFLECTIVE_SPLIT
             reflectiveAddresses[0] = reflectiveNumAddr + sizeof(reflectiveNumAddr);
             for (int i=1;i<REFLECTIVE_REFERENCE_NUM;++i)
             {
@@ -148,6 +152,7 @@ class ColourSensor
             {
                 reflectiveSamples.setReflective(true);
             }
+            #endif
         }
         void init();
         enum FloorColour {
@@ -222,15 +227,20 @@ class ColourSensor
         const int blackAddr = 0;
         const int blueAddr = sizeof(ColourStorageData);
         const int whiteAddr = 2*sizeof(ColourStorageData);
-        const int reflectiveNumAddr = 3*sizeof(ColourStorageData);
-        int reflectiveAddresses[REFLECTIVE_REFERENCE_NUM];
         ColourStorageData blackReference;
         ColourStorageData blueReference;
-        // ColourStorageData reflectiveReference1;
+        ColourStorageData whiteReference;
+
+        #ifdef REFLECTIVE_SPLIT
+        const int reflectiveNumAddr = 3*sizeof(ColourStorageData);
+        int reflectiveAddresses[REFLECTIVE_REFERENCE_NUM];
         int usedReflectiveReferences = 0;
         int minReflectiveIndex = 0; // The index for the closest reflective colour
         ColourStorageData reflectiveReferences[REFLECTIVE_REFERENCE_NUM] {true};
-        ColourStorageData whiteReference;
+        #else
+        const int reflectiveAddr = 3*sizeof(ColourStorageData);
+        ColourStorageData reflectiveReference;
+        #endif
 };
 
 
