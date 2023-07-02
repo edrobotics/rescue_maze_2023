@@ -589,9 +589,9 @@ namespace SerialConsole
                     currentHeight = maps[currentMap].UpdateHeight(currentHeight);
                     currentArea = maps[currentMap].GetArea(new byte[] {(byte)posX, (byte)posZ});
 
-                    if (AreaInWayBack(currentArea))
+                    if (AreaInWayBack(currentArea, currentMap))
                     {
-                        RemoveWayBack(currentArea); //We are back to this area, same shortest path back
+                        RemoveWayBack(currentArea, currentMap); //We are back to this area, same shortest path back
                     }
                     else
                     {

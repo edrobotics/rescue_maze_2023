@@ -514,11 +514,11 @@ namespace SerialConsole
             mapWayBack[^1].Insert(1, new byte[] { (byte)_fromX, (byte)_fromZ });
         }
 
-        static bool AreaInWayBack(int _area)
+        static bool AreaInWayBack(int _area, int _untilMap)
         {
             for (int i = mapWayBack.Count - 1; i >= 0; i--)
             {
-                if (mapWayBack[i][0][1] == _area)
+                if (mapWayBack[i][0][1] == _area && mapWayBack[i][0][0] == _untilMap)
                 {
                     return true;
                 }
@@ -526,11 +526,11 @@ namespace SerialConsole
             return false;
         }
 
-        static void RemoveWayBack(int _untilArea)
+        static void RemoveWayBack(int _untilArea, int _untilMap)
         {
             for (int i = mapWayBack.Count - 1; i >= 0; i--)
             {
-                if (mapWayBack[i][0][1] == _untilArea)
+                if (mapWayBack[i][0][1] == _untilArea && mapWayBack[i][0][0] == _untilMap)
                 {
                     return;
                 }
