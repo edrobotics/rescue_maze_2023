@@ -91,7 +91,7 @@ const double WHEEL_CIRCUMFERENCE = PI * WHEEL_DIAMETER;
 
 // Driving
 const double CMPS_TO_RPM = 1.0 / WHEEL_CIRCUMFERENCE * 60.0;  // Constant to convert from cm/s to rpm
-const double BASE_SPEED_CMPS = 17;                            // The base speed of driving (cm/s)
+const double BASE_SPEED_CMPS = 18;                            // The base speed of driving (cm/s)
 double BASE_TURNING_SPEED = 35 / CMPS_TO_RPM;                 // The turning speed to normally use
 double g_baseSpeed_CMPS = BASE_SPEED_CMPS;                    // The speed to drive at
 const double BASE_SPEED_RPM = CMPS_TO_RPM * g_baseSpeed_CMPS; // The base speed of driving (rpm)
@@ -2128,8 +2128,12 @@ double getDistanceDriven()
 }
 
 const double normAngleP = 1;      //    1  , 1, 1  ,
-const double normDistanceP = 2.5; // 2.2, 3, 3  ,
-const double normDistanceD = 1;   // 0, 1, 0.5,
+const double normDistanceP = 1.8; // 2.2, 3, 3  ,
+const double normDistanceD = 0;   // 0, 1, 0.5,
+
+const double turboAngleP = 1;
+const double turboDistanceP = 1.8;
+const double turboDistanceD = 0;
 
 const double rampAngleP = 0.2;
 const double rampDistanceP = 2;
@@ -2160,6 +2164,10 @@ void useRampPID()
 // Variables for derivative calculation
 WallSide g_lastWallSide = wall_none; // Was annoying to do as static
 
+// #define PIDTUNE_ANGLEP
+// #define PIDTUNE_DISTANCEP
+// #define PIDTUNE_DISTANCED
+
 // Drive with wall following. Will do one iteration, so to actually follow the wall, call it multiple times in short succession.
 // wallSide - which wall to follow. Can be wall_left, wall_right or wall_both. Directions relative to the robot.
 // startAngle - The angle relative to the wall for the begin of the move (degrees, mathangle)
@@ -2167,6 +2175,7 @@ WallSide g_lastWallSide = wall_none; // Was annoying to do as static
 // The last two arguments are only used if the wallSide == wall_none
 void pidDrive(WallSide wallSide)
 {
+
   static double lastDistError = 0;
   static unsigned long lastExecutionTime = millis();
   double distanceError = 0;      // positive means that we are to the right of where we want to be.
@@ -2184,12 +2193,34 @@ void pidDrive(WallSide wallSide)
   g_lastWallSide = wallSide;
 
   double goalAngle = 0;
-  if (wallSide != wall_none)
-  {                                                                         // If you do not have a wall, continue driving straight forwards with correction
+  // if (wallSide != wall_none)
+  // {                                                                         // If you do not have a wall, continue driving straight forwards with correction
     goalAngle = distanceError * distanceP + distanceDerivative * distanceD; // Calculate the angle you want depending on the distance to the wall (error) and the speed at which you approach (derivative)
-  }
+  // }
   double angleError = goalAngle - pose.angle; // Calculate the correction needed in the wheels to get to the angle
   double correction = angleP * angleError;    // Calculate the correction in the wheels. Positive is counter-clockwise (math)
+
+  #ifdef PIDTUNE_ANGLEP
+  Serial.print("angleError:");Serial.print(angleError);Serial.print(",");Serial.print("goalAngle:");Serial.println(goalAngle);
+  if (Serial.available() > 0)
+  {
+    angleP = Serial.parseFloat();
+  }
+  #endif
+  #ifdef PIDTUNE_DISTANCEP
+  Serial.print("distanceError:");Serial.println(distanceError);
+  if (Serial.available() > 0)
+  {
+    distanceP = Serial.parseFloat();
+  }
+  #endif
+  #ifdef PIDTUNE_DISTANCED
+  Serial.print("distanceError:");Serial.println(distanceError);
+  if (Serial.available() > 0)
+  {
+    distanceD = Serial.parseFloat();
+  }
+  #endif
 
   // Filter out the extreme cases
   if (correction > 10)
