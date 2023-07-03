@@ -143,13 +143,8 @@ class imgproc:
         self.image_clone = self.image.copy()#image where lines and contours will be showed to
         self.fnum = fnum
 
-        try:
-            self.find_victim()
-            self.Color_victim2()
-        except Exception as e: 
-            print(e)
-            print("something went wrong in do the work")
-            logging.exception("something went wrong")
+        self.find_victim()
+        self.Color_victim2()
         self.evaluate_detected()
 
         if self.showsource:
