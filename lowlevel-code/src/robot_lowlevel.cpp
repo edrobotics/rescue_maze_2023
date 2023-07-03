@@ -92,6 +92,7 @@ const double WHEEL_CIRCUMFERENCE = PI * WHEEL_DIAMETER;
 // Driving
 const double CMPS_TO_RPM = 1.0 / WHEEL_CIRCUMFERENCE * 60.0;  // Constant to convert from cm/s to rpm
 const double BASE_SPEED_CMPS = 18;                            // The base speed of driving (cm/s)
+const double TURBO_SPEED_CMPS = 20;
 double BASE_TURNING_SPEED = 46 / CMPS_TO_RPM;                 // The turning speed to normally use
 double g_baseSpeed_CMPS = BASE_SPEED_CMPS;                    // The speed to drive at
 const double BASE_SPEED_RPM = CMPS_TO_RPM * g_baseSpeed_CMPS; // The base speed of driving (rpm)
@@ -1197,7 +1198,7 @@ void RobotPose::calculate2(WallSide wallSide, double &tAngle, bool useGyroAngle,
   else
   {
     // If no wall is present
-    xDist += distanceIncrement * sin(angle * DEG_TO_RAD);
+    xDist += distanceIncrement * sin(-angle * DEG_TO_RAD);
   }
 
   // Blending with front ultrasonic sensor
@@ -2654,6 +2655,10 @@ bool driveStepDriveLoop(WallSide &wallToUse, double &dumbDistanceDriven, Stoppin
     // Serial.print(g_horizontalDistanceDrivenOnRamp);Serial.print("    ");Serial.print(g_verticalDistanceDrivenOnRamp);Serial.print("    ");Serial.println(-gyro.getAngleX());
 
     lights::onRamp();
+    if (rampChange==true)
+    {
+      g_baseSpeed_CMPS = BASE_SPEED_CMPS;
+    }
   }
   else // What to do ONLY when NOT on a ramp ------------------------------------------------------
   {
@@ -2665,8 +2670,16 @@ bool driveStepDriveLoop(WallSide &wallToUse, double &dumbDistanceDriven, Stoppin
         pose.yDist = 15;
         g_trueDistanceDriven = pose.yDist;
       }
+      if (g_turboSpeed==true)
+      {
+        g_baseSpeed_CMPS = TURBO_SPEED_CMPS; 
+      }
+      else
+      {
+        g_baseSpeed_CMPS = BASE_SPEED_CMPS;
+      }
+      useNormPID();
     }
-    useNormPID();
     // Checking if you are done
     // if (ultrasonicCurrentDistances[ultrasonic_F][usmt_smooth] < FRONT_WALL_STOPPING_TRESHOLD && g_driveBack == false) // If the robot is the correct distance away from the front wall. The goal is that ultrasonicDistanceF is 5.2 when the robot stops. Should not do when driving backwards.
     // {
@@ -3161,14 +3174,17 @@ void makeNavDecision(Command &action)
 
 //------------------------------ Victims and rescue kits ------------------------------//
 
+const int servoPin = 4;
 int servoPos = 10; // Servo position. Here set to starting position
-const int servoLower = 5;
-const int servoUpper = 176;
+const int SERVO_LOWER = 5;
+const int SERVO_UPPER = 176;
 
 void servoSetup()
 {
-  servo.attach(4);
+  servo.attach(servoPin);
   servo.write(servoPos);
+  delay(200);
+  servo.detach();
 }
 
 void handleVictim(double fromInterrupt)
@@ -3193,7 +3209,7 @@ void handleVictim(double fromInterrupt)
   int droppedKits = 0;
 
   // Simultaneous blinking and deployment of rescue kits
-  servoPos = servoLower;
+  servoPos = SERVO_LOWER;
   long beginTime = millis();
   long rkTimeFlag = 0;
   const int rkDelay = 200;          // The time between deploying rescue kits in ms.
@@ -3201,6 +3217,7 @@ void handleVictim(double fromInterrupt)
   const int minBlinkTime = 5500;    // Should be 5000, but I added 1000 (1s) for some margins in the referees perception
   const int servoStepTime = 10;
   const int servoStepSize = 2;
+  servo.attach(servoPin);
   lights::turnOnVictimLights(true); // For the first half blink cycle
   while (droppedKits < g_kitsToDrop || millis() - beginTime < minBlinkTime)
   {
@@ -3208,6 +3225,7 @@ void handleVictim(double fromInterrupt)
     static int direction = 1; // For keeping track of in what direction the servo is moving. 1 is back and -1 is forward
     static long loopTimeFlag = 0;
     static long servoMoveFlag = 0;
+    static bool shouldAttach = true;
 
     if (millis() - loopTimeFlag > servoStepTime) // Delay for the servo movement
     {
@@ -3216,22 +3234,32 @@ void handleVictim(double fromInterrupt)
       // Dropping rescue kits
       if (millis() - rkTimeFlag > rkDelay && droppedKits < g_kitsToDrop) // If enough time has passed and not all kits have been dropped
       {
+        if (shouldAttach==true)
+        {
+          servo.attach(servoPin);
+          shouldAttach = false;
+        }
         if (millis() - servoMoveFlag >= servoMoveDelay)
         {
           servo.write(servoPos);                       // Write servo position
           servoPos += direction * servoStepSize;                   // Increment/decrement depending on which direction you are moving in.
-        }
-        if (direction == 1 && servoPos > servoUpper) // When moving back, if reaching endpoint
-        {
-          direction = -1; // Switch direction
-          servoMoveFlag = millis();
-        }
-        else if (direction == -1 && servoPos < servoLower) // If moving forward, if reaching endpoint
-        {
-          direction = 1;         // Change direction
-          rkTimeFlag = millis(); // Set timeflag for delay
-          ++droppedKits;         // Increment the number of dropped kits
-          servoMoveFlag = millis();
+          if (direction == 1 && servoPos > SERVO_UPPER) // When moving back, if reaching endpoint
+          {
+            direction = -1; // Switch direction
+            servoMoveFlag = millis();
+            servo.detach();
+            shouldAttach = true;
+
+          }
+          else if (direction == -1 && servoPos < SERVO_LOWER) // If moving forward, if reaching endpoint
+          {
+            direction = 1;         // Change direction
+            rkTimeFlag = millis(); // Set timeflag for delay
+            ++droppedKits;         // Increment the number of dropped kits
+            servoMoveFlag = millis();
+            servo.detach();
+            shouldAttach = true;
+          }
         }
       }
     }
@@ -3255,6 +3283,7 @@ void handleVictim(double fromInterrupt)
 
     lights::showCustom();
   }
+  servo.detach();
 
   // Return the robot to original orientation
   if (turnDirection == ccw)
@@ -3277,13 +3306,13 @@ void handleVictim(double fromInterrupt)
 // void deployRescueKit()
 // {
 
-//   for (servoPos = servoLower; servoPos<=servoUpper; servoPos += 2)
+//   for (servoPos = SERVO_LOWER; servoPos<=SERVO_UPPER; servoPos += 2)
 //   {
 //     servo.write(servoPos);
 //     delay(15);
 //   }
 //   delay(500);
-//   for (servoPos = servoUpper; servoPos >= servoLower; servoPos -= 2)
+//   for (servoPos = SERVO_UPPER; servoPos >= SERVO_LOWER; servoPos -= 2)
 //   {
 //     servo.write(servoPos);
 //     delay(15);

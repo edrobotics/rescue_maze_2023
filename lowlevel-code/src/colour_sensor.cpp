@@ -415,21 +415,21 @@ ColourSample ColourSensor::getColourSample()
 // Reads thresholds from EEPROM
 void ColourSensor::refreshReferences()
 {
-    Serial.println("---Refreshing---");
+    // Serial.println("---Refreshing---");
     blackReference = blackSamples.read(blackAddr);
-    Serial.print("Black: ");printColStorData(blackReference);
+    // Serial.print("Black: ");printCorefreshlStorData(blackReference);
     blueReference = blueSamples.read(blueAddr);
-    Serial.print("Blue: ");printColStorData(blueReference);
+    // Serial.print("Blue: ");printColStorData(blueReference);
     whiteReference = whiteSamples.read(whiteAddr);
-    Serial.print("White: ");printColStorData(whiteReference);
+    // Serial.print("White: ");printColStorData(whiteReference);
 
     #ifdef REFLECTIVE_SPLIT
     usedReflectiveReferences = reflectiveSamples.readReflectiveNum(reflectiveNumAddr);
-    Serial.print("Used reflective references is: ");Serial.println(usedReflectiveReferences);
+    // Serial.print("Used reflective references is: ");Serial.println(usedReflectiveReferences);
     for (int i=0;i<usedReflectiveReferences;++i)
     {
         reflectiveReferences[i] = reflectiveSamples.readReflective(reflectiveAddresses[i]);
-        Serial.print("Reflective");Serial.print(i);Serial.print(" ");printColStorData(reflectiveReferences[i]);
+        // Serial.print("Reflective");Serial.print(i);Serial.print(" ");printColStorData(reflectiveReferences[i]);
     }
     #else
     reflectiveReference = reflectiveSamples.read(reflectiveAddr);
