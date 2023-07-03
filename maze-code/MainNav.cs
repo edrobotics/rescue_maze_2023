@@ -528,9 +528,6 @@ namespace SerialConsole
                     }
                     else //New map
                     {
-                        maps[_fromMap].AddRamp(_fromX, _fromZ, (byte)_rampDirection, (byte)rampCount, (byte)(maps.Count - 1), (byte)_length);
-                        Log($"Saved ramp: x:{_fromX}, z:{_fromZ}, dir:{_rampDirection}, rampCount:{rampCount}, map:{maps.Count - 1}", false);
-
                         Log("____---- NEW MAP; NEW RAMP ----____", true);
 
                         //Setup new map
@@ -538,7 +535,11 @@ namespace SerialConsole
                         currentMap = maps.Count - 1;
 
                         _rampTile = DirToTile(direction - 2, (byte)posX, (byte)posZ);
+
+                        maps[_fromMap].AddRamp(_fromX, _fromZ, (byte)_rampDirection, (byte)rampCount, (byte)(maps.Count - 1), (byte)_length);
+                        Log($"Saved ramp: x:{_fromX}, z:{_fromZ}, dir:{_rampDirection}, rampCount:{rampCount}, map:{maps.Count - 1}", false);
                     }
+
                     maps[currentMap].AddRamp((byte)posX, (byte)posZ, (byte)FixDirection(_rampDirection - 2), (byte)rampCount, _fromMap, (byte)_length);
                     rampCount++;
 
@@ -565,6 +566,14 @@ namespace SerialConsole
                     //Get data
                     byte[] currentRamp = maps[currentMap].GetRampAt((byte)posX, (byte)posZ, (byte)direction);
                     byte[] newMapInfo = maps[currentRamp[(int)RampStorage.ConnectedMap]].GetRampAt(currentRamp[(int)RampStorage.RampIndex]);
+                    foreach(byte _info in currentRamp)
+                    {
+                        Log("::..::" + _info + "::..::", false);
+                    }
+                    foreach (byte _info in newMapInfo)
+                    {
+                        Log("..::.." + _info + "..::..", false);
+                    }
 
                     //Update data
                     int _oldMap = currentMap;
@@ -856,7 +865,7 @@ namespace SerialConsole
         /// </summary>
         public static void LogException(Exception e)
         {
-            errors += 5;
+            errors += 4;
             Log($"Exception: {e}", false);
             Console.WriteLine($"Exception -- {e.Message}");
         }
