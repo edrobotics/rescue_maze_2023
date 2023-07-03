@@ -150,11 +150,11 @@ class imgproc:
             print(e)
             print("something went wrong in do the work")
             logging.exception("something went wrong")
+        self.evaluate_detected()
 
         if self.showsource:
             cv2.imshow("image_clone",self.image_clone)
 
-        self.evaluate_detected()
 
 
     def detected(self,msg, victim): #makes the victim only send once every victim detection
@@ -164,9 +164,10 @@ class imgproc:
 
 
 
-    def evaluate_detected(self): #does not update lastdetected[1] would be horrible if one is bdetected all the time
+    def evaluate_detected(self):
         send = False
         if len(self.framedetected) > 0:
+
             for victim in self.framedetected:
                 msg = self.framedetected[victim]
                 
@@ -176,15 +177,25 @@ class imgproc:
                 else:
                     if self.info: print("alredy detected")
                 #updates last detected
+                break
+            if send:
+                if len(self.framedetected) == 1:
+                    self.sendMessage(msg)
+                elif len(self.framedetected) > 1:
+                    if len(victim) == 1:
+                        self.sendMessage(msg)
+            
+            S_detected_victims = ""
+            for victim in self.framedetected:
                 new_list = (msg, self.fnum, list[2]+ 1)
                 self.lastdetected[victim] = new_list
-                break
-        if send:
-            if len(self.framedetected) == 1:
-                self.sendMessage(msg)
-            elif len(self.framedetected) > 1:
-                if len(victim) == 1:
-                    self.sendMessage(msg)
+                S_detected_victims += f"{victim} " 
+            
+                  
+            pos = [10,20]
+            self.putText(S_detected_victims,pos=pos)
+
+            
 
 
             
@@ -330,7 +341,7 @@ class imgproc:
                     cv2.waitKey(0)
 
   
-        if sim[0] + sim[1] > 1.95:
+        if sim[0] + sim[1] > 1.93:
             identified = True
 
         kits = self.how_many_kits(victim)
@@ -349,8 +360,10 @@ class imgproc:
         return kits
     
     def putText(self, text, pos = None):
-        bottomLeftCornerOfText = self.putTextPos
-
+        if pos == None:
+            bottomLeftCornerOfText = self.putTextPos
+        else:
+            bottomLeftCornerOfText = pos
         font                   = cv2.FONT_HERSHEY_SIMPLEX
         fontScale              =  1/2
         color                  = (255,255,255)
@@ -361,6 +374,7 @@ class imgproc:
     
     def safeguards_color(self, contour, victim,mask):#reducing false identified colour victims
         correct = False
+        text_pos = [10,0]
         (x,y,w,h) = cv2.boundingRect(contour)
         if x > 300: self.side = "l"
         else: self.side = "r"
@@ -369,12 +383,18 @@ class imgproc:
             if self.check_position(x,y,w,h):
                 if self.check_movement(victim,x,y,w,h): #evaluate and remove
                     correct = True
-                else: print("something of in multiframe safeguard")
+                else: 
+                    print("something of in multiframe safeguard")
+                    self.putText("not moving",text_pos)
 
-            elif self.info: print("to high or low")
+            elif self.info: 
+                print("to high or low")
+                self.putText("wrong position",text_pos)
 
         else: 
-            if self.info: print("no edges")
+            if self.info: 
+                print("no edges")
+                self.putText("no edges",text_pos)
         return correct
 
 
@@ -387,6 +407,11 @@ class imgproc:
             b_position = True
         elif victimheight2 > x and victimheight2 - 20 < x + w:
             b_position = True
+
+        if y < 42 or y + h > 442: #FIX VALUES  
+            b_position = False
+
+
         return b_position
  
     def check_movement(self,victim,x,y,w,h):
@@ -495,8 +520,8 @@ class imgproc:
 
         lower_range = {
             "green": np.array([50,60,70]), 
-            "yellow": np.array([12,90,100]),      
-            "red" : np.array([130,60,100]) #increase saturation >100
+            "yellow": np.array([12,90,100]),#decrese Saturation? 
+            "red" : np.array([130,69,100]) #increase saturation >100
             }
         upper_range = {
             "green" : np.array([85,255,255]),
