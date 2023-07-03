@@ -98,7 +98,7 @@ void printColStorData(ColourStorageData printData);
 const int MAX_COLOUR_SAMPLES = 8; // Outside of class due to error
 const int REFLECTIVE_REFERENCE_NUM = 5;
 
-// #define REFLECTIVE_SPLIT // Using individual reflective samples
+#define REFLECTIVE_SPLIT // Using individual reflective samples
 #ifndef REFLECTIVE_SPLIT
 #define REFLECTIVE_COMBINED // Using a single calculated threshold sample like all the other colours do
 #endif

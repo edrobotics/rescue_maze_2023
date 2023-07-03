@@ -92,7 +92,7 @@ const double WHEEL_CIRCUMFERENCE = PI * WHEEL_DIAMETER;
 // Driving
 const double CMPS_TO_RPM = 1.0 / WHEEL_CIRCUMFERENCE * 60.0;  // Constant to convert from cm/s to rpm
 const double BASE_SPEED_CMPS = 18;                            // The base speed of driving (cm/s)
-double BASE_TURNING_SPEED = 35 / CMPS_TO_RPM;                 // The turning speed to normally use
+double BASE_TURNING_SPEED = 46 / CMPS_TO_RPM;                 // The turning speed to normally use
 double g_baseSpeed_CMPS = BASE_SPEED_CMPS;                    // The speed to drive at
 const double BASE_SPEED_RPM = CMPS_TO_RPM * g_baseSpeed_CMPS; // The base speed of driving (rpm)
 double g_trueDistanceDriven = 0;                              // The correct driven distance. Measured as travelling along the wall and also updated when landmarks are seen
@@ -450,7 +450,7 @@ void serialcomm::cancelInterrupt()
 
 //---------------------- Buzzer and lights (for debugging) ------------------//
 
-const int CAMERA_LED_PIN = 34;
+const int CAMERA_LED_PIN = 36;
 const int CAMERA_LED_NUM = 12;
 CRGB cameraLeds[CAMERA_LED_NUM];
 
@@ -2687,7 +2687,7 @@ bool driveStepDriveLoop(WallSide &wallToUse, double &dumbDistanceDriven, Stoppin
       return true;
     }
 
-    if ((g_trueDistanceDriven >= g_targetDistance - 1.7 && abs(gyro.getAngleX()) < 4) || g_trueDistanceDriven >= g_targetDistance) // Stopping due to dead reckoning. Only if robot flat enough or having driven further as a safeguard (if angle is wrong)
+    if ((g_trueDistanceDriven >= g_targetDistance - 2 && abs(gyro.getAngleX()) < 4) || g_trueDistanceDriven >= g_targetDistance) // Stopping due to dead reckoning. Only if robot flat enough or having driven further as a safeguard (if angle is wrong)
     {
       if (stopReason == stop_none)
         stopReason = stop_deadReckoning;
@@ -3196,33 +3196,42 @@ void handleVictim(double fromInterrupt)
   servoPos = servoLower;
   long beginTime = millis();
   long rkTimeFlag = 0;
-  const int rkDelay = 500;          // The time between deploying rescue kits in ms.
-  const int minBlinkTime = 6000;    // Should be 6000, but I added 1000 (1s) for some margins in the referees perception
+  const int rkDelay = 200;          // The time between deploying rescue kits in ms.
+  const int servoMoveDelay = 20;    // Delay when switching directions
+  const int minBlinkTime = 5500;    // Should be 5000, but I added 1000 (1s) for some margins in the referees perception
+  const int servoStepTime = 10;
+  const int servoStepSize = 2;
   lights::turnOnVictimLights(true); // For the first half blink cycle
   while (droppedKits < g_kitsToDrop || millis() - beginTime < minBlinkTime)
   {
     static long blinkTimerFlag = beginTime;
     static int direction = 1; // For keeping track of in what direction the servo is moving. 1 is back and -1 is forward
     static long loopTimeFlag = 0;
+    static long servoMoveFlag = 0;
 
-    if (millis() - loopTimeFlag > 15) // Delay for the servo movement
+    if (millis() - loopTimeFlag > servoStepTime) // Delay for the servo movement
     {
       loopTimeFlag = millis();
 
       // Dropping rescue kits
       if (millis() - rkTimeFlag > rkDelay && droppedKits < g_kitsToDrop) // If enough time has passed and not all kits have been dropped
       {
-        servo.write(servoPos);                       // Write servo position
-        servoPos += direction * 2;                   // Increment/decrement depending on which direction you are moving in.
+        if (millis() - servoMoveFlag >= servoMoveDelay)
+        {
+          servo.write(servoPos);                       // Write servo position
+          servoPos += direction * servoStepSize;                   // Increment/decrement depending on which direction you are moving in.
+        }
         if (direction == 1 && servoPos > servoUpper) // When moving back, if reaching endpoint
         {
           direction = -1; // Switch direction
+          servoMoveFlag = millis();
         }
         else if (direction == -1 && servoPos < servoLower) // If moving forward, if reaching endpoint
         {
           direction = 1;         // Change direction
           rkTimeFlag = millis(); // Set timeflag for delay
           ++droppedKits;         // Increment the number of dropped kits
+          servoMoveFlag = millis();
         }
       }
     }
@@ -3288,8 +3297,8 @@ void handleVictim(double fromInterrupt)
 
 // Front touch sensor buttons
 
-HardwareButton pressPlateLeft{30, false};
-HardwareButton pressPlateRight{32, false};
+HardwareButton pressPlateLeft{32, false};
+HardwareButton pressPlateRight{34, false};
 
 TouchSensorSide frontSensorActivated()
 {

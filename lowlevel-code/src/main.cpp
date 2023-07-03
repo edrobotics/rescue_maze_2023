@@ -8,8 +8,8 @@
 #include <Wire.h>
 #include <SPI.h>
 
-// #define PICODE
-#define TESTING_NAV
+#define PICODE
+// #define TESTING_NAV
 // #define TESTING
 // #define COLSENS_CALIBRATION
 
@@ -21,7 +21,7 @@ extern ColourSensor colSensor; // The colSensor object in robot_lowlevel.cpp
 extern RobotPose pose;
 extern double BASE_TURNING_SPEED;
 
-HardwareButton colCalButton {36, false};
+HardwareButton colCalButton {30, false};
 
 void setup()
 {
