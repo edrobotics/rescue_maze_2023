@@ -105,6 +105,8 @@ class imgproc:
 
     
     
+    
+
     def adjust_white_balance(self, image_s, percent_red=0, percent_blue=0):
         image = image_s.copy()
         image = self.blank_out(image)
@@ -133,6 +135,8 @@ class imgproc:
         if self.showsource:
             cv2.imshow("adjusted",adjusted_image)
         return adjusted_image       
+
+
 
 
     def do_the_work(self, image, fnum):
@@ -369,7 +373,7 @@ class imgproc:
     
     def safeguards_color(self, contour, victim,mask):#reducing false identified colour victims
         correct = False
-        text_pos = [10,0]
+        text_pos = [10,470]
         (x,y,w,h) = cv2.boundingRect(contour)
         if x > 300: self.side = "l"
         else: self.side = "r"
@@ -396,16 +400,24 @@ class imgproc:
 
     def check_position(self, x,y,w,h): # makes sure the victim is on the right height
         b_position = None
-        victimheight = 142
-        victimheight2 = 450
-        if victimheight > x and victimheight - 20 < x + w:
+        victimheight = 150
+        victimheight2 = 460
+        if victimheight > x and victimheight - 40 < x + w:
             b_position = True
-        elif victimheight2 > x and victimheight2 - 20 < x + w:
+        elif victimheight2 > x and victimheight2 - 40 < x + w:
             b_position = True
 
-        if y < 42 or y + h > 442: #FIX VALUES  
+        width1 = 69
+        width2 = 420
+        if y < width1 or y + h > width2: #FIX VALUES  
             b_position = False
+        #draw lines where it can't be
+        cv2.line(self.image_clone, (0,width1),(640,width1),(0,0,200), 1)
+        cv2.line(self.image_clone, (0,width2),(640,width2),(0,0,200), 1)
 
+        
+        cv2.line(self.image_clone, (victimheight,0),(victimheight,480),(0,200,0), 1)
+        cv2.line(self.image_clone, (victimheight2,0),(victimheight2,480),(0,200,0), 1)
 
         return b_position
  
@@ -499,8 +511,37 @@ class imgproc:
                     break
 
 
-
+        self.test_find_edges(contour,mask,x,y,w,h)
         return contours_match
+
+#safe guard to make sure the found mask is actually a contour
+    def test_find_edges(self,contour,mask, x,y,w,h):
+        contours_match = False
+        image = np.copy(self.image)
+        if x < 20:
+            x = 20
+        if y < 20:
+            y = 20
+
+        aoi = image[y -20 : y+h+20 ,x-20: x+w+ 20]
+        aoi2 = np.copy(aoi)
+        aoi3 = np.copy(aoi)
+        binary = mask[y -20 : y+h+20 ,x-20: x+w+ 20]
+        kernel =np.ones((9,9),np.uint8)
+        img_gray = cv2.cvtColor(aoi, cv2.COLOR_BGR2GRAY)
+        hsv = cv2.cvtColor(aoi,cv2.COLOR_BGR2HSV)
+        b, g, r = cv2.split(aoi)
+
+        H, s, v = cv2.split(hsv)
+        channels = {"gray":img_gray,"b": b,"g": g,"r": r, "H":H, "s":s, "v":v}
+        for channel in channels:
+            img_blur = cv2.GaussianBlur(channels[channel], (7,7), 1) 
+            img_blur = cv2.morphologyEx(img_blur, cv2.MORPH_CLOSE, kernel)
+            edges = cv2.Canny(image=img_blur, threshold1=10, threshold2=50)
+     #       edges = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel)
+            cv2.imshow(channel,edges)
+
+
 
 
 
@@ -514,12 +555,12 @@ class imgproc:
         self.masks = {}
 
         lower_range = {
-            "green": np.array([50,60,70]), 
+            "green": np.array([50,50,70]), #decrese V 50 
             "yellow": np.array([12,90,100]),#decrese Saturation? 
             "red" : np.array([130,69,100]) #increase saturation >100
             }
         upper_range = {
-            "green" : np.array([85,255,255]),
+            "green" : np.array([90,255,255]),
             "yellow" : np.array([50,255,255]),
             "red" : np.array([180,255,255])
             }
