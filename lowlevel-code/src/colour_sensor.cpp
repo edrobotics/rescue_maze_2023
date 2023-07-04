@@ -269,6 +269,19 @@ bool ColourSensor::readSensor()
     
 }
 
+bool ColourSensor::isSpike()
+{
+    double spikeThreshold = whiteReference.s.values[ColourSample::clear] + whiteReference.radius;
+    if (reading.values[ColourSample::clear] > spikeThreshold)
+    {
+        return true;
+    }
+    else
+    {
+        return false;
+    }
+}
+
 // Identify the colour read by readSensor()
 FloorColour ColourSensor::identifyColour()
 {

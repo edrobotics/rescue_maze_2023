@@ -2616,6 +2616,7 @@ void printWallchangeData(UltrasonicSensorEnum sensor)
 }
 
 int g_reflectiveIterations = 0; // Iterations on new tile when colour was reflective
+int g_spikeIterations = 0;      // Iterations on new tile when a spike was detected
 int g_blueIterations = 0;       // Iterations on new tile when colour was blue
 int g_onBumpIterations = 0;
 int g_totalNewIterations = 0;   // Total iterations on new tile
@@ -2827,6 +2828,11 @@ bool driveStepDriveLoop(WallSide &wallToUse, double &dumbDistanceDriven, Stoppin
       if (g_trueDistanceDriven > 15 - 4) // If the colour sensor is on the next tile
       {
         ++g_totalNewIterations;
+        // Checking for spikes
+        if (colSensor.isSpike()==true)
+        {
+          ++g_spikeIterations;
+        }
         if (-gyro.getAngleX() > 1.5) // Does not use absolute value as i cannot drive down to an obstacle
         {
           #warning untuned angle constant for bump detection
@@ -2960,8 +2966,9 @@ bool driveStep(FloorColour &floorColourAhead, bool &rampDriven, TouchSensorSide 
   dumbDistanceDriven = 0;
   pose.distOnRamp = 0;
 
-  // For checking for blue and reflective tiles
+  // For checking for blue and reflective tiles (preparing variables)
   g_reflectiveIterations = 0;
+  g_spikeIterations = 0;
   g_blueIterations = 0;
   g_onBumpIterations = 0;
   g_totalNewIterations = 0;
@@ -3118,13 +3125,14 @@ bool driveStep(FloorColour &floorColourAhead, bool &rampDriven, TouchSensorSide 
   // Serial.println("");
 
   // Serial.print("Reflective share: ");Serial.println(double(g_reflectiveIterations)/double(g_totalNewIterations), 3); // Debugging
+  Serial.print("Spike share: ");Serial.println(double(g_spikeIterations) / double(g_totalNewIterations), 3); // Debugging
   // Check for blue
   if (double(g_blueIterations) / double(g_totalNewIterations) > 0.85 && g_driveBack == false) // If the ground colour is blue
   {
     floorColourAhead = floor_blue;
   }
   // Check for reflective
-  else if (double(g_reflectiveIterations) / double(g_totalNewIterations) > 0.45 && g_driveBack == false && bumpDriven==false) // If the ground colour is reflective
+  else if ((double(g_reflectiveIterations) / double(g_totalNewIterations) > 0.45 || double(g_spikeIterations) / double(g_totalNewIterations) > 0.2)&& g_driveBack == false && bumpDriven==false) // If the ground colour is reflective
   {
     floorColourAhead = floor_reflective;
   }

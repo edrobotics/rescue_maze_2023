@@ -72,7 +72,7 @@ struct ColourSample // Should maybe be inside one of the other classes?
         values[gb] = 0;
     }
 
-    double rVar, gVar, bVar, clearVar, rgVar, rbVar, gbVar;
+    // double rVar, gVar, bVar, clearVar, rgVar, rbVar, gbVar;
     
     enum Values
     {
@@ -183,6 +183,7 @@ class ColourSensor
 
         FloorColour checkFloorColour();
         FloorColour checkRawFloorColour();
+        bool isSpike(); // Check if there was a spike in values (to detect reflective)
 
         char floorColourAsChar(FloorColour floorColour);
         void printValues();
