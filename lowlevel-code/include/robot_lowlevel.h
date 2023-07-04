@@ -52,7 +52,7 @@ enum TouchSensorSide
 // Drives one step (30cm) forwards.
 // Could take a speed argument
 // continuing - if you should continue where you left off last time (keeping the truedistancedriven)
-bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, TouchSensorSide& frontSensorDetectionType, double& xDistanceOnRamp, double& yDistanceOnRamp, bool continuing);
+bool driveStep(FloorColour& floorColourAhead, bool& rampDriven, TouchSensorSide& frontSensorDetectionType, double& xDistanceOnRamp, double& yDistanceOnRamp, bool continuing);
 
 bool driveStep();
 
@@ -91,7 +91,7 @@ namespace serialcomm
 
     void returnFailure();
 
-    void returnFloorColour(ColourSensor::FloorColour floorColour);
+    void returnFloorColour(FloorColour floorColour);
 
     void returnAnswer(int answer);
 
@@ -146,6 +146,17 @@ namespace lights
         back = 2,
     };
 
+    enum LightCommand
+    {
+      lCommand_done,
+      lCommand_returning,
+      lCommand_notReturning,
+      lCommand_mappingError,
+      lCommand_navigationFail,
+      lCommand_none
+    };
+
+    LightCommand getLightCommandFromChar(char command);
     void execLightCommand();
 
     // Turns all lights off
@@ -170,7 +181,7 @@ namespace lights
 
     void negativeBlink();
     
-    void floorIndicator(ColourSensor::FloorColour floorColour);
+    void floorIndicator(FloorColour floorColour);
     
     void disabled();
 

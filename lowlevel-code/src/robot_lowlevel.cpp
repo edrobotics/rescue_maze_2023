@@ -207,12 +207,13 @@ RobotPose pose;
 
 // For driving decision (driving backwards)
 bool g_driveBack = false;
-ColourSensor::FloorColour g_floorColour = ColourSensor::floor_notUpdated;
+FloorColour g_floorColour = floor_notUpdated;
 TouchSensorSide g_lastTouchSensorState = touch_none;
 
 int g_kitsToDrop = 0;
 char g_dropDirection = ' ';
 bool g_returnAfterDrop = false;
+bool g_turnToDrop = true;
 
 //------------------ Serial communication -------------------------------//
 
@@ -237,17 +238,17 @@ void serialcomm::returnAnswer(int answer)
   Serial.flush();
 }
 
-void serialcomm::returnFloorColour(ColourSensor::FloorColour floorColour)
+void serialcomm::returnFloorColour(FloorColour floorColour)
 {
   switch (floorColour)
   {
-  case ColourSensor::floor_black:
+  case floor_black:
     returnAnswer('s');
     break;
-  case ColourSensor::floor_blue:
+  case floor_blue:
     returnAnswer('b');
     break;
-  case ColourSensor::floor_reflective:
+  case floor_reflective:
     returnAnswer('c');
   default:
     returnAnswer(0); // If some error occured
@@ -280,8 +281,9 @@ Command serialcomm::readCommand(bool waitForSerial)
     return readCommand(waitForSerial, 5000); // 5000ms is the longest time to wait for Serial communication.
 }
 
-char lightCommandChar = ' ';
+lights::LightCommand g_lightCommand = lights::lCommand_none;
 bool g_turboSpeed = false;
+
 
 Command serialcomm::readCommand(bool waitForSerial, int timeout)
 {
@@ -378,6 +380,19 @@ Command serialcomm::readCommand(bool waitForSerial, int timeout)
       lights::setColour(0, colourError, true);
       sounds::errorBeep();
     }
+    ++strIdx;
+    if (readString.charAt(strIdx) != '0') return command_invalid;
+    ++strIdx;
+    if (readString.charAt(strIdx) == '0')
+    {
+      g_turnToDrop = false;
+    }
+    else
+    {
+      g_turnToDrop = true;
+    }
+
+    if (g_kitsToDrop==0) g_turnToDrop = false;
 
     return command_dropKit;
     break;
@@ -389,14 +404,18 @@ Command serialcomm::readCommand(bool waitForSerial, int timeout)
   case 'r': // resume the action interrupted by interrupt
     break;
 
-  case 'b':
+  case 'b': // Blink/lights
     ++strIdx;
     if (readString.charAt(strIdx) != ',')
       return command_invalid; // Invalid because the form was not followed
     ++strIdx;
-    lightCommandChar = readString.charAt(strIdx);
+    char inputChar = readString.charAt(strIdx);
+    g_lightCommand = lights::getLightCommandFromChar(inputChar);
     return command_light;
     break;
+  
+  case 'z':
+
 
   default:
     sounds::errorBeep();
@@ -472,6 +491,33 @@ void lightsAndBuzzerInit()
   FastLED.show();
 }
 
+
+lights::LightCommand lights::getLightCommandFromChar(char command)
+{
+  switch (command)
+  {
+    case 'd':
+      return lCommand_done;
+      break;
+    case 'f':
+      return lCommand_navigationFail;
+      break;
+    case 'r':
+      return lCommand_returning;
+      break;
+    case 'n':
+      return lCommand_notReturning;
+      break;
+    case 'e':
+      return lCommand_notReturning;
+      break;
+    default:
+      return lCommand_none;
+      break;
+  }
+}
+
+
 void lights::turnOff()
 {
   setColour(0, colourBlack, true);
@@ -517,12 +563,35 @@ void lights::setColour(int index, RGBColour colour, double intensity, bool showC
 
 void lights::execLightCommand()
 {
-  switch (lightCommandChar)
+  switch (g_lightCommand)
   {
-  case 'a':
-    break;
-  case 'b':
-    break;
+    case lCommand_done:
+      circle(colourAffirmative, colourRed, 1, 10000);
+      break;
+    case lCommand_returning:
+      setColour(9, colourAffirmative, true);
+      delay(420);
+      break;
+    case lCommand_notReturning:
+      setColour(9, colourError, true);
+      delay(420);
+      break;
+    case lCommand_mappingError:
+      setColour(3, colourError, false);
+      setColour(6, colourError, false);
+      setColour(9, colourError, false);
+      setColour(12, colourError, true);
+      delay(420);
+      break;
+    case lCommand_navigationFail:
+      sounds::errorBeep();
+      circle(colourError, colourBlack, 1, 700);
+      break;
+    case lCommand_none:
+      // Do nothing
+      break;
+    default:
+      break;
   }
 }
 
@@ -609,24 +678,24 @@ void lights::activated()
   turnOff();
 }
 
-void lights::floorIndicator(ColourSensor::FloorColour floorColour)
+void lights::floorIndicator(FloorColour floorColour)
 {
   switch (floorColour)
   {
-  case ColourSensor::floor_black:
+  case floor_black:
     showDirection(front, colourRed);
     break;
-  case ColourSensor::floor_blue:
+  case floor_blue:
     showDirection(front, colourBlue);
     break;
   default:
     showDirection(front, colourWhite);
   }
 
-  if (floorColour == ColourSensor::floor_black)
+  if (floorColour == floor_black)
   {
   }
-  else if (floorColour == ColourSensor::floor_blue)
+  else if (floorColour == floor_blue)
   {
   }
 }
@@ -724,7 +793,7 @@ void lights::circleLoop(RGBColour colour1, RGBColour colour2, double speed)
     for (int i = 0; i < 12; i += 3)
     {
       setColour(safeIndex(leadIndex + i), colour1, false);
-      // setColour(safeIndex(leadIndex+2+i), colour2, false);
+      setColour(safeIndex(leadIndex+2+i), colour2, false);
     }
     showCustom();
     leadIndex = safeIndex(leadIndex + 1);
@@ -2563,19 +2632,19 @@ bool driveStepDriveLoop(WallSide &wallToUse, double &dumbDistanceDriven, Stoppin
 {
   // One way of doing it:
   // getUltrasonics1();
-  // ColourSensor::FloorColour g_floorColour = colSensor.checkFloorColour();
+  // FloorColour g_floorColour = colSensor.checkFloorColour();
   // if (g_driveBack == false)
   // {
   //   switch (g_floorColour)
   //   {
-  //     case ColourSensor::floor_notUpdated:
+  //     case floor_notUpdated:
   //       break; // Do nothing
-  //     case ColourSensor::floor_black:
+  //     case floor_black:
   //       // Drive back to last point and exit the loop
   //       stopReason = stop_floorColour;
   //       return true; // Exit the loop
   //       break;
-  //     case ColourSensor::floor_blue:
+  //     case floor_blue:
   //       // Go on driving and tell Marcus that there is a blue tile
   //       // stopReason = stop_floorColour;
   //       // return true; // Exit the loop
@@ -2687,7 +2756,7 @@ bool driveStepDriveLoop(WallSide &wallToUse, double &dumbDistanceDriven, Stoppin
     //   // g_trueDistanceDriven = 30; // The robot has arrived
     //   stopReason = stop_frontWallPresent;
     //   // stopReason = stop_floorColour; // For debugging driving backwards
-    //   // g_floorColour = ColourSensor::floor_black; // Same as line above
+    //   // g_floorColour = floor_black; // Same as line above
     //   // return true;
     // }
     // Serial.println(ultrasonicDistanceF); // Debugging
@@ -2715,13 +2784,13 @@ bool driveStepDriveLoop(WallSide &wallToUse, double &dumbDistanceDriven, Stoppin
       // g_baseSpeed_CMPS = 15;
       switch (g_floorColour)
       {
-      case ColourSensor::floor_notUpdated:
+      case floor_notUpdated:
         break; // Do nothing
-      case ColourSensor::floor_unknown:
+      case floor_unknown:
         // g_baseSpeed_CMPS = 10;
         // Serial.println("Unknown");
         break;
-      case ColourSensor::floor_black:
+      case floor_black:
         // Drive back to last point and exit the loop
         // Serial.println("Black");
         // sounds::tone(440, 20);
@@ -2737,14 +2806,14 @@ bool driveStepDriveLoop(WallSide &wallToUse, double &dumbDistanceDriven, Stoppin
         else
         {
           lights::setColour(3, colourRed, true);
-          g_floorColour = ColourSensor::floor_unknown;
+          g_floorColour = floor_unknown;
         }
         // sounds::tone(440, 20);
         break;
-      case ColourSensor::floor_blue:
+      case floor_blue:
         // Do nothing here. Is handled below.
         break;
-      case ColourSensor::floor_reflective:
+      case floor_reflective:
         // Do nothing here. Is handled below
         break;
       default:
@@ -2763,12 +2832,12 @@ bool driveStepDriveLoop(WallSide &wallToUse, double &dumbDistanceDriven, Stoppin
           #warning untuned angle constant for bump detection
           ++g_onBumpIterations;
         }
-        if (g_floorColour == ColourSensor::floor_reflective && (abs(gyro.getAngleX()) < 2 || abs(gyro.getAngleY()) < 2)) // Robot can be scewed in any direction
+        if (g_floorColour == floor_reflective && (abs(gyro.getAngleX()) < 2 || abs(gyro.getAngleY()) < 2)) // Robot can be scewed in any direction
         {
           #warning angle threshold for reflective detection untuned
           ++g_reflectiveIterations;
         }
-        if (g_floorColour == ColourSensor::floor_blue)
+        if (g_floorColour == floor_blue)
         {
           ++g_blueIterations;
         }
@@ -2832,6 +2901,7 @@ bool driveStepDriveLoop(WallSide &wallToUse, double &dumbDistanceDriven, Stoppin
       g_kitsToDrop = 1;
       g_dropDirection = 'r';
       g_returnAfterDrop = true;
+      g_turnToDrop = true;
 #endif
       if (intrCommand == command_dropKit)
       {
@@ -2859,7 +2929,7 @@ bool driveStepDriveLoop(WallSide &wallToUse, double &dumbDistanceDriven, Stoppin
   return false; // The default return - not finished
 }
 
-bool driveStep(ColourSensor::FloorColour &floorColourAhead, bool &rampDriven, TouchSensorSide &frontSensorDetectionType, double &xDistanceOnRamp, double &yDistanceOnRamp, bool continuing)
+bool driveStep(FloorColour &floorColourAhead, bool &rampDriven, TouchSensorSide &frontSensorDetectionType, double &xDistanceOnRamp, double &yDistanceOnRamp, bool continuing)
 {
   // straighten();
   if (g_turboSpeed == true)
@@ -2947,7 +3017,7 @@ bool driveStep(ColourSensor::FloorColour &floorColourAhead, bool &rampDriven, To
   dumbDistanceDriven = 0;
   double trueDistanceDrivenFlag = g_trueDistanceDriven;
   // Continue driving forward if necessary (close enough to the wall in front)
-  if (stoppingReason != stop_frontWallPresent && stoppingReason != stop_floorColour && ultrasonicCurrentDistances[ultrasonic_F][usmt_smooth] < (15 - ULTRASONIC_FRONT_OFFSET + 10) && (g_floorColour != ColourSensor::floor_black) && g_driveBack == false) // && g_floorColour != ColourSensor::floor_blue // Removed due to strategy change
+  if (stoppingReason != stop_frontWallPresent && stoppingReason != stop_floorColour && ultrasonicCurrentDistances[ultrasonic_F][usmt_smooth] < (15 - ULTRASONIC_FRONT_OFFSET + 10) && (g_floorColour != floor_black) && g_driveBack == false) // && g_floorColour != floor_blue // Removed due to strategy change
   {
     bool throwaWayRampDriven = false; // Just to give driveStepDriveLoop someting. Is not used for anything.
     lights::setColour(3, colourOrange, true);
@@ -2969,9 +3039,9 @@ bool driveStep(ColourSensor::FloorColour &floorColourAhead, bool &rampDriven, To
   // Serial.print(g_floorColour); Serial.print("  ");
   // Serial.println(colSensor.lastKnownFloorColour);
 
-  // if (colSensor.lastKnownFloorColour == ColourSensor::floor_reflective)
+  // if (colSensor.lastKnownFloorColour == floor_reflective)
   // {
-  //   g_floorColour = ColourSensor::floor_reflective;
+  //   g_floorColour = floor_reflective;
   // }
   g_floorColour = colSensor.lastKnownFloorColour;
 
@@ -3023,7 +3093,7 @@ bool driveStep(ColourSensor::FloorColour &floorColourAhead, bool &rampDriven, To
       break;
   }
 
-  // if (colSensor.lastKnownFloorColour == ColourSensor::floor_reflective) // Double check that the floor is really reflective.
+  // if (colSensor.lastKnownFloorColour == floor_reflective) // Double check that the floor is really reflective.
   // {
   //   delay(300);
   //   colSensor.checkFloorColour();
@@ -3051,24 +3121,24 @@ bool driveStep(ColourSensor::FloorColour &floorColourAhead, bool &rampDriven, To
   // Check for blue
   if (double(g_blueIterations) / double(g_totalNewIterations) > 0.85 && g_driveBack == false) // If the ground colour is blue
   {
-    floorColourAhead = ColourSensor::floor_blue;
+    floorColourAhead = floor_blue;
   }
   // Check for reflective
   else if (double(g_reflectiveIterations) / double(g_totalNewIterations) > 0.45 && g_driveBack == false && bumpDriven==false) // If the ground colour is reflective
   {
-    floorColourAhead = ColourSensor::floor_reflective;
+    floorColourAhead = floor_reflective;
   }
   else // When not blue or reflective or if driving back
   {
     floorColourAhead = g_floorColour; // Or use last known floor colour?
 
-    if (floorColourAhead == ColourSensor::floor_blue) // Not allowed, so set unknown instead
+    if (floorColourAhead == floor_blue) // Not allowed, so set unknown instead
     {
-      floorColourAhead = ColourSensor::floor_unknown;
+      floorColourAhead = floor_unknown;
     }
-    else if (floorColourAhead == ColourSensor::floor_reflective) // Not allowed, so set unknown instead
+    else if (floorColourAhead == floor_reflective) // Not allowed, so set unknown instead
     {
-      floorColourAhead = ColourSensor::floor_unknown;
+      floorColourAhead = floor_unknown;
     }
   }
 
@@ -3137,7 +3207,7 @@ bool driveStep(ColourSensor::FloorColour &floorColourAhead, bool &rampDriven, To
 
 bool driveStep()
 {
-  ColourSensor::FloorColour throwAwayColour;
+  FloorColour throwAwayColour;
   bool throwawayRampDriven = false;
   TouchSensorSide throwawayFrontSensorDetectionType = touch_none;
   double throwawayxDistance = 0;
@@ -3200,7 +3270,7 @@ void handleVictim(double fromInterrupt)
   if (g_dropDirection == 'r')
     turnDirection = ccw; // If the kit is on the left
   // Serial.print(g_dropDirection);
-  if (g_kitsToDrop != 0)
+  if (g_turnToDrop==true)
   {
     turnSteps(turnDirection, 1, BASE_TURNING_SPEED); // Only turn if you have to drop
   }
@@ -3290,7 +3360,7 @@ void handleVictim(double fromInterrupt)
     turnDirection = cw; // Reverse direction
   else
     turnDirection = ccw; // Reverse direction
-  if (g_kitsToDrop != 0 && (g_returnAfterDrop == true || fromInterrupt == true))
+  if (g_turnToDrop == true && (g_returnAfterDrop == true || fromInterrupt == true))
   {
     turnSteps(turnDirection, 1, BASE_TURNING_SPEED); // Only turn if you have to drop and only turn back if necessary
     pose.update();
@@ -3299,6 +3369,7 @@ void handleVictim(double fromInterrupt)
   // Reset variables
   g_dropDirection = ' ';
   g_kitsToDrop = 0;
+  g_turnToDrop = true;
   // lights::turnOff();
 }
 
