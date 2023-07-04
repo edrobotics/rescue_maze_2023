@@ -2618,6 +2618,8 @@ void printWallchangeData(UltrasonicSensorEnum sensor)
 int g_reflectiveIterations = 0; // Iterations on new tile when colour was reflective
 int g_spikeIterations = 0;      // Iterations on new tile when a spike was detected
 int g_blueIterations = 0;       // Iterations on new tile when colour was blue
+int g_blackIterations = 0;      // Total iterations when black was seen
+int g_iterations_since_black = 0; // Iterations since last black detection
 int g_onBumpIterations = 0;
 int g_totalNewIterations = 0;   // Total iterations on new tile
 int g_totalIterations = 0; // Total iterations for move
@@ -2795,7 +2797,9 @@ bool driveStepDriveLoop(WallSide &wallToUse, double &dumbDistanceDriven, Stoppin
         // Drive back to last point and exit the loop
         // Serial.println("Black");
         // sounds::tone(440, 20);
-        if (-gyro.getAngleX() > -4 && -gyro.getAngleX() < 2)
+        ++g_blackIterations;
+        g_iterations_since_black = 0;
+        if ((-gyro.getAngleX() > -4 && -gyro.getAngleX() < 2) || g_blackIterations >= 5) // Only detect black if flat enough or if enough black detections were made
         {
           stopWheels();
           double dumbDistanceIncrement = getDistanceDriven() - dumbDistanceDriven;
@@ -2822,6 +2826,16 @@ bool driveStepDriveLoop(WallSide &wallToUse, double &dumbDistanceDriven, Stoppin
         break; // Potential problem with the last break statement?
       }
 
+
+      if (g_floorColour != floor_black)
+      {
+        ++g_iterations_since_black;
+        // Reset number of black iterations if enough time has passed
+        if (g_iterations_since_black > 10) // Reset black iterations if enough iterations have gone without black
+        {
+          g_blackIterations = 0;
+        }
+      }
 
       // Serial.println(gyro.getAngleX());
       // Handling of bumps and some colours
@@ -2969,6 +2983,8 @@ bool driveStep(FloorColour &floorColourAhead, bool &rampDriven, TouchSensorSide 
   // For checking for blue and reflective tiles (preparing variables)
   g_reflectiveIterations = 0;
   g_spikeIterations = 0;
+  g_blackIterations = 0;
+  g_iterations_since_black = 0;
   g_blueIterations = 0;
   g_onBumpIterations = 0;
   g_totalNewIterations = 0;
