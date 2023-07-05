@@ -508,7 +508,7 @@ lights::LightCommand lights::getLightCommandFromChar(char command)
       return lCommand_notReturning;
       break;
     case 'e':
-      return lCommand_notReturning;
+      return lCommand_mappingError;
       break;
     default:
       return lCommand_none;
@@ -568,23 +568,25 @@ void lights::execLightCommand()
       circle(colourAffirmative, colourRed, 1, 10000);
       break;
     case lCommand_returning:
-      setColour(9, colourAffirmative, true);
-      delay(420);
+      setColour(8, colourAffirmative, false);
+      setColour(10, colourAffirmative, true);
+      delay(690);
       break;
     case lCommand_notReturning:
-      setColour(9, colourError, true);
-      delay(420);
+      setColour(8, colourError, false);
+      setColour(10, colourError, true);
+      delay(690);
       break;
     case lCommand_mappingError:
       setColour(3, colourError, false);
       setColour(6, colourError, false);
       setColour(9, colourError, false);
       setColour(12, colourError, true);
-      delay(420);
+      delay(690);
       break;
     case lCommand_navigationFail:
       sounds::errorBeep();
-      circle(colourError, colourBlack, 1, 700);
+      circle(colourError, colourBlack, 1, 1000);
       break;
     case lCommand_none:
       // Do nothing
