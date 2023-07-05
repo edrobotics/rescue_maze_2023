@@ -30,8 +30,8 @@ class imgproc:
         for file in log.glob(f"log*"):
             list.append(file)
         print(len(list))
-        log_folder = f"{self.basefolder}log/log{len(list)}"
-        os.mkdir(log_folder)
+        self.log_folder = f"{self.basefolder}log/log{len(list)}"
+        os.mkdir(self.log_folder)
     
 
 
@@ -219,7 +219,7 @@ class imgproc:
                 S_detected_victims += f"{victim} " 
             
                   
-            pos = [10,20]
+            pos = (10,20)
             self.putText(S_detected_victims,pos=pos)
 
             
