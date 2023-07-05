@@ -235,7 +235,8 @@ void loop()
           {
             serialcomm::returnFailure();
           }
-          if (pose.yDist > 15) pose.yDist -= 30; // Just set to 0 instead?
+          // if (pose.yDist > 15) pose.yDist -= 30; // Just set to 0 instead?
+          pose.yDist = 0; // To prevent the robot driving too far? This could help
         
       }
         break;

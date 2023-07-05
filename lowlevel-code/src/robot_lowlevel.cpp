@@ -91,8 +91,8 @@ const double WHEEL_CIRCUMFERENCE = PI * WHEEL_DIAMETER;
 
 // Driving
 const double CMPS_TO_RPM = 1.0 / WHEEL_CIRCUMFERENCE * 60.0;  // Constant to convert from cm/s to rpm
-const double BASE_SPEED_CMPS = 18;                            // The base speed of driving (cm/s)
-const double TURBO_SPEED_CMPS = 20;
+const double BASE_SPEED_CMPS = 21;                            // The base speed of driving (cm/s)
+const double TURBO_SPEED_CMPS = 25;
 double BASE_TURNING_SPEED = 46 / CMPS_TO_RPM;                 // The turning speed to normally use
 double g_baseSpeed_CMPS = BASE_SPEED_CMPS;                    // The speed to drive at
 const double BASE_SPEED_RPM = CMPS_TO_RPM * g_baseSpeed_CMPS; // The base speed of driving (rpm)
@@ -3141,14 +3141,15 @@ bool driveStep(FloorColour &floorColourAhead, bool &rampDriven, TouchSensorSide 
   // Serial.println("");
 
   // Serial.print("Reflective share: ");Serial.println(double(g_reflectiveIterations)/double(g_totalNewIterations), 3); // Debugging
-  Serial.print("Spike share: ");Serial.println(double(g_spikeIterations) / double(g_totalNewIterations), 3); // Debugging
+  // Serial.print("Spike share: ");Serial.println(double(g_spikeIterations) / double(g_totalNewIterations), 3); // Debugging
+  // Serial.print("Blue share: ");Serial.println(double(g_blueIterations) / double(g_totalNewIterations), 3); // Debugging
   // Check for blue
   if (double(g_blueIterations) / double(g_totalNewIterations) > 0.85 && g_driveBack == false) // If the ground colour is blue
   {
     floorColourAhead = floor_blue;
   }
   // Check for reflective
-  else if ((double(g_reflectiveIterations) / double(g_totalNewIterations) > 0.45 || double(g_spikeIterations) / double(g_totalNewIterations) > 0.2)&& g_driveBack == false && bumpDriven==false) // If the ground colour is reflective
+  else if ((double(g_reflectiveIterations) / double(g_totalNewIterations) > 0.45 || double(g_spikeIterations) / double(g_totalNewIterations) > 0.2) && g_driveBack == false && bumpDriven==false) // If the ground colour is reflective
   {
     floorColourAhead = floor_reflective;
   }
