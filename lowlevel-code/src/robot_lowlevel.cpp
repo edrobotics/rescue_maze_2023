@@ -327,7 +327,7 @@ Command serialcomm::readCommand(bool waitForSerial, int timeout)
     break;
 
   case 't': // turn
-    sounds::tone(440, 1000);
+    // sounds::tone(440, 1000); // Debugging
     ++strIdx;
     if (readString.charAt(strIdx) != ',')
       return command_invalid; // Invalid because the form was not followed
@@ -405,6 +405,7 @@ Command serialcomm::readCommand(bool waitForSerial, int timeout)
     break;
 
   case 'b': // Blink/lights
+  {
     ++strIdx;
     if (readString.charAt(strIdx) != ',')
       return command_invalid; // Invalid because the form was not followed
@@ -413,6 +414,7 @@ Command serialcomm::readCommand(bool waitForSerial, int timeout)
     g_lightCommand = lights::getLightCommandFromChar(inputChar);
     return command_light;
     break;
+  }
 
   default:
     sounds::errorBeep();
@@ -2498,7 +2500,6 @@ void checkAndUseWallChange(int sensor, WallChangeType wallChangeToCheck, Stoppin
         else
           stopReason = stop_backWallChangeApproaching;
       }
-      Serial.println(stopReason);
     }
   }
 }
