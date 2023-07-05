@@ -91,8 +91,8 @@ const double WHEEL_CIRCUMFERENCE = PI * WHEEL_DIAMETER;
 
 // Driving
 const double CMPS_TO_RPM = 1.0 / WHEEL_CIRCUMFERENCE * 60.0;  // Constant to convert from cm/s to rpm
-const double BASE_SPEED_CMPS = 21;                            // The base speed of driving (cm/s)
-const double TURBO_SPEED_CMPS = 25;
+const double BASE_SPEED_CMPS = 18;                            // The base speed of driving (cm/s)
+const double TURBO_SPEED_CMPS = 21;
 double BASE_TURNING_SPEED = 46 / CMPS_TO_RPM;                 // The turning speed to normally use
 double g_baseSpeed_CMPS = BASE_SPEED_CMPS;                    // The speed to drive at
 const double BASE_SPEED_RPM = CMPS_TO_RPM * g_baseSpeed_CMPS; // The base speed of driving (rpm)
@@ -327,11 +327,11 @@ Command serialcomm::readCommand(bool waitForSerial, int timeout)
     break;
 
   case 't': // turn
+    sounds::tone(440, 1000);
     ++strIdx;
     if (readString.charAt(strIdx) != ',')
       return command_invalid; // Invalid because the form was not followed
     ++strIdx;
-
     if (readString.charAt(strIdx) == 'l')
       return command_turnLeft;
     else if (readString.charAt(strIdx) == 'r')
@@ -381,7 +381,7 @@ Command serialcomm::readCommand(bool waitForSerial, int timeout)
       sounds::errorBeep();
     }
     ++strIdx;
-    if (readString.charAt(strIdx) != '0') return command_invalid;
+    if (readString.charAt(strIdx) != ',') return command_invalid;
     ++strIdx;
     if (readString.charAt(strIdx) == '0')
     {
@@ -413,9 +413,6 @@ Command serialcomm::readCommand(bool waitForSerial, int timeout)
     g_lightCommand = lights::getLightCommandFromChar(inputChar);
     return command_light;
     break;
-  
-  case 'z':
-
 
   default:
     sounds::errorBeep();
@@ -1459,12 +1456,14 @@ void gyroTurn(double turnAngle, bool stopMoving, double turnSpeed, bool aware = 
   {
     turnAngle = 90;
     sounds::errorBeep();
+    sounds::tone(700, 500);
     // Serial.println(turnAngle);
   }
   if (turnAngle < -170)
   {
     turnAngle = -90;
     sounds::errorBeep();
+    sounds::tone(400, 500);
     // Serial.println(turnAngle);
   }
 
@@ -2439,6 +2438,8 @@ void checkAndUseWallChange(int sensor, WallChangeType wallChangeToCheck, Stoppin
       }
     }
 
+    bool didCorrection = false;
+
     // Checking for potential wallchanges
     if (millis() - g_potWallChanges[sensor][wallChangeToCheck].timestamp < 500) // Time is not tuned!!!
     {
@@ -2450,12 +2451,12 @@ void checkAndUseWallChange(int sensor, WallChangeType wallChangeToCheck, Stoppin
           pose.yDist = 30 - corrected;
         else
           pose.yDist = corrected;
+        didCorrection = true;
       }
       g_potWallChanges[sensor][wallChangeToCheck].timestamp = 0; // Resets the timeflag to prevent double detection. If correction was too large, also prevents from
     }
-    else
+    else // Normal detection using only smooth wallchange
     {
-// Normal detection using only smooth wallchange
 #warning code also used elsewhere
       double angleCorrDistance = 0;
       if (abs(pose.angle) <= MAX_WALLCHANGE_ANGLE)
@@ -2466,32 +2467,38 @@ void checkAndUseWallChange(int sensor, WallChangeType wallChangeToCheck, Stoppin
           angleCorrDistance *= -1;
         }
 
-        smoothOffset += angleCorrDistance; // Set the distance to write to trueDistanceDriven
+        double corrected = smoothOffset + angleCorrDistance;
+        // smoothOffset += angleCorrDistance; // Set the distance to write to trueDistanceDriven
+        // Actually executing the wallchange
+        if (abs(g_trueDistanceDriven - corrected) <= MAX_CORRECTION_DISTANCE) // Limit correction
+        {
+          if (g_driveBack == true)
+            pose.yDist = 30 - corrected;
+          else
+            pose.yDist = smoothOffset;
+          didCorrection = true;
+        }
       }
 
-      // Actually executing the wallchange
-      if (abs(g_trueDistanceDriven - smoothOffset) <= MAX_CORRECTION_DISTANCE) // Limit correction
+    }
+
+    if (didCorrection==true)
+    {
+      if (wallChangeToCheck == wallchange_leaving)
       {
-        if (g_driveBack == true)
-          pose.yDist = g_targetDistance - smoothOffset;
+        if (ultrasonicGroup == ultrasonics_front)
+          stopReason = stop_frontWallChangeLeaving;
         else
-          pose.yDist = smoothOffset;
+          stopReason = stop_backWallChangeLeaving;
       }
-    }
-
-    if (wallChangeToCheck == wallchange_leaving)
-    {
-      if (ultrasonicGroup == ultrasonics_front)
-        stopReason = stop_frontWallChangeLeaving;
       else
-        stopReason = stop_backWallChangeLeaving;
-    }
-    else
-    {
-      if (ultrasonicGroup == ultrasonics_front)
-        stopReason = stop_frontWallChangeApproaching;
-      else
-        stopReason = stop_backWallChangeApproaching;
+      {
+        if (ultrasonicGroup == ultrasonics_front)
+          stopReason = stop_frontWallChangeApproaching;
+        else
+          stopReason = stop_backWallChangeApproaching;
+      }
+      Serial.println(stopReason);
     }
   }
 }
@@ -2801,6 +2808,7 @@ bool driveStepDriveLoop(WallSide &wallToUse, double &dumbDistanceDriven, Stoppin
         g_iterations_since_black = 0;
         if ((-gyro.getAngleX() > -4 && -gyro.getAngleX() < 2) || g_blackIterations >= 5) // Only detect black if flat enough or if enough black detections were made
         {
+          // awareGyroTurn(1, true, 1, false, -20);
           stopWheels();
           double dumbDistanceIncrement = getDistanceDriven() - dumbDistanceDriven;
           pose.update(wallToUse, dumbDistanceIncrement);

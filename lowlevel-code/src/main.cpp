@@ -286,6 +286,7 @@ void loop()
         lights::execLightCommand();
         lights::turnOff();
         serialcomm::returnSuccess();
+        break;
 
       case command_invalid:
         sounds::errorBeep();
