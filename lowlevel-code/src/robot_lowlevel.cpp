@@ -381,8 +381,10 @@ Command serialcomm::readCommand(bool waitForSerial, int timeout)
       sounds::errorBeep();
     }
     ++strIdx;
+
     if (readString.charAt(strIdx) != ',') return command_invalid;
     ++strIdx;
+
     if (readString.charAt(strIdx) == '0')
     {
       g_turnToDrop = false;
