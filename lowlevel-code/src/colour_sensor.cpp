@@ -322,8 +322,8 @@ FloorColour ColourSensor::identifyColour()
 
     // Calculation using colour distances
 
-    #warning Debugging
-    return floor_unknown; // For debugging. Uncomment to disable colour detection
+    // #warning Debugging
+    // return floor_unknown; // For debugging. Uncomment to disable colour detection
 
     FloorColour closestCol = getClosestColour(reading);
     ColourStorageData reference;

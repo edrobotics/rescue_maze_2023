@@ -2822,7 +2822,7 @@ bool driveStepDriveLoop(WallSide &wallToUse, double &dumbDistanceDriven, Stoppin
         g_iterations_since_black = 0;
         if ((-gyro.getAngleX() > -4 && -gyro.getAngleX() < 2) || g_blackIterations >= 5) // Only detect black if flat enough or if enough black detections were made
         {
-          awareGyroTurn(1, true, 1, false, -20);
+          // awareGyroTurn(1, true, 1, false, -20); // DO NOT USE!!! It messes up the positioning (I believe, it does not work without it at least)
           stopWheels();
           double dumbDistanceIncrement = getDistanceDriven() - dumbDistanceDriven;
           pose.update(wallToUse, dumbDistanceIncrement);
@@ -2975,7 +2975,7 @@ bool driveStep(FloorColour &floorColourAhead, bool &rampDriven, TouchSensorSide 
 {
   // straighten();
   if (g_turboSpeed == true)
-    g_baseSpeed_CMPS = 21;
+    g_baseSpeed_CMPS = TURBO_SPEED_CMPS;
   else
     g_baseSpeed_CMPS = BASE_SPEED_CMPS;
   WallSide wallToUse = wall_none; // Initialize a variable for which wall to follow
@@ -2990,7 +2990,7 @@ bool driveStep(FloorColour &floorColourAhead, bool &rampDriven, TouchSensorSide 
     // g_targetDistance = g_trueDistanceDriven + 2;
     // g_targetDistance = 15;
     g_startDistance = g_targetDistance - g_trueDistanceDriven;
-    pose.yDist = g_trueDistanceDriven; // Needed? Problematic?
+    // pose.yDist = g_trueDistanceDriven; // Needed? Problematic? Should already be correct
     // g_targetDistance += 3;
   }
   if (continuing == true)

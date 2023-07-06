@@ -9,8 +9,8 @@
 #include <SPI.h>
 
 // #define PICODE
-// #define TESTING_NAV
-#define TESTING
+#define TESTING_NAV
+// #define TESTING
 // #define COLSENS_CALIBRATION
 
 #ifdef COLSENS_CALIBRATION
