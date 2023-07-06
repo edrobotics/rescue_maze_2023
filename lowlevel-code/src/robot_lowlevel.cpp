@@ -131,17 +131,17 @@ const double FRONT_WALL_STOPPING_TRESHOLD = 15 - ULTRASONIC_FRONT_OFFSET + 1.8;
 // Wallchange offsets for neoprene foam wheels
 double wallChangeOffsets[wcoff_num] =
     {
-        1,    // frontLeaving
-        -1.2, // frontApproaching
-        2,    // backLeaving
+        2,    // frontLeaving
+        -1.5, // frontApproaching
+        5.3,    // backLeaving
         -0.5  // backApproaching
 };
 double wallChangeOffsetsSmooth[wcoff_num] =
     {
-        2.3,  // frontLeaving
+        4.3,  // frontLeaving
         -0.1, // frontApproaching
-        3,    // backLeaving
-        -1.8  // backApproaching
+        4.4,    // backLeaving
+        -1.5  // backApproaching
 };
 
 const double BACK_WALLCHANGE_DISTANCE = 15 + ULTRASONIC_SPACING / 2.0;
@@ -475,7 +475,7 @@ CRGB cameraLeds[CAMERA_LED_NUM];
 
 void lightsAndBuzzerInit()
 {
-  buzzer.setpin(45);
+  // buzzer.setpin(45);
   ledRing.setpin(44);
   ledRing.fillPixelsBak(0, 2, 1);
   lights::turnOff();
@@ -2400,6 +2400,8 @@ void setShadowDistance(int sensor, WallChangeType wallChange, double setDistance
   g_potWallChanges[sensor][wallChange].shadowDistanceDriven = setDistance;
 }
 
+// #define DEBUG
+
 // Updates the appropriate variables to the appropriate values in accordance with the detected wallchange, if there is one
 // sensor - which ultrasonic sensor to check and update from
 // wallChangeToCheck - wallchange_approaching or wallchange_leaving
@@ -2445,7 +2447,7 @@ void checkAndUseWallChange(int sensor, WallChangeType wallChangeToCheck, Stoppin
     bool didCorrection = false;
 
     // Checking for potential wallchanges
-    if (millis() - g_potWallChanges[sensor][wallChangeToCheck].timestamp < 500) // Time is not tuned!!!
+    if (millis() - g_potWallChanges[sensor][wallChangeToCheck].timestamp < 500 && g_potWallChanges[sensor][wallChangeToCheck].detected == true) // Time is not tuned!!!
     {
       // Successful detection using potential wallchange
       double corrected = g_potWallChanges[sensor][wallChangeToCheck].shadowDistanceDriven + offset;
@@ -2458,6 +2460,9 @@ void checkAndUseWallChange(int sensor, WallChangeType wallChangeToCheck, Stoppin
         didCorrection = true;
       }
       g_potWallChanges[sensor][wallChangeToCheck].timestamp = 0; // Resets the timeflag to prevent double detection. If correction was too large, also prevents from
+    // #ifdef DEBUG
+    // Serial.println("Raw wallchange exists");
+    // #endif
     }
     else // Normal detection using only smooth wallchange
     {
@@ -2472,6 +2477,9 @@ void checkAndUseWallChange(int sensor, WallChangeType wallChangeToCheck, Stoppin
         }
 
         double corrected = smoothOffset + angleCorrDistance;
+        // #ifdef DEBUG
+        // Serial.println(corrected);
+        // #endif
         // smoothOffset += angleCorrDistance; // Set the distance to write to trueDistanceDriven
         // Actually executing the wallchange
         if (abs(g_trueDistanceDriven - corrected) <= MAX_CORRECTION_DISTANCE) // Limit correction
@@ -2479,8 +2487,11 @@ void checkAndUseWallChange(int sensor, WallChangeType wallChangeToCheck, Stoppin
           if (g_driveBack == true)
             pose.yDist = 30 - corrected;
           else
-            pose.yDist = smoothOffset;
+            pose.yDist = corrected;
           didCorrection = true;
+          // #ifdef DEBUG
+          // Serial.println("Corrected the distance");
+          // #endif
         }
       }
 
@@ -2782,7 +2793,7 @@ bool driveStepDriveLoop(WallSide &wallToUse, double &dumbDistanceDriven, Stoppin
       return true;
     }
 
-    if ((g_trueDistanceDriven >= g_targetDistance - 2 && abs(gyro.getAngleX()) < 4) || g_trueDistanceDriven >= g_targetDistance) // Stopping due to dead reckoning. Only if robot flat enough or having driven further as a safeguard (if angle is wrong)
+    if ((g_trueDistanceDriven >= g_targetDistance - 1.7 && abs(gyro.getAngleX()) < 4) || g_trueDistanceDriven >= g_targetDistance) // Stopping due to dead reckoning. Only if robot flat enough or having driven further as a safeguard (if angle is wrong)
     {
       if (stopReason == stop_none)
         stopReason = stop_deadReckoning;
@@ -2811,7 +2822,7 @@ bool driveStepDriveLoop(WallSide &wallToUse, double &dumbDistanceDriven, Stoppin
         g_iterations_since_black = 0;
         if ((-gyro.getAngleX() > -4 && -gyro.getAngleX() < 2) || g_blackIterations >= 5) // Only detect black if flat enough or if enough black detections were made
         {
-          // awareGyroTurn(1, true, 1, false, -20);
+          awareGyroTurn(1, true, 1, false, -20);
           stopWheels();
           double dumbDistanceIncrement = getDistanceDriven() - dumbDistanceDriven;
           pose.update(wallToUse, dumbDistanceIncrement);
@@ -2979,7 +2990,7 @@ bool driveStep(FloorColour &floorColourAhead, bool &rampDriven, TouchSensorSide 
     // g_targetDistance = g_trueDistanceDriven + 2;
     // g_targetDistance = 15;
     g_startDistance = g_targetDistance - g_trueDistanceDriven;
-    // pose.yDist = g_trueDistanceDriven; // Needed? Problematic?
+    pose.yDist = g_trueDistanceDriven; // Needed? Problematic?
     // g_targetDistance += 3;
   }
   if (continuing == true)

@@ -8,9 +8,9 @@
 #include <Wire.h>
 #include <SPI.h>
 
-#define PICODE
+// #define PICODE
 // #define TESTING_NAV
-// #define TESTING
+#define TESTING
 // #define COLSENS_CALIBRATION
 
 #ifdef COLSENS_CALIBRATION
@@ -43,6 +43,10 @@ void setup()
   flushDistanceArrays();
   fillRampArrayFalse();
   // startDistanceMeasure(); // Why is this here?
+
+  // #warning Debugging
+  // checkSmoothWallChanges();
+  // checkPotWallChanges();
   
 
   // Wait for beginning (to give time to remove hands etc.)
@@ -123,13 +127,15 @@ void loop()
 
   // getUltrasonics();
   // printUltrasonics();
-  startDistanceMeasure();
-  while(true)
-  {
-    delay(20);
-    loopEncoders();
-    Serial.println(getDistanceDriven());
-  }
+  // startDistanceMeasure();
+  // while(true)
+  // {
+  //   delay(20);
+  //   loopEncoders();
+  //   Serial.println(getDistanceDriven());
+  // }
+  driveStep();
+  delay(2000);
   
 
   #else
