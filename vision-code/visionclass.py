@@ -6,6 +6,7 @@ import time
 import cv2
 import logging
 import os
+import pathlib
 
 
 class imgproc:
@@ -15,9 +16,24 @@ class imgproc:
     cwd = os.getcwd()
     if cwd == '/Users/lukas/GitHub/rescue_maze_2023/vision-code':
         sampledir = "/Users/lukas/GitHub/rescue_maze_2023/vision-code/samples/"
+        basefolder = "/Users/lukas/GitHub/rescue_maze_2023/vision-code/"
     else: 
-        sampledir = "/home/pi/rescue_maze_2023/vision-code/samples/"
-        
+        basefolder = "/home/theseus/rescue_maze_2023/vision-code/"
+        sampledir = "/home/theseus/rescue_maze_2023/vision-code/samples/"
+
+
+    #log directory
+
+    def createfolder(self):  
+        log = pathlib.Path(f"{self.basefolder}log")
+        list = []
+        for file in log.glob(f"log*"):
+            list.append(file)
+        print(len(list))
+        self.log_folder = f"{self.basefolder}log/log{len(list)}"
+        os.mkdir(self.log_folder)
+    
+
 
 #loading samples
     Dictand = {
@@ -70,9 +86,13 @@ class imgproc:
             self.client.send(message)
         except Exception as e:
             if self.info: print("failed to send messsage")
+            logging.exception("failed to send message")
+            self.connect(once = True, msg = msg)
 #connects to navigation code
-    def connect(self):
-        while True:
+    def connect(self, once = False, msg = None):
+        connect = True
+        while connect:
+            if once: connect = False
             try:
                 self.HEADER = 16
                 PORT = 4242
@@ -84,7 +104,8 @@ class imgproc:
                 self.client.connect(ADDR)
             except:
                 print("failed")
-                time.sleep(2)
+                if not once: time.sleep(2)
+                if msg: self.sendMessage(msg)
             else:
                 print("Connected")
                 connected = True
@@ -101,6 +122,7 @@ class imgproc:
         self.time = time
         if connect:
             self.connect()
+        if logging: self.createfolder()
     
 
     
@@ -140,16 +162,22 @@ class imgproc:
 
 
     def do_the_work(self, image, fnum):
+        self.fnum = fnum
         self.framedetected = {}
         self.original_image = np.copy(image)
-        self.log("E")
         self.image = self.adjust_white_balance(self.original_image)
         self.image_clone = self.image.copy()#image where lines and contours will be showed to
-        self.fnum = fnum
+        self.log("E")
+        try: 
+            self.find_victim()
+            self.Color_victim2()
+        except Exception as ex:
+            logging.exception("exception in class")
 
-        self.find_victim()
-        self.Color_victim2()
-        self.evaluate_detected()
+        finally:
+            self.evaluate_detected()
+
+
 
         if self.showsource:
             cv2.imshow("image_clone",self.image_clone)
@@ -191,7 +219,7 @@ class imgproc:
                 S_detected_victims += f"{victim} " 
             
                   
-            pos = [10,20]
+            pos = (10,20)
             self.putText(S_detected_victims,pos=pos)
 
             
@@ -367,18 +395,23 @@ class imgproc:
         fontScale              =  1/2
         color                  = (255,255,255)
         thickness              =   1
-        cv2.putText(self.image_clone,text,bottomLeftCornerOfText,font,fontScale,color,thickness)
+        try:
+            cv2.putText(self.image_clone,text,bottomLeftCornerOfText,font,fontScale,color,thickness)
+        except Exception as ex:
+            logging.exception("could not put text")
+            logging.debug(f"textpos: {pos}")
+            print("failed putting text")
     
 
     
     def safeguards_color(self, contour, victim,mask):#reducing false identified colour victims
         correct = False
-        text_pos = [10,470]
+        text_pos = (10,470)
         (x,y,w,h) = cv2.boundingRect(contour)
         if x > 300: self.side = "l"
         else: self.side = "r"
 
-        if self.find_edges(contour, mask, x,y,w,h):
+        if True or self.find_edges(contour, mask, x,y,w,h):
             if self.check_position(x,y,w,h):
                 if self.check_movement(victim,x,y,w,h): #evaluate and remove
                     correct = True
@@ -461,6 +494,7 @@ class imgproc:
         
 #safe guard to make sure the found mask is actually a contour
     def find_edges(self,contour,mask, x,y,w,h):
+        print("achtung achtung, das ist nicht gut")
         contours_match = False
         image = np.copy(self.image)
         if x < 20:
@@ -511,35 +545,9 @@ class imgproc:
                     break
 
 
-        self.test_find_edges(contour,mask,x,y,w,h)
+ #       self.test_find_edges(contour,mask,x,y,w,h)
         return contours_match
 
-#safe guard to make sure the found mask is actually a contour
-    def test_find_edges(self,contour,mask, x,y,w,h):
-        contours_match = False
-        image = np.copy(self.image)
-        if x < 20:
-            x = 20
-        if y < 20:
-            y = 20
-
-        aoi = image[y -20 : y+h+20 ,x-20: x+w+ 20]
-        aoi2 = np.copy(aoi)
-        aoi3 = np.copy(aoi)
-        binary = mask[y -20 : y+h+20 ,x-20: x+w+ 20]
-        kernel =np.ones((9,9),np.uint8)
-        img_gray = cv2.cvtColor(aoi, cv2.COLOR_BGR2GRAY)
-        hsv = cv2.cvtColor(aoi,cv2.COLOR_BGR2HSV)
-        b, g, r = cv2.split(aoi)
-
-        H, s, v = cv2.split(hsv)
-        channels = {"gray":img_gray,"b": b,"g": g,"r": r, "H":H, "s":s, "v":v}
-        for channel in channels:
-            img_blur = cv2.GaussianBlur(channels[channel], (7,7), 1) 
-            img_blur = cv2.morphologyEx(img_blur, cv2.MORPH_CLOSE, kernel)
-            edges = cv2.Canny(image=img_blur, threshold1=10, threshold2=50)
-     #       edges = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel)
-            cv2.imshow(channel,edges)
 
 
 
@@ -555,13 +563,13 @@ class imgproc:
         self.masks = {}
 
         lower_range = {
-            "green": np.array([50,50,70]), #decrese V 50 
-            "yellow": np.array([12,90,100]),#decrese Saturation? 
+            "green": np.array([42,50,70]), #decrese V 50 
+            "yellow": np.array([20,50,100]),#decrese Saturation? 
             "red" : np.array([130,69,100]) #increase saturation >100
             }
         upper_range = {
             "green" : np.array([90,255,255]),
-            "yellow" : np.array([50,255,255]),
+            "yellow" : np.array([35,255,255]),
             "red" : np.array([180,255,255])
             }
         for color in lower_range:
@@ -618,12 +626,15 @@ class imgproc:
 
 
     def log(self, name, img=None):#logging the images
-        if img is None:
-            img = self.original_image
-   
-        if self.logging:
-            path = f'./log/{name}{self.fnum}.png'
-            cv2.imwrite(path,img)
+        try:
+            if img is None:
+                img = self.original_image
+    
+            if self.logging:
+                path = f'{self.log_folder}/{name}{self.fnum}.png'
+                cv2.imwrite(path,img)
+        except Exception as ex:
+            logging.exception("couldn't log")
 
         
         

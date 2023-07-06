@@ -8,7 +8,7 @@ ssh = False
 
 if __name__ == '__main__':
     n = 0
-    logging.basicConfig(filename='example.log', encoding='utf-8', level=logging.DEBUG)
+    logging.basicConfig(filename='log/vision.log', encoding='utf-8', level=logging.DEBUG)
     logging.info("started")
 #initating class
     imgproc = tc.imgproc()
