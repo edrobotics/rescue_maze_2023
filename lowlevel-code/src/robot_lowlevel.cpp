@@ -61,12 +61,12 @@ MeRGBLed ledRing(0, 12);
 
 const double MAX_CORRECTION_DISTANCE = 16;
 const double MIN_CORRECTION_ANGLE = 8;
-const double MAX_WALLCHANGE_ANGLE = 33; // Should be changed later to compute the actual distances
+const double MAX_WALLCHANGE_ANGLE = 25; // Should be changed later to compute the actual distances
 const double MAX_WALLCHANGE_DISTANCE;
 
 #warning untuned constants
 // const double MAX_ULTRASONIC_FAR = 70; // Max distance to use differences in front ultrasonic sensor distance
-const double MAX_ULTRASONIC_NEAR = 20; // Max distance to use absolute value of front ultrasonic sensor
+const double MAX_ULTRASONIC_NEAR = 21; // Max distance to use absolute value of front ultrasonic sensor
 // const double MAX_FRONT_DIFFERENCE = 3; // The maximum allowed difference between two front ultrasonic readings
 const double MAX_FRONT_CORRECTION_DISTANCE = 11; // The maximum allowed difference between pose and corrected pose when the front ultrasonic sensor gets involved.
 // const double MAX_FRONT_ANGLE = 7; // The maximum allowed angle for the front sensor to be used. Tuned theoretically for 120cm far distance
@@ -3062,7 +3062,7 @@ bool driveStep(FloorColour &floorColourAhead, bool &rampDriven, TouchSensorSide 
   dumbDistanceDriven = 0;
   double trueDistanceDrivenFlag = g_trueDistanceDriven;
   // Continue driving forward if necessary (close enough to the wall in front)
-  if (stoppingReason != stop_frontWallPresent && stoppingReason != stop_floorColour && ultrasonicCurrentDistances[ultrasonic_F][usmt_smooth] < (15 - ULTRASONIC_FRONT_OFFSET + 10) && (g_floorColour != floor_black) && g_driveBack == false) // && g_floorColour != floor_blue // Removed due to strategy change
+  if (stoppingReason != stop_frontWallPresent && stoppingReason != stop_floorColour && ultrasonicCurrentDistances[ultrasonic_F][usmt_smooth] < (15 - ULTRASONIC_FRONT_OFFSET + 13) && (g_floorColour != floor_black) && g_driveBack == false) // && g_floorColour != floor_blue // Removed due to strategy change
   {
     bool throwaWayRampDriven = false; // Just to give driveStepDriveLoop someting. Is not used for anything.
     lights::setColour(3, colourOrange, true);
