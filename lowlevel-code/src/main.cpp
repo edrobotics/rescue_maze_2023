@@ -8,8 +8,8 @@
 #include <Wire.h>
 #include <SPI.h>
 
-// #define PICODE
-#define TESTING_NAV
+#define PICODE
+// #define TESTING_NAV
 // #define TESTING
 // #define COLSENS_CALIBRATION
 
@@ -29,7 +29,7 @@ void setup()
   #ifdef PICODE
   Serial.begin(9600);
   #else
-  Serial.begin(115200);
+  Serial.begin(9600);
   #endif
   
   // Init hardware
