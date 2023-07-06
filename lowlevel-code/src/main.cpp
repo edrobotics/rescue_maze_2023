@@ -8,8 +8,8 @@
 #include <Wire.h>
 #include <SPI.h>
 
-#define PICODE
-// #define TESTING_NAV
+// #define PICODE
+#define TESTING_NAV
 // #define TESTING
 // #define COLSENS_CALIBRATION
 
@@ -76,6 +76,8 @@ void setup()
 void loop()
 {
 
+  static bool shouldDelay = false;
+  
   #ifdef TESTING
  
   // Command command = serialcomm::readCommand();
@@ -139,9 +141,7 @@ void loop()
   
 
   #else
-
   #ifdef PICODE
-  static bool shouldDelay = false;
   if (shouldDelay==true)
   {
   delay(200);

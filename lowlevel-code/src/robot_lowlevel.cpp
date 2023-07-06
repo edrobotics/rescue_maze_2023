@@ -2350,9 +2350,17 @@ double measurementAverage(double arrayToCalc[]) // Use a reference to the array 
 }
 
 bool g_onRampIterations[ON_RAMP_ARR_SIZE];
+bool g_upRampIterations[ON_RAMP_ARR_SIZE];
+bool g_downRampIterations[ON_RAMP_ARR_SIZE];
 int g_onRampPointer = 0;
+int g_upRampPointer = 0;
+int g_downRampPointer = 0;
 bool g_previousOnRampState = false;
+bool g_upPreviousOnRampState = false;
+bool g_downPreviousOnRampState = false;
 double g_trueDistanceDrivenOnRamp = 0;
+double g_upTrueDistanceDrivenOnRamp = 0;
+double g_downTrueDistanceDrivenOnRamp = 0;
 double g_horizontalDistanceDrivenOnRamp = 0;
 double g_verticalDistanceDrivenOnRamp = 0;
 
@@ -2360,7 +2368,8 @@ void fillRampArrayFalse()
 {
   for (int i = 0; i < ON_RAMP_ARR_SIZE; ++i)
   {
-    g_onRampIterations[i] = false;
+    g_upRampIterations[i] = false;
+    g_downRampIterations[i] = false;
   }
 }
 
@@ -2372,6 +2381,23 @@ void addOnRampValue(bool state)
   ++g_onRampPointer;
 }
 
+void addUpRampValue(bool state)
+{
+  while (g_upRampPointer >= ON_RAMP_ARR_SIZE) {g_upRampPointer -= ON_RAMP_ARR_SIZE;}
+  g_upRampPointer = g_upRampPointer % ON_RAMP_ARR_SIZE; // Could cause errors if g_onRampPointer goes negative, which it never should
+  g_upRampIterations[g_upRampPointer] = state;
+  ++g_upRampPointer;
+}
+
+void addDownRampValue(bool state)
+{
+  while (g_downRampPointer >= ON_RAMP_ARR_SIZE) {g_downRampPointer -= ON_RAMP_ARR_SIZE;}
+  g_downRampPointer = g_downRampPointer % ON_RAMP_ARR_SIZE; // Could cause errors if g_onRampPointer goes negative, which it never should
+  g_downRampIterations[g_downRampPointer] = state;
+  ++g_downRampPointer;
+
+}
+
 // Returns true if you are currently on a ramp
 bool getIsOnRamp()
 {
@@ -2379,6 +2405,36 @@ bool getIsOnRamp()
   for (int i = 0; i < ON_RAMP_ARR_SIZE; ++i)
   {
     if (g_onRampIterations[i] == true)
+      ++sum;
+  }
+  int average = (double)sum / (double)ON_RAMP_ARR_SIZE;
+  if (average > 0.5)
+    return true;
+  else
+    return false;
+}
+
+bool getIsUpRamp()
+{
+  int sum = 0;
+  for (int i = 0; i < ON_RAMP_ARR_SIZE; ++i)
+  {
+    if (g_upRampIterations[i] == true)
+      ++sum;
+  }
+  int average = (double)sum / (double)ON_RAMP_ARR_SIZE;
+  if (average > 0.5)
+    return true;
+  else
+    return false;
+}
+
+bool getIsDownRamp()
+{
+  int sum = 0;
+  for (int i = 0; i < ON_RAMP_ARR_SIZE; ++i)
+  {
+    if (g_downRampIterations[i] == true)
       ++sum;
   }
   int average = (double)sum / (double)ON_RAMP_ARR_SIZE;
@@ -2519,6 +2575,16 @@ void checkAndUseWallChange(int sensor, WallChangeType wallChangeToCheck, Stoppin
   }
 }
 
+
+void resetWallChanges()
+{
+  for (int i=0;i<ULTRASONIC_NUM;++i)
+  {
+    g_potWallChanges[i][wallchange_leaving].timestamp = 0;
+    g_potWallChanges[i][wallchange_approaching].timestamp = 0;
+  }
+}
+
 // Checks for wallchanges and sets the truedistance driven variable accordingly.
 // stopReason - the variable to safe the stoppingreason in
 // This function can be run by itself and does not need any special code in driveStepDriveLoop
@@ -2647,6 +2713,10 @@ int g_onBumpIterations = 0;
 int g_totalNewIterations = 0;   // Total iterations on new tile
 int g_totalIterations = 0; // Total iterations for move
 
+
+bool g_upRampDetected = false;
+bool g_downRampDetected = false;
+
 // What to run inside of the driveStep loop (the driving forward-portion)
 // Arguments have the same names as the variables they should accept in driveStep.
 // wallToUse - which wall to follow/measure
@@ -2721,20 +2791,40 @@ bool driveStepDriveLoop(WallSide &wallToUse, double &dumbDistanceDriven, Stoppin
 
   // Checking for ramps (perhaps do running average?)
   // Need to handle when you get off the ramp, so that you don't stop immediately
-  if (abs(gyro.getAngleX()) > 10)
+  if (-gyro.getAngleX() > 10)
   {
+    addUpRampValue(true);
+    addDownRampValue(false);
+    addOnRampValue(true);
+  }
+  else if (-gyro.getAngleX() < -10)
+  {
+    addUpRampValue(false);
+    addDownRampValue(true);
     addOnRampValue(true);
   }
   else
   {
+    addUpRampValue(false);
+    addDownRampValue(false);
     addOnRampValue(false);
   }
   
-
   bool onRamp = getIsOnRamp();
+  bool onUpRamp = getIsUpRamp();
+  bool onDownRamp = getIsDownRamp();
+
+  // For rejecting it when both have been detected
+  if (onUpRamp==true) g_upRampDetected = true;
+  if (onDownRamp==true) g_downRampDetected = true;
+  
   bool rampChange = false;
-  if (onRamp != g_previousOnRampState)
-    rampChange = true;
+  bool upRampChange = false;
+  bool downRampChange = false;
+  if (onRamp != g_previousOnRampState) rampChange = true;
+  if (onUpRamp != g_upPreviousOnRampState)
+    upRampChange = true;
+  if (onDownRamp != g_downPreviousOnRampState) downRampChange = true;
 
   // Serial.print("onRamp: ");Serial.print(onRamp);Serial.print("  ");
   // pose.printRampVals();
@@ -2755,7 +2845,7 @@ bool driveStepDriveLoop(WallSide &wallToUse, double &dumbDistanceDriven, Stoppin
       g_baseSpeed_CMPS = BASE_SPEED_CMPS;
     }
   }
-  else // What to do ONLY when NOT on a ramp ------------------------------------------------------
+  else// What to do ONLY when NOT on a ramp ------------------------------------------------------
   {
     if (rampChange == true)
     {
@@ -2786,22 +2876,6 @@ bool driveStepDriveLoop(WallSide &wallToUse, double &dumbDistanceDriven, Stoppin
     //   // return true;
     // }
     // Serial.println(ultrasonicDistanceF); // Debugging
-
-    if (g_driveBack == false && g_trueDistanceDriven >= (g_targetDistance + 15 - (ULTRASONIC_FRONT_OFFSET + FRONT_WALL_STOPPING_TRESHOLD) - 1) && g_frontUltrasonicUsed == true)
-    {
-      if (stopReason == stop_none)
-        stopReason = stop_frontWallPresent;
-      g_driveBack = false;
-      return true;
-    }
-
-    if ((g_trueDistanceDriven >= g_targetDistance - 1.7 && abs(gyro.getAngleX()) < 4) || g_trueDistanceDriven >= g_targetDistance) // Stopping due to dead reckoning. Only if robot flat enough or having driven further as a safeguard (if angle is wrong)
-    {
-      if (stopReason == stop_none)
-        stopReason = stop_deadReckoning;
-      g_driveBack = false; // Reset the driveBack variable (do not drive back the next step)
-      return true;
-    }
 
     // Checking for ground colour (should perhaps only be done when not on ramp?)
     g_floorColour = colSensor.checkFloorColour();
@@ -2911,6 +2985,30 @@ bool driveStepDriveLoop(WallSide &wallToUse, double &dumbDistanceDriven, Stoppin
 
   } // Only do when not on ramp ends here
 
+  // Safeguard for stairs with short top
+  if ((onRamp==true && g_upRampDetected==true && g_downRampDetected==true )|| onRamp==false)
+  {
+    if (g_driveBack == false && g_trueDistanceDriven >= (g_targetDistance + 15 - (ULTRASONIC_FRONT_OFFSET + FRONT_WALL_STOPPING_TRESHOLD) - 1) && g_frontUltrasonicUsed == true)
+    {
+      if (stopReason == stop_none)
+        stopReason = stop_frontWallPresent;
+      g_driveBack = false;
+      return true;
+    }
+
+    if ((g_trueDistanceDriven >= g_targetDistance - 1.7 && abs(gyro.getAngleX()) < 4) || g_trueDistanceDriven >= g_targetDistance) // Stopping due to dead reckoning. Only if robot flat enough or having driven further as a safeguard (if angle is wrong)
+    {
+      if (stopReason == stop_none)
+        stopReason = stop_deadReckoning;
+      g_driveBack = false; // Reset the driveBack variable (do not drive back the next step)
+      return true;
+    }
+  }
+  // Serial.print("onRamp:");Serial.print(onRamp);Serial.print(" ");
+  // Serial.print("g_upRampDetected:");Serial.print(g_upRampDetected);Serial.print(" ");
+  // Serial.print("g_downRampDetected:");Serial.print(g_downRampDetected);Serial.print(" ");
+  // Serial.println(pose.distOnRamp);
+
   // Checking for wallchanges
   if (abs(pose.angle) <= MAX_WALLCHANGE_ANGLE) // Only check wallchanges if below certain angle. Correction for angle is also done with the distance.
   {
@@ -2969,6 +3067,8 @@ bool driveStepDriveLoop(WallSide &wallToUse, double &dumbDistanceDriven, Stoppin
 
   // Updates for the next loop (may not be all of themo)
   g_previousOnRampState = onRamp;
+  g_upPreviousOnRampState = onUpRamp;
+  g_downPreviousOnRampState = onDownRamp;
   setPreviousSensorWallStates();
   return false; // The default return - not finished
 }
@@ -3013,6 +3113,8 @@ bool driveStep(FloorColour &floorColourAhead, bool &rampDriven, TouchSensorSide 
   g_onBumpIterations = 0;
   g_totalNewIterations = 0;
   g_totalIterations = 0;
+  g_upRampDetected = false;
+  g_downRampDetected = false;
 
   // Get sensor data for initial values
   if (g_driveBack == false)
@@ -3021,6 +3123,7 @@ bool driveStep(FloorColour &floorColourAhead, bool &rampDriven, TouchSensorSide 
   }
   checkWallPresence();
   setPreviousSensorWallStates();
+  resetWallChanges();
   wallToUse = pose.getSafeWallToUse();
 
   // Update pose
@@ -3168,7 +3271,7 @@ bool driveStep(FloorColour &floorColourAhead, bool &rampDriven, TouchSensorSide 
   // Serial.print("Spike share: ");Serial.println(double(g_spikeIterations) / double(g_totalNewIterations), 3); // Debugging
   // Serial.print("Blue share: ");Serial.println(double(g_blueIterations) / double(g_totalNewIterations), 3); // Debugging
   // Check for blue
-  if (double(g_blueIterations) / double(g_totalNewIterations) > 0.85 && g_driveBack == false) // If the ground colour is blue
+  if (double(g_blueIterations) / double(g_totalNewIterations) > 0.8 && g_driveBack == false) // If the ground colour is blue
   {
     floorColourAhead = floor_blue;
   }

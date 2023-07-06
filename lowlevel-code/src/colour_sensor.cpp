@@ -15,7 +15,7 @@ Adafruit_TCS34725 colSens = Adafruit_TCS34725(TCS34725_INTEGRATIONTIME_60MS, TCS
 bool readState = false; // Keeps track of whether the sensor was read or not
 
 double MAX_DETECTION_DISTANCES[5] {50, 20, 70, 70, 0}; // White, black, blue, reflective, unknown
-double STANDARD_RADIUSES[5] {30, 0, 0, 20, 0};// White, black, blue, reflective, unknown
+double STANDARD_RADIUSES[5] {30, 0, 7, 20, 0};// White, black, blue, reflective, unknown
 
 MeRGBLed newLed(0, 12);
 newLights::RGBColour newColourBlack {0, 0, 0};
