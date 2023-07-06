@@ -68,6 +68,7 @@ void ColourSensor::init()
 {
     if (colSens.begin() == false)
     {
+        newLights::errorBlink();
         // Serial.println("Could not find sensor");
     }
     // else Serial.println("Sensor initialized");
