@@ -372,7 +372,7 @@ class imgproc:
                     cv2.waitKey(0)
 
   
-        if sim[0] + sim[1] > 1.85:
+        if sim[0] + sim[1] > 1.91:
             identified = True
 
         if victim: kits = self.how_many_kits(victim)
