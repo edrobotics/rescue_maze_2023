@@ -1,10 +1,5 @@
 ﻿// |||| NAVIGATION - Custom attribute for commands for better code structure ||||
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Reflection;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace EnumCommand
 {
@@ -53,7 +48,7 @@ namespace EnumCommand
             string _add = "";
             foreach (object _s in _parameters)
             {
-                _add += "," +_s;
+                _add += "," + _s;
             }
 
             // Return the first if there was a match.

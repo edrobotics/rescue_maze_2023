@@ -1,21 +1,15 @@
 ﻿// |||| NAVIGATION - Code for communication stuff and related ||||
-using System;
-using System.Collections.Generic;
-using System.IO.Ports;
-using System.Linq;
-using System.Net.Sockets;
-using System.Reflection;
-using System.Text;
-using System.Threading.Tasks;
 using EnumCommand;
 using Mapping;
+using System.IO.Ports;
+using System.Net.Sockets;
+using System.Text;
 
 namespace SerialConsole
 {
     internal partial class Program
     {
         #region Variables, enums and objects
-
         enum TileFloors
         {
             Blue = 'b',
@@ -27,39 +21,63 @@ namespace SerialConsole
 
         enum SendCommands
         {
-            /// <summary>!d, turboSpeed('1'/'0')</summary>
+            /// <summary>!d, turboSpeed('1'/'0') : Drive a step</summary>
             [Command("!d")]
             Drive = 'd',
             /// <summary>!w</summary>
             [Command("!w")]
             SensorCheck = 'w',
-            ///<summary>!k, amount(int), side('l'/'r'), turnBack('1'/'0')</summary>
+            ///<summary>!k, amount(int), side('l'/'r'), turnBack('1'/'0'), TurnToDrop('1'/'0') : Check sensors and return data</summary>
             [Command("!k")]
             DropKits = 'k',
-            /// <summary>!t, direction('l'/'r')</summary>
+            /// <summary>!t, direction('l'/'r') : Turn left or right</summary>
             [Command("!t")]
             Turn = 't',
-            /// <summary>!i </summary>
+            /// <summary>!i : Interrupt auriga in a command</summary>
             [Command("!i")]
-            Interrupt = 'i'
+            Interrupt = 'i',
+            ///<summary>!b, type('d' = done = circle red & green, 'f' = navFail = error beep + circle red, 'r' = returning = green back .., 'n' = not returning = red back .., 'e' = mapping error = 4 red ::) : Blink/light up lamp</summary>
+            [Command("!b")]
+            BlinkLight = 'b'
         }
 
         enum RecivedCommands
         {
+            /// <summary>!a,x... : An answer with data be returned with parameter amount depening on sent command</summary>
             [Command("!a")]
             Answer = 'a',
+            /// <summary>!s(,i if interrupt) : The requested command was completed succesfully</summary>
             [Command("!s")]
             Success = 's',
+            /// <summary>!l(,c if colour sensor reset) : Lack of progress, reset data </summary>
             [Command("!l")]
             LOP = 'l',
+            /// <summary>!x...,i,x... : The recived command is meant for interrupt</summary>
             [Command(",i")]
             Interrupt = 'i',
+            /// <summary>!c(,i if interrupt) : The sent command was cancelled</summary>
             [Command("!c")]
             Cancelled = 'c',
+            /// <summary>!f(,i if interrupt) : This command failed</summary>
             [Command("!f")]
             Failed = 'f',
+            /// <summary>(!l),c : The LoP was from a calibration, start timer but do not start yet</summary>
             [Command(",c")]
-            Calibration
+            Calibration = 'C'
+        }
+
+        enum BlinkOptions
+        {
+            /// <summary>done = circle red & green and wait</summary>
+            Done = 'd',
+            ///<summary>navFail = error beep + circle red </summary>
+            NavigationFailure = 'f',
+            ///<summary>returning = green back .., </summary>
+            Returning = 'r',
+            ///<summary>not returning = red back .., </summary>
+            NotReturning = 'n',
+            ///<summary>mapping error = 4 red :: </summary>
+            MappingError = 'e'
         }
 
         //******** Communication ********
@@ -83,19 +101,12 @@ namespace SerialConsole
         static void ServerLoop()
         {
             NetworkStream stream = client.GetStream();
-            //StreamReader sr = new StreamReader(client.GetStream());
-            //StreamWriter sw = new StreamWriter(client.GetStream());
+
             while (!exit)
             {
                 Delay(10);
                 try
                 {
-                    if (!client.Connected)
-                    {
-                        client = listener.AcceptTcpClient();
-                        stream = client.GetStream();
-                    }
-
                     byte[] _buffer = new byte[128];
                     stream.Read(_buffer);
                     int _recv = 0;
@@ -108,7 +119,7 @@ namespace SerialConsole
                         }
                     }
 
-                    //if (_read == 0) throw new Exception("Connection reset");
+                    if (_recv == 0) throw new Exception("Connection reset");
                     string _recivedData = Encoding.UTF8.GetString(_buffer, 0, _recv);
 
                     if (_recivedData.Contains('k') && !dropKits) //Danger as these might be modified and read at the same time, which is why they are volatile
@@ -123,39 +134,38 @@ namespace SerialConsole
                 {
                     LogException(e);
                     Log("_server_: Client failure, retrying...", true);
-                    if (!client.Connected)
-                    {
-                        client = listener.AcceptTcpClient();
-                        stream = client.GetStream();
-                    }
-                    Thread.Sleep(1000);
+                    listener.Start();
+                    client = listener.AcceptTcpClient();
+                    stream = client.GetStream();
+                    Thread.Sleep(200);
                 }
-                //listener.Stop();
             }
         }
         #endregion
 
         #region MotionComm
-        // ********************************** Driving ********************************** 
+
+        #region Driving
 
         static void Drive(bool _checkRamps, bool _turboDrive)
         {
+            if (reset) return;
             if (ReadHere(BitLocation.checkPointTile)) //Update checkpoint direction upon leaving
             {
                 try
                 {
                     Log($"Updating checkpoint direction", true);
-                    sinceCheckpoint[0][3] = (byte)direction; 
+                    sinceCheckpoint[0][3] = (byte)direction;
                 }
-                catch (Exception e) 
+                catch (Exception e)
                 {
-                    LogException(e); 
+                    LogException(e);
                     Log("-Could not update checkpoint direction", true);
                 }
             }
             //Send command and recive data
             locationUpdated = false;
-            CheckAndDropKits(true, true);
+            CheckAndDropKits(true, true, true);
 
             if (reset)
                 return;
@@ -188,7 +198,7 @@ namespace SerialConsole
                     return;
                 Log($"{_recived}; Something went wrong", true);
                 LogException(e);
-                
+
                 SensorCheck();
                 if (reset) return;
 
@@ -196,16 +206,17 @@ namespace SerialConsole
                 Log($"(frontPresent = {frontPresent})", true);
                 if (!frontPresent && !ReadNextTo(BitLocation.blackTile, Directions.front))
                 {
-                    errors-=2; //I was right
+                    errors -= 2; //I was right
                     Log("Retrying", true);
                     Drive(_checkRamps, false);
                     return;
                 }
                 else
                 {
-                    errors+=2; //I was wrong
+                    errors += 2; //I was wrong
                     Log("Updating map", true);
                     UpdateMapFull(true);
+                    if (reset) return;
                     if (driveWay.Count > 0)
                     {
                         Log("Nav via driveWay failed", true);
@@ -234,6 +245,7 @@ namespace SerialConsole
                     RampDriven(direction, int.Parse(_driveInfo[3]), int.Parse(_driveInfo[4])); //Handles the ramp, creates a new map and recalculates position and height
 
                     UpdateMap();
+                    if (reset) return;
                 }
                 else
                 {
@@ -256,6 +268,7 @@ namespace SerialConsole
                     {
                         UpdateLocation();
                         UpdateMap();
+                        if (reset) return;
                     }
                 }
 
@@ -278,9 +291,9 @@ namespace SerialConsole
                 LogException(e);
             }
         }
+        #endregion Drive
 
-
-        // ********************************** Turning ********************************** 
+        #region Turning
 
         static void Turn(char _direction)
         {
@@ -314,14 +327,15 @@ namespace SerialConsole
                 return;
             Log($"Turn to {_toDirection}", true);
             _toDirection = FixDirection(_toDirection);
+            CheckAndDropKits(false, true, true);
 
             if (FixDirection(direction - _toDirection) != 3)
             {
                 while (_toDirection != direction)
                 {
-                    CheckAndDropKits(false, true);
-                    if (_toDirection != direction)
-                        Turn('r'); //turn right
+                    Turn('r'); //turn right
+                    Delay(5);
+                    CheckAndDropKits(false, true, false);
                     if (reset) return;
                 }
             }
@@ -329,19 +343,20 @@ namespace SerialConsole
             {
                 while (_toDirection != direction)
                 {
-                    CheckAndDropKits(false, true);
-                    if (_toDirection != direction)
-                        Turn('l'); //turn left
+                    Turn('l'); //turn left
+                    Delay(5);
+                    CheckAndDropKits(false, true, false);
                     if (reset) return;
                 }
             }
-            CheckAndDropKits(true, true);
         }
-        #endregion
+        #endregion Turn
+
+        #endregion Motion
 
         #region MiscComm
-        // ********************************** Other Serial Commands ********************************** 
 
+        #region RealMisc
         static void SensorCheck()
         {
             if (reset) return;
@@ -381,11 +396,19 @@ namespace SerialConsole
             Log($"left:{leftPresent}, front:{frontPresent}, right:{rightPresent}", true);
         }
 
+        static void BlinkLamp(BlinkOptions _option)
+        {
+            SerialComm(SendCommands.BlinkLight.GetCommand((char)_option), true, false);
+        }
+        #endregion Real
+
+        #region KitComm
+
         /// <summary>
         /// Checks if there are kits to drop, and if so, it drops kits
         /// </summary>
         /// <param name="_turnBack">Whether we should turn back again</param>
-        static void CheckAndDropKits(bool _turnBack, bool _useWallSafeguard)
+        static void CheckAndDropKits(bool _turnBack, bool _useWallSafeguard, bool _turn)
         {
             if (reset)
                 return;
@@ -403,7 +426,7 @@ namespace SerialConsole
                 lastDropped = dropAmount; //Save just in case vision sends a new
                 Log($"Dropping {dropAmount} kits {dropSide}", true);
 
-                string _recived = SerialComm(SendCommands.DropKits.GetCommand(dropAmount, dropSide, _turnBack ? '1' : '0'), true, false);
+                string _recived = SerialComm(SendCommands.DropKits.GetCommand(dropAmount, dropSide, _turnBack ? '1' : '0', _turn ? '1' : '0'), true, false);
                 if (reset)
                     return;
 
@@ -414,7 +437,7 @@ namespace SerialConsole
                     if (_recived.Contains(RecivedCommands.Success.GetCommand()))
                     {
                         WriteHere(BitLocation.victim, true);
-                        if (!_turnBack && lastDropped > 0)
+                        if (!_turnBack && lastDropped > 0 && _turn)
                         {
                             KitDirectionUpdate(dropSide);
                         }
@@ -458,8 +481,8 @@ namespace SerialConsole
 
                 try
                 {
-                    serialPort1.WriteLine(SendCommands.DropKits.GetCommand(dropAmount, dropSide, '1'));
-                    Log("Sending: " + SendCommands.DropKits.GetCommand(dropAmount, dropSide, '1'), false);
+                    serialPort1.WriteLine(SendCommands.DropKits.GetCommand(dropAmount, dropSide, '1', '1'));
+                    Log("Sending: " + SendCommands.DropKits.GetCommand(dropAmount, dropSide, '1', '1'), false);
                     kitsLeft -= lastDropped;
                     WriteHere(BitLocation.victim, true);
 
@@ -493,6 +516,8 @@ namespace SerialConsole
             Delay(100, true);
             return _recived;
         }
+        #endregion kits
+
         #endregion
 
         #region BaseComm
@@ -508,7 +533,7 @@ namespace SerialConsole
         static string SerialComm(string _send, bool _doubleWait, bool _interruptable)
         {
             if (!_send.Contains('!')) return "";
-        StartComm:
+            StartComm:
             if (reset) return RecivedCommands.LOP.GetCommand();
 
             string _recived = SerialRaw(_send, _doubleWait, _interruptable);
@@ -549,13 +574,14 @@ namespace SerialConsole
             {
                 Log($"Sending {_send}", false);
                 serialPort1.WriteLine(_send);
-                Delay(10);
+                Delay(20);
 
                 for (int i = 0; i < 250; i++)//50 iterations gives ~1 s.
                 {
-                    Delay(20);
+                    Delay(10);
                     if (serialPort1.BytesToRead != 0)
                     {
+                        Console.WriteLine("Broke out of 1");
                         break;
                     }
                 }
@@ -570,15 +596,27 @@ namespace SerialConsole
             }
 
             bool _checkDropAgain = false;
-            //If the double wait, we wait again but with no time limit since we know we were heard.
+            //If the double wait, we wait again time limit is longer since we know we were heard.
             if (_doubleWait)
             {
+                if (!_recived.Contains(RecivedCommands.Success.GetCommand()))
+                {
+                    Log($"0!0!0 Recived first was strange - {_recived} - no s 0!0!0", false);
+                    return _recived;
+                }
                 if (_interruptable) //If it should be interruptable, we do some extra things:
                 {
                     string _interruptRec = "";
+                    long _startTime = timer.ElapsedMilliseconds;
                     while (serialPort1.BytesToRead == 0)
                     {
                         Delay(20);
+                        if (timer.ElapsedMilliseconds - _startTime > 30_000)
+                        {
+                            Log("Taking too long, retrying", false);
+                            return SerialRaw(_send, _doubleWait, _interruptable);
+                        }
+
                         if (dropKits)
                         {
                             #region InterruptHandling
@@ -647,7 +685,7 @@ namespace SerialConsole
                                 }
 
                                 if (_checkDropAgain)
-                                serialPort1.WriteLine("!w"); //Any command returns to drive
+                                    serialPort1.WriteLine("!w"); //Any command returns to drive
                             }
                             dropKits = false;
                             #endregion Interrupthandling
@@ -666,9 +704,15 @@ namespace SerialConsole
                 }
                 else //If not, normal wait and recive
                 {
+                    long _startTime = timer.ElapsedMilliseconds;
                     while (serialPort1.BytesToRead == 0)
                     {
                         Delay(20);
+                        if (timer.ElapsedMilliseconds - _startTime > 20_000)
+                        {
+                            Log("Taking too long, retrying", false);
+                            return SerialRaw(_send, _doubleWait, _interruptable);
+                        }
                     }
 
                     _recived = serialPort1.ReadLine();
@@ -676,6 +720,7 @@ namespace SerialConsole
                     //dropKits = false;
                 }
 
+                Log("Broke out of 1", false);
                 if (_checkDropAgain)
                 {
                     SensorCheck();
@@ -687,13 +732,13 @@ namespace SerialConsole
                     {
                         case 'l':
                             if (leftPresent)
-                                CheckAndDropKits(true, false);
+                                CheckAndDropKits(true, false, true);
                             else
                                 Log("Forgot kit l, no wall", true);
                             break;
                         case 'r':
                             if (rightPresent)
-                                CheckAndDropKits(true, false);
+                                CheckAndDropKits(true, false, true);
                             else
                                 Log("Forgot kit r, no wall", true);
                             break;

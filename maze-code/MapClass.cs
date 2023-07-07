@@ -1,10 +1,4 @@
 ﻿// |||| NAVIGATION - Class which contains all the mapping stuff, as well as paths between tiles in the same area ||||
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Reflection;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Mapping
 {
@@ -59,8 +53,9 @@ namespace Mapping
     class Map
     {
         #region Variables, objects, and class stuff
-        //**Data, mapping**
-        public Map (int _mazeLength, int _height, int _startPosX, int _startPosZ)
+
+        #region Special map stuff
+        public Map(int _mazeLength, int _height, int _startPosX, int _startPosZ)
         {
             Length = _mazeLength;
             map = new ushort[_mazeLength, _mazeLength];
@@ -92,12 +87,14 @@ namespace Mapping
             {
                 for (int j = 0; j < _oldMap.Length; j++)
                 {
-                    expandMap.map[i,j] = _oldMap[i,j];
+                    expandMap.map[i, j] = _oldMap[i, j];
                 }
             }
             return expandMap;
         }
+        #endregion
 
+        #region Map data
         /// <summary>The size of the map in tile amount</summary>
         public int Length { get; private set; }
 
@@ -106,9 +103,9 @@ namespace Mapping
         public int Height { get => height; }
         ///<summary>Whether any of the four directions on this map have had any strangeness with length, i.e., 
         ///whether any of the ramps facing this direction had ramp lengths that were not dividable or close to dividable by a tile</summary>
-        public bool[] HasStrangeRamps { get; set; } = new bool[] {false, false, false, false};
-        public int StartPosX { get;}
-        public int StartPosZ { get;}
+        public bool[] HasStrangeRamps { get; set; } = new bool[] { false, false, false, false };
+        public int StartPosX { get; }
+        public int StartPosZ { get; }
 
         ushort[,] map;
 
@@ -119,7 +116,6 @@ namespace Mapping
 
         List<List<byte[]>> areas = new();
         List<List<byte[]>> saveAreas = new();
-
 
         public ushort[,] GetMap
         {
@@ -145,7 +141,9 @@ namespace Mapping
             get => ref areas;
         }
 
-        //**Searching**
+        #endregion
+
+        #region PathFinding
         bool skipNext;
         bool returningFromGoal;
         bool foundWay;
@@ -160,27 +158,11 @@ namespace Mapping
         readonly List<byte[]> extraBits = new();
         #endregion
 
+        #endregion
+
         #region General data handling
-        // ********************************** Data - Methods ********************************** 
 
-        public int UpdateHeight(int _newHeight)
-        {
-            height = (_newHeight + height) / 2;
-            return height;
-        }
-
-        public void UpdateCrossTiles()
-        {
-            for (int i = 0; i < crossTiles.Count; i++)
-            {
-                if (ReadBit(crossTiles[i][0], crossTiles[i][1], BitLocation.explored))
-                {
-                    crossTiles.RemoveAt(i);
-                    i--;
-                }
-            }
-        }
-
+        #region Areas
         public void AddArea()
         {
             areas.Add(new List<byte[]>());
@@ -224,6 +206,9 @@ namespace Mapping
             SerialConsole.Program.Log($"!_!-!| Tile {_tile[0]},{_tile[1]} is not added to area |!-!_!", true);
             return -1;
         }
+        #endregion
+
+        #region Ramps
 
         public void AddRamp(byte _x, byte _z, byte _direction, byte _rampIndex, byte _connectedMap, byte _rampLength)
         {
@@ -238,7 +223,7 @@ namespace Mapping
         {
             for (int i = 0; i < reachedFrom.Count; i++)
             {
-                if (reachedFrom[i][(int)RampStorage.XCoord] == _x && reachedFrom[i][(int)RampStorage.ZCoord] == _z 
+                if (reachedFrom[i][(int)RampStorage.XCoord] == _x && reachedFrom[i][(int)RampStorage.ZCoord] == _z
                     && _direction == reachedFrom[i][(int)RampStorage.RampDirection])
                 {
                     return reachedFrom[i];
@@ -280,13 +265,15 @@ namespace Mapping
             }
             return false;
         }
+        #endregion
 
+        #region Reset info
         /// <summary>
         /// Makes this bit get removed on reset
         /// </summary>
         public void AddBitInfo(byte[] _xz, BitLocation _bit)
         {
-            byte[] _info = new byte[] { _xz[0], _xz[1], (byte)_bit};
+            byte[] _info = new byte[] { _xz[0], _xz[1], (byte)_bit };
             extraBits.Add(_info);
         }
 
@@ -317,8 +304,32 @@ namespace Mapping
         }
         #endregion
 
+        #region Misc
+
+        public int UpdateHeight(int _newHeight)
+        {
+            height = (_newHeight + height) / 2;
+            return height;
+        }
+
+        public void UpdateCrossTiles()
+        {
+            for (int i = 0; i < crossTiles.Count; i++)
+            {
+                if (ReadBit(crossTiles[i][0], crossTiles[i][1], BitLocation.explored))
+                {
+                    crossTiles.RemoveAt(i);
+                    i--;
+                }
+            }
+        }
+        #endregion
+
+        #endregion
+
         #region Map data handling
-        // ********************************** Read And Write Map ********************************** 
+
+        #region Read/write
 
         /// <summary>
         /// Checks if a certain bit exists on a certain location
@@ -345,6 +356,9 @@ namespace Mapping
             }
         }
 
+        #endregion
+
+        #region Clear
         /// <summary>
         /// Sets all bits in the map to 0
         /// </summary>
@@ -396,6 +410,7 @@ namespace Mapping
                 map[_x, _z] = 0;
             }
         }
+        #endregion
         #endregion
 
         #region Pathfinding
@@ -680,7 +695,6 @@ namespace Mapping
                 for (int i = 0; i < 3; i++) SerialConsole.Program.Log("!!!!!!FindTile -- index out of bounds(?)!!!!!!", true);
             }
         }
-#endregion
-
+        #endregion
     }
 }
