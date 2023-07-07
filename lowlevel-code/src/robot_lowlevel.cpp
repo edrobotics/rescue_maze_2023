@@ -2833,7 +2833,7 @@ bool driveStepDriveLoop(WallSide &wallToUse, double &dumbDistanceDriven, Stoppin
   {
     useRampPID();
     pose.updateOnRamp(wallToUse, dumbDistanceIncrement);
-    if (pose.distOnRamp > 10)
+    if (pose.distOnRamp > 10 && !(g_downRampDetected==true && g_upRampDetected==true))
     {
       rampDriven = true; // Could be moved to driveStep() ?
     }
