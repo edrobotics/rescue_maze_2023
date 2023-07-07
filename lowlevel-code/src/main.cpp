@@ -202,6 +202,7 @@ void loop()
           {
             // Correct by turning right
             awareGyroTurn(-18, true, BASE_TURNING_SPEED, true, -5);
+            awareGyroTurn(8, true, BASE_TURNING_SPEED, true, 5);
             continuing = true;
             goto driveStepBegin;
             
@@ -210,6 +211,7 @@ void loop()
           {
             // Correct by turning left
             awareGyroTurn(18, true, BASE_TURNING_SPEED, true, -5);
+            awareGyroTurn(-8, true, BASE_TURNING_SPEED, true, 5);
             continuing = true;
             goto driveStepBegin;
           }
