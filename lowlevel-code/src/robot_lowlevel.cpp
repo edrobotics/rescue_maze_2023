@@ -61,12 +61,12 @@ MeRGBLed ledRing(0, 12);
 
 const double MAX_CORRECTION_DISTANCE = 16;
 const double MIN_CORRECTION_ANGLE = 8;
-const double MAX_WALLCHANGE_ANGLE = 33; // Should be changed later to compute the actual distances
+const double MAX_WALLCHANGE_ANGLE = 25; // Should be changed later to compute the actual distances
 const double MAX_WALLCHANGE_DISTANCE;
 
 #warning untuned constants
 // const double MAX_ULTRASONIC_FAR = 70; // Max distance to use differences in front ultrasonic sensor distance
-const double MAX_ULTRASONIC_NEAR = 20; // Max distance to use absolute value of front ultrasonic sensor
+const double MAX_ULTRASONIC_NEAR = 21; // Max distance to use absolute value of front ultrasonic sensor
 // const double MAX_FRONT_DIFFERENCE = 3; // The maximum allowed difference between two front ultrasonic readings
 const double MAX_FRONT_CORRECTION_DISTANCE = 11; // The maximum allowed difference between pose and corrected pose when the front ultrasonic sensor gets involved.
 // const double MAX_FRONT_ANGLE = 7; // The maximum allowed angle for the front sensor to be used. Tuned theoretically for 120cm far distance
@@ -92,7 +92,7 @@ const double WHEEL_CIRCUMFERENCE = PI * WHEEL_DIAMETER;
 // Driving
 const double CMPS_TO_RPM = 1.0 / WHEEL_CIRCUMFERENCE * 60.0;  // Constant to convert from cm/s to rpm
 const double BASE_SPEED_CMPS = 18;                            // The base speed of driving (cm/s)
-const double TURBO_SPEED_CMPS = 20;
+const double TURBO_SPEED_CMPS = 21;
 double BASE_TURNING_SPEED = 46 / CMPS_TO_RPM;                 // The turning speed to normally use
 double g_baseSpeed_CMPS = BASE_SPEED_CMPS;                    // The speed to drive at
 const double BASE_SPEED_RPM = CMPS_TO_RPM * g_baseSpeed_CMPS; // The base speed of driving (rpm)
@@ -131,17 +131,17 @@ const double FRONT_WALL_STOPPING_TRESHOLD = 15 - ULTRASONIC_FRONT_OFFSET + 1.8;
 // Wallchange offsets for neoprene foam wheels
 double wallChangeOffsets[wcoff_num] =
     {
-        1,    // frontLeaving
-        -1.2, // frontApproaching
-        2,    // backLeaving
+        2,    // frontLeaving
+        -1.5, // frontApproaching
+        5.3,    // backLeaving
         -0.5  // backApproaching
 };
 double wallChangeOffsetsSmooth[wcoff_num] =
     {
-        2.3,  // frontLeaving
+        4.3,  // frontLeaving
         -0.1, // frontApproaching
-        3,    // backLeaving
-        -1.8  // backApproaching
+        4.4,    // backLeaving
+        -1.5  // backApproaching
 };
 
 const double BACK_WALLCHANGE_DISTANCE = 15 + ULTRASONIC_SPACING / 2.0;
@@ -327,11 +327,11 @@ Command serialcomm::readCommand(bool waitForSerial, int timeout)
     break;
 
   case 't': // turn
+    // sounds::tone(440, 1000); // Debugging
     ++strIdx;
     if (readString.charAt(strIdx) != ',')
       return command_invalid; // Invalid because the form was not followed
     ++strIdx;
-
     if (readString.charAt(strIdx) == 'l')
       return command_turnLeft;
     else if (readString.charAt(strIdx) == 'r')
@@ -381,8 +381,10 @@ Command serialcomm::readCommand(bool waitForSerial, int timeout)
       sounds::errorBeep();
     }
     ++strIdx;
-    if (readString.charAt(strIdx) != '0') return command_invalid;
+
+    if (readString.charAt(strIdx) != ',') return command_invalid;
     ++strIdx;
+
     if (readString.charAt(strIdx) == '0')
     {
       g_turnToDrop = false;
@@ -405,6 +407,7 @@ Command serialcomm::readCommand(bool waitForSerial, int timeout)
     break;
 
   case 'b': // Blink/lights
+  {
     ++strIdx;
     if (readString.charAt(strIdx) != ',')
       return command_invalid; // Invalid because the form was not followed
@@ -413,9 +416,7 @@ Command serialcomm::readCommand(bool waitForSerial, int timeout)
     g_lightCommand = lights::getLightCommandFromChar(inputChar);
     return command_light;
     break;
-  
-  case 'z':
-
+  }
 
   default:
     sounds::errorBeep();
@@ -509,7 +510,7 @@ lights::LightCommand lights::getLightCommandFromChar(char command)
       return lCommand_notReturning;
       break;
     case 'e':
-      return lCommand_notReturning;
+      return lCommand_mappingError;
       break;
     default:
       return lCommand_none;
@@ -569,23 +570,25 @@ void lights::execLightCommand()
       circle(colourAffirmative, colourRed, 1, 10000);
       break;
     case lCommand_returning:
-      setColour(9, colourAffirmative, true);
-      delay(420);
+      setColour(8, colourAffirmative, false);
+      setColour(10, colourAffirmative, true);
+      delay(690);
       break;
     case lCommand_notReturning:
-      setColour(9, colourError, true);
-      delay(420);
+      setColour(8, colourError, false);
+      setColour(10, colourError, true);
+      delay(690);
       break;
     case lCommand_mappingError:
       setColour(3, colourError, false);
       setColour(6, colourError, false);
       setColour(9, colourError, false);
       setColour(12, colourError, true);
-      delay(420);
+      delay(690);
       break;
     case lCommand_navigationFail:
       sounds::errorBeep();
-      circle(colourError, colourBlack, 1, 700);
+      circle(colourError, colourBlack, 1, 1000);
       break;
     case lCommand_none:
       // Do nothing
@@ -1459,12 +1462,14 @@ void gyroTurn(double turnAngle, bool stopMoving, double turnSpeed, bool aware = 
   {
     turnAngle = 90;
     sounds::errorBeep();
+    sounds::tone(700, 500);
     // Serial.println(turnAngle);
   }
   if (turnAngle < -170)
   {
     turnAngle = -90;
     sounds::errorBeep();
+    sounds::tone(400, 500);
     // Serial.println(turnAngle);
   }
 
@@ -2345,9 +2350,17 @@ double measurementAverage(double arrayToCalc[]) // Use a reference to the array 
 }
 
 bool g_onRampIterations[ON_RAMP_ARR_SIZE];
+bool g_upRampIterations[ON_RAMP_ARR_SIZE];
+bool g_downRampIterations[ON_RAMP_ARR_SIZE];
 int g_onRampPointer = 0;
+int g_upRampPointer = 0;
+int g_downRampPointer = 0;
 bool g_previousOnRampState = false;
+bool g_upPreviousOnRampState = false;
+bool g_downPreviousOnRampState = false;
 double g_trueDistanceDrivenOnRamp = 0;
+double g_upTrueDistanceDrivenOnRamp = 0;
+double g_downTrueDistanceDrivenOnRamp = 0;
 double g_horizontalDistanceDrivenOnRamp = 0;
 double g_verticalDistanceDrivenOnRamp = 0;
 
@@ -2355,7 +2368,8 @@ void fillRampArrayFalse()
 {
   for (int i = 0; i < ON_RAMP_ARR_SIZE; ++i)
   {
-    g_onRampIterations[i] = false;
+    g_upRampIterations[i] = false;
+    g_downRampIterations[i] = false;
   }
 }
 
@@ -2367,6 +2381,23 @@ void addOnRampValue(bool state)
   ++g_onRampPointer;
 }
 
+void addUpRampValue(bool state)
+{
+  while (g_upRampPointer >= ON_RAMP_ARR_SIZE) {g_upRampPointer -= ON_RAMP_ARR_SIZE;}
+  g_upRampPointer = g_upRampPointer % ON_RAMP_ARR_SIZE; // Could cause errors if g_onRampPointer goes negative, which it never should
+  g_upRampIterations[g_upRampPointer] = state;
+  ++g_upRampPointer;
+}
+
+void addDownRampValue(bool state)
+{
+  while (g_downRampPointer >= ON_RAMP_ARR_SIZE) {g_downRampPointer -= ON_RAMP_ARR_SIZE;}
+  g_downRampPointer = g_downRampPointer % ON_RAMP_ARR_SIZE; // Could cause errors if g_onRampPointer goes negative, which it never should
+  g_downRampIterations[g_downRampPointer] = state;
+  ++g_downRampPointer;
+
+}
+
 // Returns true if you are currently on a ramp
 bool getIsOnRamp()
 {
@@ -2374,6 +2405,36 @@ bool getIsOnRamp()
   for (int i = 0; i < ON_RAMP_ARR_SIZE; ++i)
   {
     if (g_onRampIterations[i] == true)
+      ++sum;
+  }
+  int average = (double)sum / (double)ON_RAMP_ARR_SIZE;
+  if (average > 0.5)
+    return true;
+  else
+    return false;
+}
+
+bool getIsUpRamp()
+{
+  int sum = 0;
+  for (int i = 0; i < ON_RAMP_ARR_SIZE; ++i)
+  {
+    if (g_upRampIterations[i] == true)
+      ++sum;
+  }
+  int average = (double)sum / (double)ON_RAMP_ARR_SIZE;
+  if (average > 0.5)
+    return true;
+  else
+    return false;
+}
+
+bool getIsDownRamp()
+{
+  int sum = 0;
+  for (int i = 0; i < ON_RAMP_ARR_SIZE; ++i)
+  {
+    if (g_downRampIterations[i] == true)
       ++sum;
   }
   int average = (double)sum / (double)ON_RAMP_ARR_SIZE;
@@ -2396,6 +2457,8 @@ void setShadowDistance(int sensor, WallChangeType wallChange, double setDistance
 {
   g_potWallChanges[sensor][wallChange].shadowDistanceDriven = setDistance;
 }
+
+// #define DEBUG
 
 // Updates the appropriate variables to the appropriate values in accordance with the detected wallchange, if there is one
 // sensor - which ultrasonic sensor to check and update from
@@ -2439,8 +2502,10 @@ void checkAndUseWallChange(int sensor, WallChangeType wallChangeToCheck, Stoppin
       }
     }
 
+    bool didCorrection = false;
+
     // Checking for potential wallchanges
-    if (millis() - g_potWallChanges[sensor][wallChangeToCheck].timestamp < 500) // Time is not tuned!!!
+    if (millis() - g_potWallChanges[sensor][wallChangeToCheck].timestamp < 500 && g_potWallChanges[sensor][wallChangeToCheck].detected == true) // Time is not tuned!!!
     {
       // Successful detection using potential wallchange
       double corrected = g_potWallChanges[sensor][wallChangeToCheck].shadowDistanceDriven + offset;
@@ -2450,12 +2515,15 @@ void checkAndUseWallChange(int sensor, WallChangeType wallChangeToCheck, Stoppin
           pose.yDist = 30 - corrected;
         else
           pose.yDist = corrected;
+        didCorrection = true;
       }
       g_potWallChanges[sensor][wallChangeToCheck].timestamp = 0; // Resets the timeflag to prevent double detection. If correction was too large, also prevents from
+    // #ifdef DEBUG
+    // Serial.println("Raw wallchange exists");
+    // #endif
     }
-    else
+    else // Normal detection using only smooth wallchange
     {
-// Normal detection using only smooth wallchange
 #warning code also used elsewhere
       double angleCorrDistance = 0;
       if (abs(pose.angle) <= MAX_WALLCHANGE_ANGLE)
@@ -2466,33 +2534,54 @@ void checkAndUseWallChange(int sensor, WallChangeType wallChangeToCheck, Stoppin
           angleCorrDistance *= -1;
         }
 
-        smoothOffset += angleCorrDistance; // Set the distance to write to trueDistanceDriven
+        double corrected = smoothOffset + angleCorrDistance;
+        // #ifdef DEBUG
+        // Serial.println(corrected);
+        // #endif
+        // smoothOffset += angleCorrDistance; // Set the distance to write to trueDistanceDriven
+        // Actually executing the wallchange
+        if (abs(g_trueDistanceDriven - corrected) <= MAX_CORRECTION_DISTANCE) // Limit correction
+        {
+          if (g_driveBack == true)
+            pose.yDist = 30 - corrected;
+          else
+            pose.yDist = corrected;
+          didCorrection = true;
+          // #ifdef DEBUG
+          // Serial.println("Corrected the distance");
+          // #endif
+        }
       }
 
-      // Actually executing the wallchange
-      if (abs(g_trueDistanceDriven - smoothOffset) <= MAX_CORRECTION_DISTANCE) // Limit correction
+    }
+
+    if (didCorrection==true)
+    {
+      if (wallChangeToCheck == wallchange_leaving)
       {
-        if (g_driveBack == true)
-          pose.yDist = g_targetDistance - smoothOffset;
+        if (ultrasonicGroup == ultrasonics_front)
+          stopReason = stop_frontWallChangeLeaving;
         else
-          pose.yDist = smoothOffset;
+          stopReason = stop_backWallChangeLeaving;
+      }
+      else
+      {
+        if (ultrasonicGroup == ultrasonics_front)
+          stopReason = stop_frontWallChangeApproaching;
+        else
+          stopReason = stop_backWallChangeApproaching;
       }
     }
+  }
+}
 
-    if (wallChangeToCheck == wallchange_leaving)
-    {
-      if (ultrasonicGroup == ultrasonics_front)
-        stopReason = stop_frontWallChangeLeaving;
-      else
-        stopReason = stop_backWallChangeLeaving;
-    }
-    else
-    {
-      if (ultrasonicGroup == ultrasonics_front)
-        stopReason = stop_frontWallChangeApproaching;
-      else
-        stopReason = stop_backWallChangeApproaching;
-    }
+
+void resetWallChanges()
+{
+  for (int i=0;i<ULTRASONIC_NUM;++i)
+  {
+    g_potWallChanges[i][wallchange_leaving].timestamp = 0;
+    g_potWallChanges[i][wallchange_approaching].timestamp = 0;
   }
 }
 
@@ -2624,6 +2713,10 @@ int g_onBumpIterations = 0;
 int g_totalNewIterations = 0;   // Total iterations on new tile
 int g_totalIterations = 0; // Total iterations for move
 
+
+bool g_upRampDetected = false;
+bool g_downRampDetected = false;
+
 // What to run inside of the driveStep loop (the driving forward-portion)
 // Arguments have the same names as the variables they should accept in driveStep.
 // wallToUse - which wall to follow/measure
@@ -2698,20 +2791,40 @@ bool driveStepDriveLoop(WallSide &wallToUse, double &dumbDistanceDriven, Stoppin
 
   // Checking for ramps (perhaps do running average?)
   // Need to handle when you get off the ramp, so that you don't stop immediately
-  if (abs(gyro.getAngleX()) > 10)
+  if (-gyro.getAngleX() > 10)
   {
+    addUpRampValue(true);
+    addDownRampValue(false);
+    addOnRampValue(true);
+  }
+  else if (-gyro.getAngleX() < -10)
+  {
+    addUpRampValue(false);
+    addDownRampValue(true);
     addOnRampValue(true);
   }
   else
   {
+    addUpRampValue(false);
+    addDownRampValue(false);
     addOnRampValue(false);
   }
   
-
   bool onRamp = getIsOnRamp();
+  bool onUpRamp = getIsUpRamp();
+  bool onDownRamp = getIsDownRamp();
+
+  // For rejecting it when both have been detected
+  if (onUpRamp==true) g_upRampDetected = true;
+  if (onDownRamp==true) g_downRampDetected = true;
+  
   bool rampChange = false;
-  if (onRamp != g_previousOnRampState)
-    rampChange = true;
+  bool upRampChange = false;
+  bool downRampChange = false;
+  if (onRamp != g_previousOnRampState) rampChange = true;
+  if (onUpRamp != g_upPreviousOnRampState)
+    upRampChange = true;
+  if (onDownRamp != g_downPreviousOnRampState) downRampChange = true;
 
   // Serial.print("onRamp: ");Serial.print(onRamp);Serial.print("  ");
   // pose.printRampVals();
@@ -2732,7 +2845,7 @@ bool driveStepDriveLoop(WallSide &wallToUse, double &dumbDistanceDriven, Stoppin
       g_baseSpeed_CMPS = BASE_SPEED_CMPS;
     }
   }
-  else // What to do ONLY when NOT on a ramp ------------------------------------------------------
+  else// What to do ONLY when NOT on a ramp ------------------------------------------------------
   {
     if (rampChange == true)
     {
@@ -2764,22 +2877,6 @@ bool driveStepDriveLoop(WallSide &wallToUse, double &dumbDistanceDriven, Stoppin
     // }
     // Serial.println(ultrasonicDistanceF); // Debugging
 
-    if (g_driveBack == false && g_trueDistanceDriven >= (g_targetDistance + 15 - (ULTRASONIC_FRONT_OFFSET + FRONT_WALL_STOPPING_TRESHOLD) - 1) && g_frontUltrasonicUsed == true)
-    {
-      if (stopReason == stop_none)
-        stopReason = stop_frontWallPresent;
-      g_driveBack = false;
-      return true;
-    }
-
-    if ((g_trueDistanceDriven >= g_targetDistance - 2 && abs(gyro.getAngleX()) < 4) || g_trueDistanceDriven >= g_targetDistance) // Stopping due to dead reckoning. Only if robot flat enough or having driven further as a safeguard (if angle is wrong)
-    {
-      if (stopReason == stop_none)
-        stopReason = stop_deadReckoning;
-      g_driveBack = false; // Reset the driveBack variable (do not drive back the next step)
-      return true;
-    }
-
     // Checking for ground colour (should perhaps only be done when not on ramp?)
     g_floorColour = colSensor.checkFloorColour();
     if (g_driveBack == false)
@@ -2801,6 +2898,7 @@ bool driveStepDriveLoop(WallSide &wallToUse, double &dumbDistanceDriven, Stoppin
         g_iterations_since_black = 0;
         if ((-gyro.getAngleX() > -4 && -gyro.getAngleX() < 2) || g_blackIterations >= 5) // Only detect black if flat enough or if enough black detections were made
         {
+          // awareGyroTurn(1, true, 1, false, -20); // DO NOT USE!!! It messes up the positioning (I believe, it does not work without it at least)
           stopWheels();
           double dumbDistanceIncrement = getDistanceDriven() - dumbDistanceDriven;
           pose.update(wallToUse, dumbDistanceIncrement);
@@ -2887,6 +2985,30 @@ bool driveStepDriveLoop(WallSide &wallToUse, double &dumbDistanceDriven, Stoppin
 
   } // Only do when not on ramp ends here
 
+  // Safeguard for stairs with short top
+  if ((onRamp==true && g_upRampDetected==true && g_downRampDetected==true )|| onRamp==false)
+  {
+    if (g_driveBack == false && g_trueDistanceDriven >= (g_targetDistance + 15 - (ULTRASONIC_FRONT_OFFSET + FRONT_WALL_STOPPING_TRESHOLD) - 1) && g_frontUltrasonicUsed == true)
+    {
+      if (stopReason == stop_none)
+        stopReason = stop_frontWallPresent;
+      g_driveBack = false;
+      return true;
+    }
+
+    if ((g_trueDistanceDriven >= g_targetDistance - 1.7 && abs(gyro.getAngleX()) < 4) || g_trueDistanceDriven >= g_targetDistance) // Stopping due to dead reckoning. Only if robot flat enough or having driven further as a safeguard (if angle is wrong)
+    {
+      if (stopReason == stop_none)
+        stopReason = stop_deadReckoning;
+      g_driveBack = false; // Reset the driveBack variable (do not drive back the next step)
+      return true;
+    }
+  }
+  // Serial.print("onRamp:");Serial.print(onRamp);Serial.print(" ");
+  // Serial.print("g_upRampDetected:");Serial.print(g_upRampDetected);Serial.print(" ");
+  // Serial.print("g_downRampDetected:");Serial.print(g_downRampDetected);Serial.print(" ");
+  // Serial.println(pose.distOnRamp);
+
   // Checking for wallchanges
   if (abs(pose.angle) <= MAX_WALLCHANGE_ANGLE) // Only check wallchanges if below certain angle. Correction for angle is also done with the distance.
   {
@@ -2945,6 +3067,8 @@ bool driveStepDriveLoop(WallSide &wallToUse, double &dumbDistanceDriven, Stoppin
 
   // Updates for the next loop (may not be all of themo)
   g_previousOnRampState = onRamp;
+  g_upPreviousOnRampState = onUpRamp;
+  g_downPreviousOnRampState = onDownRamp;
   setPreviousSensorWallStates();
   return false; // The default return - not finished
 }
@@ -2953,7 +3077,7 @@ bool driveStep(FloorColour &floorColourAhead, bool &rampDriven, TouchSensorSide 
 {
   // straighten();
   if (g_turboSpeed == true)
-    g_baseSpeed_CMPS = 21;
+    g_baseSpeed_CMPS = TURBO_SPEED_CMPS;
   else
     g_baseSpeed_CMPS = BASE_SPEED_CMPS;
   WallSide wallToUse = wall_none; // Initialize a variable for which wall to follow
@@ -2968,7 +3092,7 @@ bool driveStep(FloorColour &floorColourAhead, bool &rampDriven, TouchSensorSide 
     // g_targetDistance = g_trueDistanceDriven + 2;
     // g_targetDistance = 15;
     g_startDistance = g_targetDistance - g_trueDistanceDriven;
-    // pose.yDist = g_trueDistanceDriven; // Needed? Problematic?
+    // pose.yDist = g_trueDistanceDriven; // Needed? Problematic? Should already be correct
     // g_targetDistance += 3;
   }
   if (continuing == true)
@@ -2989,6 +3113,8 @@ bool driveStep(FloorColour &floorColourAhead, bool &rampDriven, TouchSensorSide 
   g_onBumpIterations = 0;
   g_totalNewIterations = 0;
   g_totalIterations = 0;
+  g_upRampDetected = false;
+  g_downRampDetected = false;
 
   // Get sensor data for initial values
   if (g_driveBack == false)
@@ -2997,6 +3123,7 @@ bool driveStep(FloorColour &floorColourAhead, bool &rampDriven, TouchSensorSide 
   }
   checkWallPresence();
   setPreviousSensorWallStates();
+  resetWallChanges();
   wallToUse = pose.getSafeWallToUse();
 
   // Update pose
@@ -3040,7 +3167,7 @@ bool driveStep(FloorColour &floorColourAhead, bool &rampDriven, TouchSensorSide 
   dumbDistanceDriven = 0;
   double trueDistanceDrivenFlag = g_trueDistanceDriven;
   // Continue driving forward if necessary (close enough to the wall in front)
-  if (stoppingReason != stop_frontWallPresent && stoppingReason != stop_floorColour && ultrasonicCurrentDistances[ultrasonic_F][usmt_smooth] < (15 - ULTRASONIC_FRONT_OFFSET + 10) && (g_floorColour != floor_black) && g_driveBack == false) // && g_floorColour != floor_blue // Removed due to strategy change
+  if (stoppingReason != stop_frontWallPresent && stoppingReason != stop_floorColour && ultrasonicCurrentDistances[ultrasonic_F][usmt_smooth] < (15 - ULTRASONIC_FRONT_OFFSET + 13) && (g_floorColour != floor_black) && g_driveBack == false) // && g_floorColour != floor_blue // Removed due to strategy change
   {
     bool throwaWayRampDriven = false; // Just to give driveStepDriveLoop someting. Is not used for anything.
     lights::setColour(3, colourOrange, true);
@@ -3141,14 +3268,15 @@ bool driveStep(FloorColour &floorColourAhead, bool &rampDriven, TouchSensorSide 
   // Serial.println("");
 
   // Serial.print("Reflective share: ");Serial.println(double(g_reflectiveIterations)/double(g_totalNewIterations), 3); // Debugging
-  Serial.print("Spike share: ");Serial.println(double(g_spikeIterations) / double(g_totalNewIterations), 3); // Debugging
+  // Serial.print("Spike share: ");Serial.println(double(g_spikeIterations) / double(g_totalNewIterations), 3); // Debugging
+  // Serial.print("Blue share: ");Serial.println(double(g_blueIterations) / double(g_totalNewIterations), 3); // Debugging
   // Check for blue
-  if (double(g_blueIterations) / double(g_totalNewIterations) > 0.85 && g_driveBack == false) // If the ground colour is blue
+  if (double(g_blueIterations) / double(g_totalNewIterations) > 0.8 && g_driveBack == false) // If the ground colour is blue
   {
     floorColourAhead = floor_blue;
   }
   // Check for reflective
-  else if ((double(g_reflectiveIterations) / double(g_totalNewIterations) > 0.45 || double(g_spikeIterations) / double(g_totalNewIterations) > 0.2)&& g_driveBack == false && bumpDriven==false) // If the ground colour is reflective
+  else if ((double(g_reflectiveIterations) / double(g_totalNewIterations) > 0.45 || double(g_spikeIterations) / double(g_totalNewIterations) > 0.2) && g_driveBack == false && bumpDriven==false) // If the ground colour is reflective
   {
     floorColourAhead = floor_reflective;
   }

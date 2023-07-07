@@ -474,6 +474,8 @@ void checkSmoothWallChanges();
 
 void checkPotWallChanges();
 
+void resetWallChanges();
+
 
 
 

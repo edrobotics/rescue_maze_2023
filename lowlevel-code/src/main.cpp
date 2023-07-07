@@ -8,8 +8,8 @@
 #include <Wire.h>
 #include <SPI.h>
 
-#define PICODE
-// #define TESTING_NAV
+// #define PICODE
+#define TESTING_NAV
 // #define TESTING
 // #define COLSENS_CALIBRATION
 
@@ -29,7 +29,7 @@ void setup()
   #ifdef PICODE
   Serial.begin(9600);
   #else
-  Serial.begin(115200);
+  Serial.begin(9600);
   #endif
   
   // Init hardware
@@ -43,6 +43,10 @@ void setup()
   flushDistanceArrays();
   fillRampArrayFalse();
   // startDistanceMeasure(); // Why is this here?
+
+  // #warning Debugging
+  // checkSmoothWallChanges();
+  // checkPotWallChanges();
   
 
   // Wait for beginning (to give time to remove hands etc.)
@@ -72,6 +76,8 @@ void setup()
 void loop()
 {
 
+  static bool shouldDelay = false;
+  
   #ifdef TESTING
  
   // Command command = serialcomm::readCommand();
@@ -123,18 +129,23 @@ void loop()
 
   // getUltrasonics();
   // printUltrasonics();
-  startDistanceMeasure();
-  while(true)
-  {
-    delay(20);
-    loopEncoders();
-    Serial.println(getDistanceDriven());
-  }
+  // startDistanceMeasure();
+  // while(true)
+  // {
+  //   delay(20);
+  //   loopEncoders();
+  //   Serial.println(getDistanceDriven());
+  // }
+  driveStep();
+  delay(2000);
   
 
   #else
-
   #ifdef PICODE
+  if (shouldDelay==true)
+  {
+  delay(200);
+  }
   lights::turnOff();
   #endif
   #ifdef TESTING_NAV
@@ -235,18 +246,21 @@ void loop()
           {
             serialcomm::returnFailure();
           }
-          if (pose.yDist > 15) pose.yDist -= 30; // Just set to 0 instead?
-        
+          // if (pose.yDist > 15) pose.yDist -= 30; // Just set to 0 instead?
+          pose.yDist = 0; // To prevent the robot driving too far? This could help
+          shouldDelay = true;
       }
         break;
 
       case command_driveBack: // drive one step backwards. Only used for testing/debugging
+        shouldDelay = false;
         driveBlind(-30, false);
         stopWheels();
         serialcomm::returnSuccess();
         break;
 
       case command_turnLeft: // turn counterclockwise one step
+        shouldDelay = false;
         serialcomm::returnSuccess();
         // lights::showDirection(lights::left);
         turnSteps(ccw, 1, BASE_TURNING_SPEED);
@@ -257,6 +271,7 @@ void loop()
         break;
 
       case command_turnRight: // turn clockwise one step
+        shouldDelay = false;
         serialcomm::returnSuccess();
         // lights::showDirection(lights::right);
         turnSteps(cw, 1, BASE_TURNING_SPEED);
@@ -268,25 +283,30 @@ void loop()
       // Sensors
       case command_getWallStates: // Send the current state of the walls to the maze code (raspberry). The form is 0bXYZ, where X, Y, Z are 0 or 1, 1 meaning the wall is present. X front, Y left, Z right.
         {
+          shouldDelay = false;
           uint8_t wallStates = getWallStates();
           serialcomm::returnAnswer(wallStates);
           break;
         }
 
       case command_dropKit:
+        shouldDelay = false;
         serialcomm::returnSuccess();
         handleVictim(false);
         serialcomm::returnSuccess();
         break;
 
       case command_light:
+        shouldDelay = false;
         // Execute the lighting (including delay)
         serialcomm::returnSuccess();
         lights::execLightCommand();
         lights::turnOff();
         serialcomm::returnSuccess();
+        break;
 
       case command_invalid:
+        shouldDelay = false;
         sounds::errorBeep();
         serialcomm::returnFailure();
         break;

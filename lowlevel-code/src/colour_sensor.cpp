@@ -14,8 +14,8 @@
 Adafruit_TCS34725 colSens = Adafruit_TCS34725(TCS34725_INTEGRATIONTIME_60MS, TCS34725_GAIN_1X);
 bool readState = false; // Keeps track of whether the sensor was read or not
 
-double MAX_DETECTION_DISTANCES[5] {50, 30, 60, 70, 0}; // White, black, blue, reflective, unknown
-double STANDARD_RADIUSES[5] {0, 0, 0, 20, 0};// White, black, blue, reflective, unknown
+double MAX_DETECTION_DISTANCES[5] {50, 20, 70, 70, 0}; // White, black, blue, reflective, unknown
+double STANDARD_RADIUSES[5] {30, 0, 7, 20, 0};// White, black, blue, reflective, unknown
 
 MeRGBLed newLed(0, 12);
 newLights::RGBColour newColourBlack {0, 0, 0};
@@ -68,6 +68,7 @@ void ColourSensor::init()
 {
     if (colSens.begin() == false)
     {
+        newLights::errorBlink();
         // Serial.println("Could not find sensor");
     }
     // else Serial.println("Sensor initialized");
@@ -208,16 +209,22 @@ FloorColour ColourSensor::getClosestColour(ColourSample compare)
     distances[floor_black] = getColDistance(blackReference.s, compare) - blackReference.radius;
     distances[floor_blue] = getColDistance(blueReference.s, compare) - blueReference.radius;
     distances[floor_white] = getColDistance(whiteReference.s, compare) - whiteReference.radius;
+    // Serial.print("Black: ");Serial.print(distances[floor_black] + blackReference.radius);Serial.print(" - ");Serial.print(blackReference.radius);Serial.print(" = ");Serial.println(distances[floor_black]);
+    // Serial.print("Blue: ");Serial.print(distances[floor_blue] + blueReference.radius);Serial.print(" - ");Serial.print(blueReference.radius);Serial.print(" = ");Serial.println(distances[floor_blue]);
+    // Serial.print("White: ");Serial.print(distances[floor_white] + whiteReference.radius);Serial.print(" - ");Serial.print(whiteReference.radius);Serial.print(" = ");Serial.println(distances[floor_white]);
     
     #ifdef REFLECTIVE_SPLIT
     double reflectiveDistances[REFLECTIVE_REFERENCE_NUM];
     for (int i=0; i<usedReflectiveReferences; ++i)
     {
         reflectiveDistances[i] = getColDistance(reflectiveReferences[i].s, compare) - reflectiveReferences[i].radius;
+        // Serial.print("Reflective");Serial.print(i);Serial.print(": ");Serial.print(reflectiveDistances[i] + reflectiveReferences[i].radius);Serial.print(" - ");Serial.print(reflectiveReferences[i].radius);Serial.print(" = ");Serial.println(reflectiveDistances[i]);
     }
     #else
     distances[floor_reflective] = getColDistance(reflectiveReference.s, compare) - reflectiveReference.radius;
+    // Serial.print("Reflective: ");Serial.print(distances[floor_reflective] + reflectiveReference.radius);Serial.print(" - ");Serial.print(reflectiveReference.radius);Serial.print(" = ");Serial.println(distances[floor_reflectiveReference]);
     #endif
+    // Serial.println("");Serial.println("");
     
     FloorColour minCol = floor_black;
     if (distances[floor_blue] < distances[minCol]) minCol = floor_blue;
@@ -271,15 +278,16 @@ bool ColourSensor::readSensor()
 
 bool ColourSensor::isSpike()
 {
-    double spikeThreshold = whiteReference.s.values[ColourSample::clear] + whiteReference.radius;
-    if (reading.values[ColourSample::clear] > spikeThreshold)
-    {
-        return true;
-    }
-    else
-    {
-        return false;
-    }
+    // double spikeThreshold = whiteReference.s.values[ColourSample::clear] + 200;
+    // if (reading.values[ColourSample::clear] > spikeThreshold)
+    // {
+    //     return true;
+    // }
+    // else
+    // {
+    //     return false;
+    // }
+    return false; // For now, as it is not tuned correclty
 }
 
 // Identify the colour read by readSensor()
@@ -292,7 +300,6 @@ FloorColour ColourSensor::identifyColour()
     {
         return floor_notUpdated;
     }
-
     
     // // Calculation using thresholds
 
@@ -316,6 +323,7 @@ FloorColour ColourSensor::identifyColour()
 
     // Calculation using colour distances
 
+    // #warning Debugging
     // return floor_unknown; // For debugging. Uncomment to disable colour detection
 
     FloorColour closestCol = getClosestColour(reading);
