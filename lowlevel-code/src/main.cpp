@@ -8,8 +8,8 @@
 #include <Wire.h>
 #include <SPI.h>
 
-#define PICODE
-// #define TESTING_NAV
+// #define PICODE
+#define TESTING_NAV
 // #define TESTING
 // #define COLSENS_CALIBRATION
 
@@ -20,6 +20,7 @@
 extern ColourSensor colSensor; // The colSensor object in robot_lowlevel.cpp
 extern RobotPose pose;
 extern double BASE_TURNING_SPEED;
+extern double g_pidSetPoint;
 
 HardwareButton colCalButton {30, false};
 
@@ -180,6 +181,7 @@ void loop()
       case command_driveStep: // drive one step forward
       {
         serialcomm::returnSuccess(); // For validation and robustness of the communication protocol
+        g_pidSetPoint = 15;
         // lights::showDirection(lights::front);
         bool continuing = false;
         bool rampDriven = false;
@@ -202,8 +204,9 @@ void loop()
           {
             // Correct by turning right
             awareGyroTurn(-18, true, BASE_TURNING_SPEED, true, -5);
-            awareGyroTurn(8, true, BASE_TURNING_SPEED, true, 5);
+            awareGyroTurn(-8, true, BASE_TURNING_SPEED, true, 5);
             continuing = true;
+            g_pidSetPoint = 20;
             goto driveStepBegin;
             
           }
@@ -211,8 +214,9 @@ void loop()
           {
             // Correct by turning left
             awareGyroTurn(18, true, BASE_TURNING_SPEED, true, -5);
-            awareGyroTurn(-8, true, BASE_TURNING_SPEED, true, 5);
+            awareGyroTurn(8, true, BASE_TURNING_SPEED, true, 5);
             continuing = true;
+            g_pidSetPoint = 10;
             goto driveStepBegin;
           }
 
@@ -251,6 +255,7 @@ void loop()
           // if (pose.yDist > 15) pose.yDist -= 30; // Just set to 0 instead?
           pose.yDist = 0; // To prevent the robot driving too far? This could help
           shouldDelay = true;
+          g_pidSetPoint = 15;
       }
         break;
 

@@ -2243,6 +2243,12 @@ WallSide g_lastWallSide = wall_none; // Was annoying to do as static
 // #define PIDTUNE_DISTANCEP
 // #define PIDTUNE_DISTANCED
 
+double g_pidSetPoint = 15;
+// void setSetPoint(double setVal)
+// {
+//   g_pidSetPoint = setVal;
+// }
+
 // Drive with wall following. Will do one iteration, so to actually follow the wall, call it multiple times in short succession.
 // wallSide - which wall to follow. Can be wall_left, wall_right or wall_both. Directions relative to the robot.
 // startAngle - The angle relative to the wall for the begin of the move (degrees, mathangle)
@@ -2258,7 +2264,7 @@ void pidDrive(WallSide wallSide)
 
   pose.update(wallSide);
 
-  distanceError = pose.xDist - 15;
+  distanceError = pose.xDist - g_pidSetPoint;
 
   if (g_lastWallSide == wallSide && g_lastWallSide != wall_none)
     distanceDerivative = 1000.0 * (distanceError - lastDistError) / (millis() - lastExecutionTime); // Calculate the derivative. (The 1000 is to make the time in seconds)
@@ -2716,6 +2722,7 @@ int g_totalIterations = 0; // Total iterations for move
 
 bool g_upRampDetected = false;
 bool g_downRampDetected = false;
+bool g_ignoreRamp = false;
 
 // What to run inside of the driveStep loop (the driving forward-portion)
 // Arguments have the same names as the variables they should accept in driveStep.
@@ -2826,6 +2833,8 @@ bool driveStepDriveLoop(WallSide &wallToUse, double &dumbDistanceDriven, Stoppin
     upRampChange = true;
   if (onDownRamp != g_downPreviousOnRampState) downRampChange = true;
 
+  if (g_upRampDetected==true && g_downRampDetected==true) g_ignoreRamp = true;
+
   // Serial.print("onRamp: ");Serial.print(onRamp);Serial.print("  ");
   // pose.printRampVals();
 
@@ -2833,7 +2842,11 @@ bool driveStepDriveLoop(WallSide &wallToUse, double &dumbDistanceDriven, Stoppin
   {
     useRampPID();
     pose.updateOnRamp(wallToUse, dumbDistanceIncrement);
-    if (pose.distOnRamp > 10 && !(g_downRampDetected==true && g_upRampDetected==true))
+    if (g_ignoreRamp==true)
+    {
+      rampDriven = false;
+    }
+    else if ((g_upRampDetected==true && pose.distOnRamp > 20) || (g_downRampDetected==true && pose.distOnRamp > 18))
     {
       rampDriven = true; // Could be moved to driveStep() ?
     }
@@ -3115,6 +3128,7 @@ bool driveStep(FloorColour &floorColourAhead, bool &rampDriven, TouchSensorSide 
   g_totalIterations = 0;
   g_upRampDetected = false;
   g_downRampDetected = false;
+  g_ignoreRamp = false;
 
   // Get sensor data for initial values
   if (g_driveBack == false)
