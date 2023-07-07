@@ -76,18 +76,19 @@ class imgproc:
 
 #sends message to navigaion code using sockets
     def sendMessage(self,msg):
-        if self.info: print("sending message", msg)
-        logging.info(f"sending: {msg}")
+        if self.connected:
+            if self.info: print("sending message", msg)
+            logging.info(f"sending: {msg}")
 
-        try:
-            message = msg.encode(self.FORMAT)
-            msg_length = len(message).to_bytes(self.HEADER, "big")
-            self.client.send(msg_length)
-            self.client.send(message)
-        except Exception as e:
-            if self.info: print("failed to send messsage")
-            logging.exception("failed to send message")
-            self.connect(once = True, msg = msg)
+            try:
+                message = msg.encode(self.FORMAT)
+                msg_length = len(message).to_bytes(self.HEADER, "big")
+                self.client.send(msg_length)
+                self.client.send(message)
+            except Exception as e:
+                if self.info: print("failed to send messsage")
+                logging.exception("failed to send message")
+                self.connect(once = True, msg = msg)
 #connects to navigation code
     def connect(self, once = False, msg = None):
         connect = True
@@ -108,7 +109,7 @@ class imgproc:
                 if msg: self.sendMessage(msg)
             else:
                 print("Connected")
-                connected = True
+                self.connected = True
                 break
 
 
@@ -120,8 +121,10 @@ class imgproc:
         self.debugidentification = debugidentification
         self.info = info
         self.time = time
+
         if connect:
             self.connect()
+        else: self.connected = False
         if logging: self.createfolder()
     
 
@@ -206,11 +209,11 @@ class imgproc:
                 #updates last detected
                 break
             if send:
-                if len(self.framedetected) == 1:
+                if len(self.framedetected) >= 1:
                     self.sendMessage(msg)
-                elif len(self.framedetected) > 1:
-                    if len(victim) == 1:
-                        self.sendMessage(msg)
+
+
+
             
             S_detected_victims = ""
             for victim in self.framedetected:
@@ -312,6 +315,7 @@ class imgproc:
                             miny = y
                     i = i+1
                 imgCnt = self.binary[miny:maxy, minx:maxx]
+                self.putTextPos = (minx, maxy + 5)
                 width = maxx - minx
                 height = maxy - miny
                 if width < 42: continue
@@ -319,13 +323,13 @@ class imgproc:
 
                 dsize = (200,200)
                 RImgCnt = cv2.resize(imgCnt, dsize)
+                if width < height: RImgCnt = cv2.rotate(RImgCnt, cv2.ROTATE_90_CLOCKWISE)
                 if self.show_visual:
                     cv2.imshow("imgCnt",RImgCnt)
 
                 if maxx < 320: self.side ="r"
                 else: self.side = "l"
 
-                self.putTextPos = (minx, maxy + 5)
                 result = self.identify_victim2(RImgCnt)
 #                self.identify_victim2(RImgCnt)
                 if result[0]:
@@ -368,12 +372,12 @@ class imgproc:
                     cv2.waitKey(0)
 
   
-        if sim[0] + sim[1] > 1.93:
+        if sim[0] + sim[1] > 1.85:
             identified = True
 
-        kits = self.how_many_kits(victim)
+        if victim: kits = self.how_many_kits(victim)
         
-        self.putText(f"{sim[0]:.2f}, {sim[1]:.2f}")
+        self.putText(f"{victim}{sim[0]:.2f}, {sim[1]:.2f}")
 
         return (identified,kits, victim)
     
@@ -413,7 +417,7 @@ class imgproc:
 
         if True or self.find_edges(contour, mask, x,y,w,h):
             if self.check_position(x,y,w,h):
-                if self.check_movement(victim,x,y,w,h): #evaluate and remove
+                if True or self.check_movement(victim,x,y,w,h): #evaluate and remove
                     correct = True
                 else: 
                     print("something of in multiframe safeguard")
@@ -433,7 +437,7 @@ class imgproc:
 
     def check_position(self, x,y,w,h): # makes sure the victim is on the right height
         b_position = None
-        victimheight = 150
+        victimheight = 185
         victimheight2 = 460
         if victimheight > x and victimheight - 40 < x + w:
             b_position = True
@@ -563,14 +567,14 @@ class imgproc:
         self.masks = {}
 
         lower_range = {
-            "green": np.array([42,50,70]), #decrese V 50 
             "yellow": np.array([20,50,100]),#decrese Saturation? 
-            "red" : np.array([130,69,100]) #increase saturation >100
+            "red" : np.array([130,69,100]), #increase saturation >100
+            "green": np.array([42,50,70]) #decrese V 50 
             }
         upper_range = {
-            "green" : np.array([90,255,255]),
             "yellow" : np.array([35,255,255]),
-            "red" : np.array([180,255,255])
+            "red" : np.array([180,255,255]),
+            "green" : np.array([90,255,255])
             }
         for color in lower_range:
             lower = lower_range[color]
