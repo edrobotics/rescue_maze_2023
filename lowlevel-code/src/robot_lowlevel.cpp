@@ -2214,6 +2214,10 @@ const double rampAngleP = 0.2;
 const double rampDistanceP = 2;
 const double rampDistanceD = 0.5;
 
+const double rampBackAngleP = 0.6;
+const double rampBackDistanceP = 2;
+const double rampBackDistanceD = 0.5;
+
 // PID coefficients for wall following (in the process of tuning)
 // The comments after the coefficients are a history of coefficients that worked allright
 double angleP = normAngleP;
@@ -2234,6 +2238,13 @@ void useRampPID()
   distanceP = rampDistanceP;
   distanceD = rampDistanceD;
   // sounds::tone(880, 50);
+}
+
+void useBackRampPID()
+{
+  angleP = rampBackAngleP;
+  distanceP = rampBackDistanceP;
+  distanceD = rampBackDistanceD;
 }
 
 // Variables for derivative calculation
@@ -2265,6 +2276,7 @@ void pidDrive(WallSide wallSide)
   pose.update(wallSide);
 
   distanceError = pose.xDist - g_pidSetPoint;
+  if (g_driveBack==true) distanceError *=-1;
 
   if (g_lastWallSide == wallSide && g_lastWallSide != wall_none)
     distanceDerivative = 1000.0 * (distanceError - lastDistError) / (millis() - lastExecutionTime); // Calculate the derivative. (The 1000 is to make the time in seconds)
@@ -2840,13 +2852,20 @@ bool driveStepDriveLoop(WallSide &wallToUse, double &dumbDistanceDriven, Stoppin
 
   if (onRamp == true)
   {
-    useRampPID();
+    if (g_driveBack == true)
+    {
+      useBackRampPID();
+    }
+    else 
+    {
+      useRampPID();
+    }
     pose.updateOnRamp(wallToUse, dumbDistanceIncrement);
     if (g_ignoreRamp==true)
     {
       rampDriven = false;
     }
-    else if ((g_upRampDetected==true && pose.distOnRamp > 20) || (g_downRampDetected==true && pose.distOnRamp > 18))
+    else if ((g_upRampDetected==true && (pose.distOnRamp > 20 || pose.distOnRamp < -20)) || (g_downRampDetected==true && (pose.distOnRamp > 18 || pose.distOnRamp < -18)))
     {
       rampDriven = true; // Could be moved to driveStep() ?
     }
@@ -2863,10 +2882,16 @@ bool driveStepDriveLoop(WallSide &wallToUse, double &dumbDistanceDriven, Stoppin
     if (rampChange == true)
     {
       lights::turnOff();      // Could cause problems?
+      // sounds::tone(440, 2000);
       if (rampDriven == true) // If it was in fact a ramp, update the pose
       {
         pose.yDist = 15;
         g_trueDistanceDriven = pose.yDist;
+        if (g_driveBack==true)
+        {
+          g_trueDistanceDriven = 30 - pose.yDist;
+        }
+        g_totalNewIterations = 0;
       }
       if (g_turboSpeed==true)
       {
@@ -2891,89 +2916,6 @@ bool driveStepDriveLoop(WallSide &wallToUse, double &dumbDistanceDriven, Stoppin
     // Serial.println(ultrasonicDistanceF); // Debugging
 
     // Checking for ground colour (should perhaps only be done when not on ramp?)
-    g_floorColour = colSensor.checkFloorColour();
-    if (g_driveBack == false)
-    {
-      // g_baseSpeed_CMPS = 15;
-      switch (g_floorColour)
-      {
-      case floor_notUpdated:
-        break; // Do nothing
-      case floor_unknown:
-        // g_baseSpeed_CMPS = 10;
-        // Serial.println("Unknown");
-        break;
-      case floor_black:
-        // Drive back to last point and exit the loop
-        // Serial.println("Black");
-        // sounds::tone(440, 20);
-        ++g_blackIterations;
-        g_iterations_since_black = 0;
-        if ((-gyro.getAngleX() > -4 && -gyro.getAngleX() < 2) || g_blackIterations >= 5) // Only detect black if flat enough or if enough black detections were made
-        {
-          // awareGyroTurn(1, true, 1, false, -20); // DO NOT USE!!! It messes up the positioning (I believe, it does not work without it at least)
-          stopWheels();
-          double dumbDistanceIncrement = getDistanceDriven() - dumbDistanceDriven;
-          pose.update(wallToUse, dumbDistanceIncrement);
-          g_trueDistanceDriven = pose.yDist;
-          stopReason = stop_floorColour;
-          return true; // Exit the loop
-        }
-        else
-        {
-          lights::setColour(3, colourRed, true);
-          g_floorColour = floor_unknown;
-        }
-        // sounds::tone(440, 20);
-        break;
-      case floor_blue:
-        // Do nothing here. Is handled below.
-        break;
-      case floor_reflective:
-        // Do nothing here. Is handled below
-        break;
-      default:
-        // Do nothing (includes silver)
-        break; // Potential problem with the last break statement?
-      }
-
-
-      if (g_floorColour != floor_black)
-      {
-        ++g_iterations_since_black;
-        // Reset number of black iterations if enough time has passed
-        if (g_iterations_since_black > 10) // Reset black iterations if enough iterations have gone without black
-        {
-          g_blackIterations = 0;
-        }
-      }
-
-      // Serial.println(gyro.getAngleX());
-      // Handling of bumps and some colours
-      if (g_trueDistanceDriven > 15 - 4) // If the colour sensor is on the next tile
-      {
-        ++g_totalNewIterations;
-        // Checking for spikes
-        if (colSensor.isSpike()==true)
-        {
-          ++g_spikeIterations;
-        }
-        if (-gyro.getAngleX() > 1.5) // Does not use absolute value as i cannot drive down to an obstacle
-        {
-          #warning untuned angle constant for bump detection
-          ++g_onBumpIterations;
-        }
-        if (g_floorColour == floor_reflective && (abs(gyro.getAngleX()) < 2 || abs(gyro.getAngleY()) < 2)) // Robot can be scewed in any direction
-        {
-          #warning angle threshold for reflective detection untuned
-          ++g_reflectiveIterations;
-        }
-        if (g_floorColour == floor_blue)
-        {
-          ++g_blueIterations;
-        }
-      }
-    }
 
     // Checking the front touch sensor
     TouchSensorSide touchSensorState = frontSensorActivated();
@@ -2998,6 +2940,94 @@ bool driveStepDriveLoop(WallSide &wallToUse, double &dumbDistanceDriven, Stoppin
 
   } // Only do when not on ramp ends here
 
+  g_floorColour = colSensor.checkFloorColour();
+  if (g_driveBack == false)
+  {
+    // g_baseSpeed_CMPS = 15;
+    switch (g_floorColour)
+    {
+    case floor_notUpdated:
+      break; // Do nothing
+    case floor_unknown:
+      // g_baseSpeed_CMPS = 10;
+      // Serial.println("Unknown");
+      break;
+    case floor_black:
+      // Drive back to last point and exit the loop
+      // Serial.println("Black");
+      // sounds::tone(440, 20);
+      ++g_blackIterations;
+      g_iterations_since_black = 0;
+      if (-gyro.getAngleX() < 2 || g_blackIterations >= 5) // Only detect black if flat enough or if enough black detections were made. //(-gyro.getAngleX() > -4 && 
+      {
+        // awareGyroTurn(1, true, 1, false, -20); // DO NOT USE!!! It messes up the positioning (I believe, it does not work without it at least)
+        stopWheels();
+        double dumbDistanceIncrement = getDistanceDriven() - dumbDistanceDriven;
+        pose.update(wallToUse, dumbDistanceIncrement);
+        g_trueDistanceDriven = pose.yDist;
+        stopReason = stop_floorColour;
+        if (rampDriven==true)
+        {
+        g_trueDistanceDriven = 15;
+        }
+        return true; // Exit the loop
+      }
+      // else
+      // {
+      //   lights::setColour(3, colourRed, true);
+      //   g_floorColour = floor_unknown;
+      // }
+      // sounds::tone(440, 20);
+      break;
+    case floor_blue:
+      // Do nothing here. Is handled below.
+      break;
+    case floor_reflective:
+      // Do nothing here. Is handled below
+      break;
+    default:
+      // Do nothing (includes silver)
+      break; // Potential problem with the last break statement?
+    }
+
+
+    if (g_floorColour != floor_black)
+    {
+      ++g_iterations_since_black;
+      // Reset number of black iterations if enough time has passed
+      if (g_iterations_since_black > 10) // Reset black iterations if enough iterations have gone without black
+      {
+        g_blackIterations = 0;
+      }
+    }
+
+    // Serial.println(gyro.getAngleX());
+    // Handling of bumps and some colours
+    if (g_trueDistanceDriven > 15 - 4) // If the colour sensor is on the next tile
+    {
+      ++g_totalNewIterations;
+      // Checking for spikes
+      if (colSensor.isSpike()==true)
+      {
+        ++g_spikeIterations;
+      }
+      if (-gyro.getAngleX() > 1.5) // Does not use absolute value as i cannot drive down to an obstacle
+      {
+        #warning untuned angle constant for bump detection
+        ++g_onBumpIterations;
+      }
+      if ((g_floorColour == floor_reflective && (abs(gyro.getAngleX()) < 2 || abs(gyro.getAngleY()) < 2)) && onRamp == false) // Robot can be scewed in any direction
+      {
+        #warning angle threshold for reflective detection untuned
+        ++g_reflectiveIterations;
+      }
+      if (g_floorColour == floor_blue)
+      {
+        ++g_blueIterations;
+      }
+    }
+  }
+
   // Safeguard for stairs with short top
   if ((onRamp==true && g_upRampDetected==true && g_downRampDetected==true )|| onRamp==false)
   {
@@ -3021,6 +3051,7 @@ bool driveStepDriveLoop(WallSide &wallToUse, double &dumbDistanceDriven, Stoppin
   // Serial.print("g_upRampDetected:");Serial.print(g_upRampDetected);Serial.print(" ");
   // Serial.print("g_downRampDetected:");Serial.print(g_downRampDetected);Serial.print(" ");
   // Serial.println(pose.distOnRamp);
+  // Serial.println(g_trueDistanceDriven);
 
   // Checking for wallchanges
   if (abs(pose.angle) <= MAX_WALLCHANGE_ANGLE) // Only check wallchanges if below certain angle. Correction for angle is also done with the distance.
@@ -3104,7 +3135,8 @@ bool driveStep(FloorColour &floorColourAhead, bool &rampDriven, TouchSensorSide 
   {
     // g_targetDistance = g_trueDistanceDriven + 2;
     // g_targetDistance = 15;
-    g_startDistance = g_targetDistance - g_trueDistanceDriven;
+    // g_startDistance = 20;
+    pose.yDist = 13;
     // pose.yDist = g_trueDistanceDriven; // Needed? Problematic? Should already be correct
     // g_targetDistance += 3;
   }
@@ -3285,7 +3317,7 @@ bool driveStep(FloorColour &floorColourAhead, bool &rampDriven, TouchSensorSide 
   // Serial.print("Spike share: ");Serial.println(double(g_spikeIterations) / double(g_totalNewIterations), 3); // Debugging
   // Serial.print("Blue share: ");Serial.println(double(g_blueIterations) / double(g_totalNewIterations), 3); // Debugging
   // Check for blue
-  if (double(g_blueIterations) / double(g_totalNewIterations) > 0.8 && g_driveBack == false) // If the ground colour is blue
+  if ((double(g_blueIterations) / double(g_totalNewIterations) > 0)&& g_driveBack == false) // If the ground colour is blue
   {
     floorColourAhead = floor_blue;
   }

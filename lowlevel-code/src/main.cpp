@@ -8,8 +8,8 @@
 #include <Wire.h>
 #include <SPI.h>
 
-// #define PICODE
-#define TESTING_NAV
+#define PICODE
+// #define TESTING_NAV
 // #define TESTING
 // #define COLSENS_CALIBRATION
 
@@ -155,7 +155,7 @@ void loop()
   flushDistanceArrays();
   makeNavDecision(command);
   // printUltrasonics();
-  // command = command_driveStep; // For debugging
+  command = command_driveStep; // For debugging
   delay(555);
   lights::turnOff();
   #endif
@@ -234,6 +234,7 @@ void loop()
           // If we have moved, mazenav has to know the new colour. If we have not moved, the colour is already known.
           if (commandSuccess == true || (floorColourAhead == floor_black)) //  || floorColourAhead == floor_black || floorColourAhead == floor_blue // Removed because it would return success every time it saw blue or black, regardless if it had driven a step or not.
           {
+            if (floorColourAhead == floor_black) rampDriven = false;
             Serial.print("!a,");
             Serial.print(colSensor.floorColourAsChar(floorColourAhead)); // If you have not driven back floorColourAhead will actually be the current tile
             Serial.print(',');
