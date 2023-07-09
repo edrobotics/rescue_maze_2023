@@ -3628,3 +3628,131 @@ void serialcomm::sendColourCal()
 {
   Serial.println("!l,c");
 }
+
+
+void BumperComm::communicate()
+{
+  while (isReady() != true)
+  {
+    delay(10);
+  }
+  beginUltrasonicDist = ultrasonicCurrentDistances[ultrasonic_F][usmt_smooth];
+  if (isInitiator == true)
+  {
+    for (int i=0;i<4;++i)
+    {
+      transmitData(writeKitNum[i]);
+    }
+    receiveData();
+  }
+
+  endCommunication();
+}
+
+bool BumperComm::isReady()
+{
+  pose.update();
+  if (ultrasonicCurrentDistances[ultrasonic_F][usmt_smooth] < ROBOT_DETECTION_THRESHOLD)
+  {
+    return true;
+  }
+  else
+  {
+    return false;
+  }
+}
+
+void BumperComm::endCommunication()
+{
+  returnToNeutral();
+  inWritePos = false;
+  inReadPos = false;
+}
+
+
+void BumperComm::receiveData()
+{
+  gotoReadPos();
+  for (int i=0; i<4;++i)
+  {
+    readKitNum[i] = read();
+  }
+}
+
+void BumperComm::transmitData(int kits)
+{
+  gotoWritePos();
+  for (int i=0; i<4;++i)
+  {
+    write(writeKitNum[i]);
+  }
+}
+
+void BumperComm::setInitiator(bool isInit)
+{
+  isInitiator = isInit;
+}
+
+void BumperComm::gotoReadPos()
+{
+  if (inReadPos) return;
+  
+
+
+  inReadPos = true;
+  inWritePos = false;
+}
+void BumperComm::gotoWritePos()
+{
+  if (inWritePos) return;
+
+
+  
+  inWritePos = true;
+  inReadPos = false;
+}
+
+
+void BumperComm::write(int kits)
+{
+  bool bumpDriven = false;
+  blockFrontSensor = false;
+  bool driveDirection = false;
+  while (bumpDriven==false)
+  {
+    bumpDriven = bumpDriveLoop(driveDirection);
+    if (isActivated())
+    {
+      stopWheels(); // Custom
+      blockFrontSensor = true;
+      delay(CONTACT_LEN);
+      driveDirection = true;
+      blockFrontSensor = false;
+    }
+  }
+  
+  
+}
+
+bool BumperComm::isActivated()
+{
+  bool blockSensor = blockFrontSensor;
+  if (blockSensor != true) // If the variable is not set (set to false), let the time decide (the variable has higher priority than the time)
+  {
+    blockSensor = (millis() - timeFlag > MIN_DEBOUNCE_TIME);
+  }
+  bool changeDetected = false;
+  bool curBlockState = blockSensor;
+  static bool prevBlockState = false;
+
+  if (curBlockState != prevBlockState) changeDetected = true;
+  prevBlockState = curBlockState; // Set the variable for next time.
+  if (frontSensorActivated() != touch_none && blockSensor==false)
+  {
+    return true;
+  }
+  else
+  {
+    return false;
+  }
+}
