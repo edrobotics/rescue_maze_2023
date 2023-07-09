@@ -78,6 +78,7 @@ void loop()
 {
 
   static bool shouldDelay = false;
+  resetWallChanges();
   
   #ifdef TESTING
  

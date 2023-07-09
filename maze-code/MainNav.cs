@@ -9,8 +9,8 @@ namespace SerialConsole
     internal partial class Program
     {
         #region Variables and objects
-        //******** Navigation & Localization ********
 
+        #region Navigation & localization
         static int highestX = 25;
         static int highestZ = 25;
         static int lowestX = 25;
@@ -19,6 +19,7 @@ namespace SerialConsole
         static int posZ = 25;
 
         static int direction = 0;
+        static char wallFollow = 'l';
 
         static bool locationUpdated;
         static bool turboDrive = false;
@@ -27,13 +28,6 @@ namespace SerialConsole
         static bool leftPresent;
         static bool rightPresent;
 
-        static List<byte[]> driveWay = new();
-        /// <summary>
-        /// The way back, FIRST BYTE[]: 0=map,1=area; SECOND BYTE[] = Current Pos
-        /// </summary>
-        static List<List<byte[]>> mapWayBack = new();
-        static List<List<byte[]>> saveWayBack = new();
-
         enum Directions
         {
             front,
@@ -41,19 +35,28 @@ namespace SerialConsole
             back,
             right
         }
+        #endregion
 
-        //static bool shortenAvailable;
+        #region paths
+        static List<byte[]> driveWay = new();
+        /// <summary>
+        /// The way back, FIRST BYTE[]: 0=map,1=area; SECOND BYTE[] = Current Pos
+        /// </summary>
+        static List<List<byte[]>> mapWayBack = new();
+        static List<List<byte[]>> saveWayBack = new();
+        #endregion
 
-        //******** Timing & exiting ********
+        #region Timing and exiting + log
 
         static readonly Stopwatch timer = new();
 
         const double SecondsPerDrive = 3;
-        const double SecondsPerTurn = 3;
+        const double SecondsPerTurn = 2.5;
         static int secondsToStart = 0;
         static volatile bool exit = false;
 
         static bool goingBack = false;
+        static bool willGoBack = true;
 
 #warning check config file before competition
         static double MINUTES = 8;
@@ -66,10 +69,12 @@ namespace SerialConsole
         static int errors = 0;
         static string logFileName = "log.txt";
 
+        #endregion Time
         #endregion Variables and objects
 
         #region Main/Startup
-        // ********************************** Main Loop & Startup ********************************** 
+
+        #region Main
 
         static void Main()
         {
@@ -87,6 +92,7 @@ namespace SerialConsole
         LoopStart:
             try
             {
+                //int _loops = 0;
                 //Main loop
                 while (!exit)
                 {
@@ -102,19 +108,34 @@ namespace SerialConsole
                     Delay(10, true);
 
                     ErrorChecker();
+                    //_loops++;
+                    //if (_loops > 2 && _loops % 11 == 0 && !exit && !reset) LogMap();
                 }
             }
             catch (Exception e)
             {
-                LogException(e);
-                if (!exit)
+                while (!exit)
                 {
-                    BackupNav(); //If we return it is likely due to a reset, which means we can go back to normal navigation
-                    goto LoopStart;
+                    try
+                    {
+                        LogException(e);
+                        BackupNav(); //If we return it is likely due to a reset, which means that we can try to go back to normal navigation
+                        goto LoopStart;
+                    }
+                    catch (Exception ex)
+                    {
+                        LogException(ex);
+                    }
                 }
             }
+            finally
+            {
+                Delay(10);
+            }
         }
+        #endregion main
 
+        #region Startup
         static void StartUp()
         {
             Config();
@@ -222,23 +243,39 @@ namespace SerialConsole
             maps[0].Areas.Clear();
             AddArea(posX, posZ);
             UpdateMapFull(true);
+            SensorCheck();
 
+            if (leftPresent)
+            {
+                wallFollow = 'l';
+            }
+            else if (rightPresent)
+            {
+                wallFollow = 'r';
+            }
 
             AddTile();
             saveWayBack = new List<List<byte[]>>(mapWayBack);
-            
+
             Delay(100);
             Log("Done with startup", true);
         }
 
         static void Config()
         {
-            logFileName = $"log{DateTime.Now:MMddTHHmm}.log";
-            if (Directory.Exists(@"../logs/"))
+            for (int i = 0; i < 1000; i++)
             {
-                logFileName = @"../logs/" + logFileName;
+                logFileName = $"log{i:000}.log";
+                if (Directory.Exists(@"../logs/"))
+                {
+                    logFileName = @"../logs/" + logFileName;
+                }
+                if (!File.Exists(logFileName))
+                {
+                    break;
+                }
             }
-            File.WriteAllText(logFileName, DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss") + "\n-----------------------------------\n:::::::::: Program start ::::::::::\n-----------------------------------");
+            File.WriteAllText(logFileName, "\n-----------------------------------\n:::::::::: Program start ::::::::::\n-----------------------------------");
 
             try
             {
@@ -259,13 +296,16 @@ namespace SerialConsole
                 MAXERRORS = 12;
             }
         }
-        #endregion
+        #endregion startup
+        #endregion main nav
 
         #region Navigation
-        // ********************************** Navigation ********************************** 
+
+        #region Turn and path deciding
 
         static void Turnlogic()
         {
+        LogicStart:
             if (reset) return;
             turboDrive = false;
 
@@ -290,17 +330,11 @@ namespace SerialConsole
 
             if (posX == maps[0].StartPosX && posZ == maps[0].StartPosZ && currentMap == 0)
             {
-                Log($"ON START TILE WITH DW:{driveWay.Count},CT:{maps[0].CrossTiles.Count},UET:{_unExpTiles}", true);
+                Log($"ON START TILE WITH DriveWay:{driveWay.Count},CrossTiles:{maps[0].CrossTiles.Count},UnExpTiles:{_unExpTiles}", true);
 
                 if ((driveWay.Count == 0 && maps[0].CrossTiles.Count == 0 && _unExpTiles == 0) || goingBack)
                 {
-                    if (timer.ElapsedMilliseconds < 10) return;
-                    timer.Stop();
-                    Log("DONE", true);
-                    Delay(20_000);
-                    Exit();
-                    return;
-                
+                    Done();
                 }
             }
 
@@ -323,6 +357,14 @@ namespace SerialConsole
                 }
                 Log($"Is turning to {driveWay[0][0]},{driveWay[0][1]}", true);
                 TurnTo(TileToDirection(driveWay[0]));
+                
+                if (ReadHere((BitLocation)direction))
+                {
+                    BlinkLamp(BlinkOptions.MappingError);
+                    driveWay.Clear();
+                    if (goingBack) driveWay = PathToStart();
+                    goto LogicStart;
+                }
 
                 if (!reset)
                 {
@@ -347,12 +389,26 @@ namespace SerialConsole
                     }
                 }
 
-                for (int i = direction + 1; i >= direction - 2; i--) //Go to best tile; first left, then front, right, back tile
+                if (wallFollow == 'r')
                 {
-                    if (_surroundingTiles[FixDirection(i)])
+                    for (int i = direction - 1; i <= direction + 2; i++) //Go to best tile; first left, then front, right, back tile
                     {
-                        TurnTo(FixDirection(i));
-                        break;
+                        if (_surroundingTiles[FixDirection(i)])
+                        {
+                            TurnTo(FixDirection(i));
+                            break;
+                        }
+                    }
+                }
+                else
+                {
+                    for (int i = direction + 1; i >= direction - 2; i--) //Go to best tile; first left, then front, right, back tile
+                    {
+                        if (_surroundingTiles[FixDirection(i)])
+                        {
+                            TurnTo(FixDirection(i));
+                            break;
+                        }
                     }
                 }
             }
@@ -389,20 +445,23 @@ namespace SerialConsole
 
                     if (driveWay.Count == 0)
                     {
-                        for (int i = maps[currentMap].CrossTiles.Count-1; i <= 0; i--)
+                        for (int i = maps[currentMap].CrossTiles.Count - 1; i <= 0; i--)
                         {
-                            //(maps[currentMap].CrossTiles[^i], maps[currentMap].CrossTiles[^1]) = (maps[currentMap].CrossTiles[^1], maps[currentMap].CrossTiles[^i]); //BAD SOLUTION, IF ONE IS BAD, BOTH ARE LIKELY BAD; travel up ramp instead?
                             if (maps[currentMap].IsSameArea(maps[currentMap].CrossTiles[i], new byte[] { (byte)posX, (byte)posZ }))
                                 FindPathHere(maps[currentMap].CrossTiles[i][1], maps[currentMap].CrossTiles[i][1]);
                             if (driveWay.Count > 0) goto NavLogic;
                         }
                         Log("SOMETHING PROBABLY WRONG WITH RAMP OR MAP, MAYBE DUAL RAMP, trying to solve", true);
 
+                        errors+=2;
                         driveWay = new List<byte[]>(mapWayBack[^1]);
                         driveWay.RemoveAt(0);
                         driveWay.RemoveAt(1);
-                        if (driveWay.Count > 0)
+                        if (driveWay.Count > 0 && !(posX == maps[0].StartPosZ && posZ == maps[0].StartPosZ && currentMap == 0))
+                        {
+                            if (currentMap == 0) BlinkLamp(BlinkOptions.Returning);
                             goto NavLogic;
+                        }
                         throw new Exception($"DID NOT FIND PATH TO (map){currentMap} START XZ");
                     }
                     goto NavLogic;
@@ -412,6 +471,7 @@ namespace SerialConsole
                     if (currentMap == 0)
                     {
                         goingBack = true;
+                        BlinkLamp(BlinkOptions.Returning);
                         Log("Going to start due to tile shortage", true);
                     }
                     else
@@ -432,48 +492,75 @@ namespace SerialConsole
                 Log("TURN ISSUE AIUAUIWS", true);
             }
         }
+        #endregion
 
+        #region Old
         static void BackupNav()
         {
-            for (int i = 0; i < 10; i++)  Log("!!!!!!!!!!!!!!!PROBLEM PROBLEM NAVIGATION FAILED!!!!!!!!!!!!!!!", true);
+            for (int i = 0; i < 10; i++) Log("!!!!!!!!!!!!!!!PROBLEM PROBLEM NAVIGATION FAILED!!!!!!!!!!!!!!!", true);
+            BlinkLamp(BlinkOptions.NavigationFailure);
             Delay(1_000);
 
-            while (true)
+            while (!reset && !exit)
             {
-                if (reset || exit)
-                    return;
-
                 while (true /*!leftPresent || frontPresent || ReadNextTo(posX, posZ, blackTile, Directions.front) || RampCheck(direction)*/)
                 {
                     SensorCheck();
                     if (reset || exit)
                         return;
-                    if (!leftPresent && !ReadNextTo(BitLocation.blackTile, Directions.left) /*&& !RampCheck(direction + 1)*/)
+
+                    if (wallFollow == 'r')
                     {
-                        CheckAndDropKits(true, true);
-                        Turn('l');
-                        CheckAndDropKits(true, true);
-                        Delay(100);
-                        Drive(false, false);
-                    }
-                    else if (frontPresent || ReadNextTo(BitLocation.blackTile, Directions.front) /*|| RampCheck(direction)*/)
-                    {
-                        CheckAndDropKits(true, true);
-                        Turn('r');
-                        Delay(50);
+                        if (!rightPresent && !ReadNextTo(BitLocation.blackTile, Directions.right) /*&& !RampCheck(direction + 1)*/)
+                        {
+                            CheckAndDropKits(true, true, true);
+                            Turn('r');
+                            CheckAndDropKits(true, true, true);
+                            Delay(100);
+                            Drive(false, false);
+                        }
+                        else if (frontPresent || ReadNextTo(BitLocation.blackTile, Directions.front) /*|| RampCheck(direction)*/)
+                        {
+                            CheckAndDropKits(true, true, true);
+                            Turn('l');
+                            Delay(50);
+                        }
+                        else
+                        {
+                            CheckAndDropKits(true, true, true);
+                            break;
+                        }
                     }
                     else
                     {
-                        CheckAndDropKits(true, true);
-                        break;
+                        if (!leftPresent && !ReadNextTo(BitLocation.blackTile, Directions.left) /*&& !RampCheck(direction + 1)*/)
+                        {
+                            CheckAndDropKits(true, true, true);
+                            Turn('l');
+                            CheckAndDropKits(true, true, true);
+                            Delay(100);
+                            Drive(false, false);
+                        }
+                        else if (frontPresent || ReadNextTo(BitLocation.blackTile, Directions.front) /*|| RampCheck(direction)*/)
+                        {
+                            CheckAndDropKits(true, true, true);
+                            Turn('r');
+                            Delay(50);
+                        }
+                        else
+                        {
+                            CheckAndDropKits(true, true, true);
+                            break;
+                        }
                     }
                     Delay(10);
                 }
 
                 Drive(false, false); //Do not check for ramps, we want to have 'dumber' code so less can go wrong
-                CheckAndDropKits(true, true);
+                CheckAndDropKits(true, true, true);
             }
         }
+        #endregion
 
         #endregion nav
 
@@ -481,9 +568,10 @@ namespace SerialConsole
         // ********************************** Ramps ********************************** 
         static void RampDriven(int _rampDirection, int _length, int _height)
         {
-            if (Math.Abs(_height - currentHeight) < 4)
+            if (Math.Abs(_height - currentHeight) < 5)
             {
                 currentHeight += _height;
+                UpdateLocation();
                 return;
             }
 
@@ -503,7 +591,7 @@ namespace SerialConsole
                     AddTile(_rampTile[0], _rampTile[1], currentMap, currentArea);
 
                     byte _fromMap = (byte)currentMap;
-                    byte _fromX = (byte)posX, 
+                    byte _fromX = (byte)posX,
                          _fromZ = (byte)posZ;
 
                     currentHeight += _height;
@@ -562,11 +650,11 @@ namespace SerialConsole
                 else //Used ramp
                 {
                     Log("-_-_-_-_-_-_-_-_-_-_ Ramp was a previously used ramp _-_-_-_-_-_-_-_-_-_-", true);
-                    
+
                     //Get data
                     byte[] currentRamp = maps[currentMap].GetRampAt((byte)posX, (byte)posZ, (byte)direction);
                     byte[] newMapInfo = maps[currentRamp[(int)RampStorage.ConnectedMap]].GetRampAt(currentRamp[(int)RampStorage.RampIndex]);
-                    foreach(byte _info in currentRamp)
+                    foreach (byte _info in currentRamp)
                     {
                         Log("::..::" + _info + "::..::", false);
                     }
@@ -585,7 +673,7 @@ namespace SerialConsole
                     if (posX == newMapInfo[(int)RampStorage.XCoord] && posZ == newMapInfo[(int)RampStorage.ZCoord] && currentHeight < maps[currentMap].Height + 10 && currentHeight > maps[currentMap].Height - 10)
                     {
                         Log("Old ramp data is good", true);
-                        errors-=2; //This is a sign that we know where we are
+                        errors -= 2; //This is a sign that we know where we are
                     }
                     else
                     {
@@ -596,7 +684,7 @@ namespace SerialConsole
                     posX = newMapInfo[(int)RampStorage.XCoord];
                     posZ = newMapInfo[(int)RampStorage.ZCoord];
                     currentHeight = maps[currentMap].UpdateHeight(currentHeight);
-                    currentArea = maps[currentMap].GetArea(new byte[] {(byte)posX, (byte)posZ});
+                    currentArea = maps[currentMap].GetArea(new byte[] { (byte)posX, (byte)posZ });
 
                     if (AreaInWayBack(currentArea, currentMap))
                     {
@@ -646,7 +734,7 @@ namespace SerialConsole
                 _isStrange = true;
                 _rampLength += 30 - (_rampLength % 30); //Add so that we "have travelled another tile", to make sure there i no error
             }
-            
+
             float _totalLength = _rampLength + 30f; //Take into account that we drove a step as well
             switch (direction) //Update position with the help of the ramp length
             {
@@ -696,7 +784,8 @@ namespace SerialConsole
         #endregion ramps
 
         #region Timing
-        // ********************************** Timing & exiting ********************************** 
+
+        #region Time check
         /// <summary>
         /// Checks the timer and returns to start if time is close to out
         /// </summary>
@@ -704,18 +793,71 @@ namespace SerialConsole
         {
             UpdateWayBack();
             secondsToStart = StartPathSeconds();
-            //Log("Seconds back: " + secondsToStart, true);
-            Log($"{timer.ElapsedMilliseconds/1000 +  secondsToStart} vs {(MINUTES - 0.5) * 60} goingback:{goingBack}", true);
+            Log($"{timer.ElapsedMilliseconds/1000 + secondsToStart} vs {(MINUTES - 0.5) * 60} goingback:{goingBack}", true);
 
-            if (timer.ElapsedMilliseconds/1000 +  secondsToStart > (MINUTES - 0.5) * 60 && !goingBack)
+            if (timer.ElapsedMilliseconds/1000 + secondsToStart > (MINUTES - 0.5) * 60 && !goingBack)
             {
-                for (int i = 0; i < 3; i++) Log("!%!%! Time passed, returning !%!%!", true);
-                driveWay = PathToStart();
-                driveWay.ForEach(_tile => Log($"WMWMW {_tile[0]},{_tile[1]} WMWMW", false));
-                goingBack = true;
+                if (secondsToStart < 3.5 * 60)
+                {
+                    for (int i = 0; i < 3; i++) Log("!%!%! Time passed, returning !%!%!", true);
+                    driveWay = PathToStart();
+                    driveWay.ForEach(_tile => Log($"WMWMW {_tile[0]},{_tile[1]} WMWMW", false));
+                    goingBack = true;
+                    BlinkLamp(BlinkOptions.Returning);
+                    if (reset) return;
+                }
+                else
+                {
+                    if (!willGoBack)
+                    {
+                        BlinkLamp(BlinkOptions.NotReturning);
+                        if (reset) return;
+                        willGoBack = false;
+                    }
+                }
             }
         }
 
+        static int StartPathSeconds()
+        {
+            int _seconds = 0;
+            for (int _area = mapWayBack.Count - 1; _area >= 0; _area--)
+            {
+                Log($"StartPathSeconds: In mapwayback[{_area}]: ", false);
+                mapWayBack[_area].ForEach(_tile => Log($"*_*_*_* {_tile[0]},{_tile[1]} *_*_*_*", false));
+                double _driveTime = 0,
+                       _turnTime = 0;
+
+                for (int i = 1; i < mapWayBack[_area].Count; i++) //Forget about first tile since it is info
+                {
+                    _driveTime += SecondsPerDrive;
+
+                    if (i > 1 && i < mapWayBack[_area].Count - 1) //Last tile has no turning from, since it is the final tile.
+                    {
+                        if (TileToDirection(mapWayBack[_area][i], mapWayBack[_area][i + 1]) !=
+                            TileToDirection(mapWayBack[_area][i - 1], mapWayBack[_area][i]))
+                        {
+                            _turnTime += SecondsPerTurn;
+                        }
+                    }
+                }
+                _seconds += (int)Math.Round((_driveTime + _turnTime + 10) * 1, 2); //Extra margin (for example dropping missed kits) and exit time
+
+                if (_area != 0)
+                {
+
+                    byte[] _ramp = RampByRamptile(mapWayBack[_area][^1][0], mapWayBack[_area][^1][1], mapWayBack[_area][0][0]);
+                    _seconds += (int)(Math.Round(_ramp[(int)RampStorage.RampLength] / 30f + 1) * SecondsPerDrive); //Add ramp drive time
+                }
+            }
+
+            Log("Seconds back: " + secondsToStart, true);
+            return _seconds;
+        }
+
+        #endregion
+
+        #region Delays
         static void Delay(int _millis, bool _doWork)
         {
             if (_doWork)
@@ -753,46 +895,23 @@ namespace SerialConsole
             if (_millis > 0) //We must be completely sure, as -1 sleeps forever
                 Thread.Sleep(_millis);
         }
-
-        static int StartPathSeconds()
-        {
-            int _secounds = 0;
-            for (int _area = mapWayBack.Count - 1; _area >= 0; _area--)
-            {
-                Log($"StartPathSeconds: In mapwayback[{_area}]: ", false);
-                mapWayBack[_area].ForEach(_tile => Log($"*_*_*_* {_tile[0]},{_tile[1]} *_*_*_*", false));
-                double _driveTime = 0,
-                       _turnTime = 0;
-
-                for (int i = 1; i < mapWayBack[_area].Count; i++) //Forget about first tile since it is info
-                {
-                    _driveTime += SecondsPerDrive;
-
-                    if (i > 1 && i < mapWayBack[_area].Count - 1) //Last tile has no turning from, since it is the final tile.
-                    {
-                        if (TileToDirection(mapWayBack[_area][i], mapWayBack[_area][i + 1]) != 
-                            TileToDirection(mapWayBack[_area][i - 1], mapWayBack[_area][i]))
-                        {
-                            _turnTime += SecondsPerTurn;
-                        }
-                    }
-                }
-                _secounds += (int)Math.Round((_driveTime + _turnTime + 10) * 1,2); //Extra margin (for example dropping missed kits) and exit time
-
-                if (_area != 0)
-                {
-
-                    byte[] _ramp = RampByRamptile(mapWayBack[_area][^1][0], mapWayBack[_area][^1][1], mapWayBack[_area][0][0]);
-                    _secounds += (int)(Math.Round(_ramp[(int)RampStorage.RampLength] / 30f + 1) * SecondsPerDrive); //Add ramp drive time
-                }
-            }
-
-            return _secounds;
-        }
+        #endregion
 
         #endregion timing
 
         #region Miscellaneous
+
+        #region Exiting
+        static void Done()
+        {
+            if (timer.ElapsedMilliseconds < 10 && timer.IsRunning) return;
+            timer.Stop();
+            Log("DONE", true);
+            BlinkLamp(BlinkOptions.Done);
+            if (reset) return;
+            Delay(15_000);
+            Exit();
+        }
 
         static void ErrorChecker()
         {
@@ -809,43 +928,14 @@ namespace SerialConsole
         {
             reset = true;
             exit = true;
-            Log($"Lowest: {lowestX},{lowestZ}; Highest: {highestX},{highestZ}", true);
-            for (int m = 0; m < maps.Count; m++)
-            {
-                string[] _mapToText = new string[(3 + highestZ - lowestZ)];
-                int _loops = 0;
-                for (int i = lowestZ - 1; i <= highestZ + 1; i++)
-                {
-                    for (int j = lowestX - 1; j <= highestX + 1; j++)
-                    {
-                        string _bits = $"{j};{i}:";
-                        for (int k = 15; k >= 0; k--)
-                        {
-                            _bits += maps[m].ReadBit(j, i, (BitLocation)k) ? "1" : "0";
-                        }
-
-                        _mapToText[_loops] += _bits + ",";
-                    }
-                    _loops++;
-                }
-                try
-                {
-                    File.AppendAllText(logFileName,$"\nmap {m+1}/{maps.Count}\n" + string.Join('\n', _mapToText) + "\n\n"); // Writes map to log file
-                }
-                catch (Exception e)
-                {
-                    Log($"Could not create log because: ", true);
-                    LogException(e);
-                }
-            }
-            Log("done with map file", true);
+            LogMap();
             Delay(1000);
             listener.Stop();
             serialPort1.Close();
         }
+        #endregion
 
-
-        // ********************************** Logging ********************************** 
+        #region Logging
 
         /// <summary>
         /// Writes a log message to the log file
@@ -855,8 +945,12 @@ namespace SerialConsole
         public static void Log(string _message, bool _consoleLog)
         {
 #if DEBUG
-            File.AppendAllText(logFileName, $"\n{timer.ElapsedMilliseconds}: {_message}");
-            if (_consoleLog) Console.WriteLine(_message);
+            try
+            {
+                File.AppendAllText(logFileName, $"\n{timer.ElapsedMilliseconds}: {_message}");
+                if (_consoleLog) Console.WriteLine(_message);
+            }
+            catch { }
 #endif
         }
 
@@ -866,9 +960,59 @@ namespace SerialConsole
         public static void LogException(Exception e)
         {
             errors += 4;
-            Log($"Exception: {e}", false);
-            Console.WriteLine($"Exception -- {e.Message}");
+            try
+            {
+                Log($"Exception: {e}", false);
+                Console.WriteLine($"Exception -- {e.Message}");
+            }
+            catch { }
         }
+
+        static void LogMap()
+        {
+            try
+            {
+                File.WriteAllText("map.log", "Map log:\n");
+                Log($"Lowest: {lowestX},{lowestZ}; Highest: {highestX},{highestZ}", true);
+                for (int m = 0; m < maps.Count; m++)
+                {
+                    string[] _mapToText = new string[(3 + highestZ - lowestZ)];
+                    int _loops = 0;
+                    for (int i = lowestZ - 1; i <= highestZ + 1; i++)
+                    {
+                        for (int j = lowestX - 1; j <= highestX + 1; j++)
+                        {
+                            string _bits = $"{j};{i}:";
+                            for (int k = 15; k >= 0; k--)
+                            {
+                                _bits += maps[m].ReadBit(j, i, (BitLocation)k) ? "1" : "0";
+                            }
+
+                            _mapToText[_loops] += _bits + ",";
+                        }
+                        _loops++;
+                    }
+                    try
+                    {
+                        File.AppendAllText("map.log", $"\n\nmap {m + 1}/{maps.Count}\n" + string.Join('\n', _mapToText) + "\n"); // Writes map to log file
+                    }
+                    catch (Exception e)
+                    {
+                        try
+                        {
+                            LogException(e);
+                        }
+                        catch { }
+                    }
+                }
+                Delay(200);
+            }
+            catch
+            {
+                Log("Saving map failed", false);
+            }
+        }
+        #endregion log
         #endregion misc
     }
 }
