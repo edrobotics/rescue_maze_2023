@@ -567,7 +567,10 @@ void lights::execLightCommand()
   switch (g_lightCommand)
   {
     case lCommand_done:
-      circle(colourAffirmative, colourRed, 1, 10000);
+      while (true)
+      {
+        circle(colourAffirmative, colourRed, 1, 10000);
+      }
       break;
     case lCommand_returning:
       setColour(8, colourAffirmative, false);
@@ -3056,7 +3059,7 @@ bool driveStepDriveLoop(WallSide &wallToUse, double &dumbDistanceDriven, Stoppin
   // Checking for wallchanges
   if (abs(pose.angle) <= MAX_WALLCHANGE_ANGLE) // Only check wallchanges if below certain angle. Correction for angle is also done with the distance.
   {
-    checkWallChanges(stopReason);
+    // checkWallChanges(stopReason);
   }
 // printWallchangeData(ultrasonic_RF);
 // printWallchangeData(ultrasonic_RB);
