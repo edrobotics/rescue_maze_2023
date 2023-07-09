@@ -19,6 +19,7 @@ namespace SerialConsole
         static int posZ = 25;
 
         static int direction = 0;
+        static char wallFollow = 'l';
 
         static bool locationUpdated;
         static bool turboDrive = false;
@@ -242,7 +243,16 @@ namespace SerialConsole
             maps[0].Areas.Clear();
             AddArea(posX, posZ);
             UpdateMapFull(true);
+            SensorCheck();
 
+            if (leftPresent)
+            {
+                wallFollow = 'l';
+            }
+            else if (rightPresent)
+            {
+                wallFollow = 'r';
+            }
 
             AddTile();
             saveWayBack = new List<List<byte[]>>(mapWayBack);
@@ -265,7 +275,7 @@ namespace SerialConsole
                     break;
                 }
             }
-            File.WriteAllText(logFileName, DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss") + "\n-----------------------------------\n:::::::::: Program start ::::::::::\n-----------------------------------");
+            File.WriteAllText(logFileName, "\n-----------------------------------\n:::::::::: Program start ::::::::::\n-----------------------------------");
 
             try
             {
@@ -379,12 +389,26 @@ namespace SerialConsole
                     }
                 }
 
-                for (int i = direction + 1; i >= direction - 2; i--) //Go to best tile; first left, then front, right, back tile
+                if (wallFollow == 'r')
                 {
-                    if (_surroundingTiles[FixDirection(i)])
+                    for (int i = direction - 1; i <= direction + 2; i++) //Go to best tile; first left, then front, right, back tile
                     {
-                        TurnTo(FixDirection(i));
-                        break;
+                        if (_surroundingTiles[FixDirection(i)])
+                        {
+                            TurnTo(FixDirection(i));
+                            break;
+                        }
+                    }
+                }
+                else
+                {
+                    for (int i = direction + 1; i >= direction - 2; i--) //Go to best tile; first left, then front, right, back tile
+                    {
+                        if (_surroundingTiles[FixDirection(i)])
+                        {
+                            TurnTo(FixDirection(i));
+                            break;
+                        }
                     }
                 }
             }
@@ -484,24 +508,50 @@ namespace SerialConsole
                     SensorCheck();
                     if (reset || exit)
                         return;
-                    if (!leftPresent && !ReadNextTo(BitLocation.blackTile, Directions.left) /*&& !RampCheck(direction + 1)*/)
+
+                    if (wallFollow == 'r')
                     {
-                        CheckAndDropKits(true, true, true);
-                        Turn('l');
-                        CheckAndDropKits(true, true, true);
-                        Delay(100);
-                        Drive(false, false);
-                    }
-                    else if (frontPresent || ReadNextTo(BitLocation.blackTile, Directions.front) /*|| RampCheck(direction)*/)
-                    {
-                        CheckAndDropKits(true, true, true);
-                        Turn('r');
-                        Delay(50);
+                        if (!rightPresent && !ReadNextTo(BitLocation.blackTile, Directions.right) /*&& !RampCheck(direction + 1)*/)
+                        {
+                            CheckAndDropKits(true, true, true);
+                            Turn('r');
+                            CheckAndDropKits(true, true, true);
+                            Delay(100);
+                            Drive(false, false);
+                        }
+                        else if (frontPresent || ReadNextTo(BitLocation.blackTile, Directions.front) /*|| RampCheck(direction)*/)
+                        {
+                            CheckAndDropKits(true, true, true);
+                            Turn('l');
+                            Delay(50);
+                        }
+                        else
+                        {
+                            CheckAndDropKits(true, true, true);
+                            break;
+                        }
                     }
                     else
                     {
-                        CheckAndDropKits(true, true, true);
-                        break;
+                        if (!leftPresent && !ReadNextTo(BitLocation.blackTile, Directions.left) /*&& !RampCheck(direction + 1)*/)
+                        {
+                            CheckAndDropKits(true, true, true);
+                            Turn('l');
+                            CheckAndDropKits(true, true, true);
+                            Delay(100);
+                            Drive(false, false);
+                        }
+                        else if (frontPresent || ReadNextTo(BitLocation.blackTile, Directions.front) /*|| RampCheck(direction)*/)
+                        {
+                            CheckAndDropKits(true, true, true);
+                            Turn('r');
+                            Delay(50);
+                        }
+                        else
+                        {
+                            CheckAndDropKits(true, true, true);
+                            break;
+                        }
                     }
                     Delay(10);
                 }
@@ -518,9 +568,10 @@ namespace SerialConsole
         // ********************************** Ramps ********************************** 
         static void RampDriven(int _rampDirection, int _length, int _height)
         {
-            if (Math.Abs(_height - currentHeight) < 4)
+            if (Math.Abs(_height - currentHeight) < 5)
             {
                 currentHeight += _height;
+                UpdateLocation();
                 return;
             }
 

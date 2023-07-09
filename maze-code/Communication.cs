@@ -508,10 +508,9 @@ namespace SerialConsole
 
         static string Interrupt()
         {
-            if (reset)
-                return RecivedCommands.LOP.GetCommand();
+            if (reset) return RecivedCommands.LOP.GetCommand();
             Log("interrupting", true);
-            string _recived = SerialComm(SendCommands.Interrupt.GetCommand(), false, false);
+            string _recived = SerialRaw(SendCommands.Interrupt.GetCommand(), false, false);
             Log("interrupted", false);
             Delay(100, true);
             return _recived;
@@ -675,7 +674,7 @@ namespace SerialConsole
                                     }
                                     else
                                     {
-                                        if (!_interruptRec.Contains(RecivedCommands.Failed.GetCommand()) && !_interruptRec.Contains(RecivedCommands.Cancelled.GetCommand()))
+                                        if (!_interruptRec.Contains(RecivedCommands.Interrupt.GetCommand()))
                                             break;
                                     }
                                 }

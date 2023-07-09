@@ -453,6 +453,17 @@ namespace SerialConsole
                 errors += 5;
                 currentArea = 0;
             }
+            SensorCheck();
+
+            if (leftPresent)
+            {
+                wallFollow = 'l';
+            }
+            else if (rightPresent)
+            {
+                wallFollow = 'r';
+            }
+
             Delay(10);
             reset = true;
         }
