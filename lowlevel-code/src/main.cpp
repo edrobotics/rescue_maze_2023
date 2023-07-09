@@ -20,6 +20,7 @@
 extern ColourSensor colSensor; // The colSensor object in robot_lowlevel.cpp
 extern RobotPose pose;
 extern double BASE_TURNING_SPEED;
+extern double g_pidSetPoint;
 
 HardwareButton colCalButton {30, false};
 
@@ -29,7 +30,7 @@ void setup()
   #ifdef PICODE
   Serial.begin(9600);
   #else
-  Serial.begin(115200);
+  Serial.begin(9600);
   #endif
   
   // Init hardware
@@ -43,6 +44,10 @@ void setup()
   flushDistanceArrays();
   fillRampArrayFalse();
   // startDistanceMeasure(); // Why is this here?
+
+  // #warning Debugging
+  // checkSmoothWallChanges();
+  // checkPotWallChanges();
   
 
   // Wait for beginning (to give time to remove hands etc.)
@@ -72,6 +77,9 @@ void setup()
 void loop()
 {
 
+  static bool shouldDelay = false;
+  resetWallChanges();
+  
   #ifdef TESTING
  
   // Command command = serialcomm::readCommand();
@@ -123,18 +131,23 @@ void loop()
 
   // getUltrasonics();
   // printUltrasonics();
-  startDistanceMeasure();
-  while(true)
-  {
-    delay(20);
-    loopEncoders();
-    Serial.println(getDistanceDriven());
-  }
+  // startDistanceMeasure();
+  // while(true)
+  // {
+  //   delay(20);
+  //   loopEncoders();
+  //   Serial.println(getDistanceDriven());
+  // }
+  driveStep();
+  delay(2000);
   
 
   #else
-
   #ifdef PICODE
+  if (shouldDelay==true)
+  {
+  delay(200);
+  }
   lights::turnOff();
   #endif
   #ifdef TESTING_NAV
@@ -143,7 +156,7 @@ void loop()
   flushDistanceArrays();
   makeNavDecision(command);
   // printUltrasonics();
-  // command = command_driveStep; // For debugging
+  command = command_driveStep; // For debugging
   delay(555);
   lights::turnOff();
   #endif
@@ -169,10 +182,11 @@ void loop()
       case command_driveStep: // drive one step forward
       {
         serialcomm::returnSuccess(); // For validation and robustness of the communication protocol
+        g_pidSetPoint = 15;
         // lights::showDirection(lights::front);
         bool continuing = false;
         bool rampDriven = false;
-        ColourSensor::FloorColour floorColourAhead = ColourSensor::floor_notUpdated;
+        FloorColour floorColourAhead = floor_notUpdated;
         double xDistanceOnRamp = 0;
         double yDistanceOnRamp = 0;
         driveStepBegin: // Label to be able to use goto statements
@@ -180,7 +194,7 @@ void loop()
           bool commandSuccess = driveStep(floorColourAhead, rampDriven, frontSensorDetectionType, xDistanceOnRamp, yDistanceOnRamp, continuing);
           // bool commandSuccess = true;
           // lights::turnOff();
-          if (floorColourAhead == ColourSensor::floor_black || frontSensorDetectionType == touch_both)
+          if (floorColourAhead == floor_black || frontSensorDetectionType == touch_both)
           {
             lights::reversing();
             driveStep(); // For driving back
@@ -191,7 +205,9 @@ void loop()
           {
             // Correct by turning right
             awareGyroTurn(-18, true, BASE_TURNING_SPEED, true, -5);
+            awareGyroTurn(-8, true, BASE_TURNING_SPEED, true, 5);
             continuing = true;
+            g_pidSetPoint = 20;
             goto driveStepBegin;
             
           }
@@ -199,15 +215,17 @@ void loop()
           {
             // Correct by turning left
             awareGyroTurn(18, true, BASE_TURNING_SPEED, true, -5);
+            awareGyroTurn(8, true, BASE_TURNING_SPEED, true, 5);
             continuing = true;
+            g_pidSetPoint = 10;
             goto driveStepBegin;
           }
 
-          if (floorColourAhead == ColourSensor::floor_blue)
+          if (floorColourAhead == floor_blue)
           {
             lights::indicateBlueCircle();
           }
-          else if (floorColourAhead == ColourSensor::floor_reflective)
+          else if (floorColourAhead == floor_reflective)
           {
             lights::indicateCheckpoint();
             
@@ -215,8 +233,9 @@ void loop()
           // Serial.print("Floor colour ahead: ");
           // Serial.println(floorColourAhead);
           // If we have moved, mazenav has to know the new colour. If we have not moved, the colour is already known.
-          if (commandSuccess == true || (floorColourAhead == ColourSensor::floor_black)) //  || floorColourAhead == ColourSensor::floor_black || floorColourAhead == ColourSensor::floor_blue // Removed because it would return success every time it saw blue or black, regardless if it had driven a step or not.
+          if (commandSuccess == true || (floorColourAhead == floor_black)) //  || floorColourAhead == floor_black || floorColourAhead == floor_blue // Removed because it would return success every time it saw blue or black, regardless if it had driven a step or not.
           {
+            if (floorColourAhead == floor_black) rampDriven = false;
             Serial.print("!a,");
             Serial.print(colSensor.floorColourAsChar(floorColourAhead)); // If you have not driven back floorColourAhead will actually be the current tile
             Serial.print(',');
@@ -235,18 +254,22 @@ void loop()
           {
             serialcomm::returnFailure();
           }
-          if (pose.yDist > 15) pose.yDist -= 30; // Just set to 0 instead?
-        
+          // if (pose.yDist > 15) pose.yDist -= 30; // Just set to 0 instead?
+          pose.yDist = 0; // To prevent the robot driving too far? This could help
+          shouldDelay = true;
+          g_pidSetPoint = 15;
       }
         break;
 
       case command_driveBack: // drive one step backwards. Only used for testing/debugging
+        shouldDelay = false;
         driveBlind(-30, false);
         stopWheels();
         serialcomm::returnSuccess();
         break;
 
       case command_turnLeft: // turn counterclockwise one step
+        shouldDelay = false;
         serialcomm::returnSuccess();
         // lights::showDirection(lights::left);
         turnSteps(ccw, 1, BASE_TURNING_SPEED);
@@ -257,6 +280,7 @@ void loop()
         break;
 
       case command_turnRight: // turn clockwise one step
+        shouldDelay = false;
         serialcomm::returnSuccess();
         // lights::showDirection(lights::right);
         turnSteps(cw, 1, BASE_TURNING_SPEED);
@@ -268,21 +292,30 @@ void loop()
       // Sensors
       case command_getWallStates: // Send the current state of the walls to the maze code (raspberry). The form is 0bXYZ, where X, Y, Z are 0 or 1, 1 meaning the wall is present. X front, Y left, Z right.
         {
+          shouldDelay = false;
           uint8_t wallStates = getWallStates();
           serialcomm::returnAnswer(wallStates);
           break;
         }
 
       case command_dropKit:
+        shouldDelay = false;
         serialcomm::returnSuccess();
         handleVictim(false);
         serialcomm::returnSuccess();
         break;
 
       case command_light:
+        shouldDelay = false;
+        // Execute the lighting (including delay)
+        serialcomm::returnSuccess();
         lights::execLightCommand();
+        lights::turnOff();
+        serialcomm::returnSuccess();
+        break;
 
       case command_invalid:
+        shouldDelay = false;
         sounds::errorBeep();
         serialcomm::returnFailure();
         break;

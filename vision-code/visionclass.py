@@ -6,6 +6,7 @@ import time
 import cv2
 import logging
 import os
+import pathlib
 
 
 class imgproc:
@@ -15,9 +16,24 @@ class imgproc:
     cwd = os.getcwd()
     if cwd == '/Users/lukas/GitHub/rescue_maze_2023/vision-code':
         sampledir = "/Users/lukas/GitHub/rescue_maze_2023/vision-code/samples/"
+        basefolder = "/Users/lukas/GitHub/rescue_maze_2023/vision-code/"
     else: 
-        sampledir = "/home/pi/rescue_maze_2023/vision-code/samples/"
-        
+        basefolder = "/home/theseus/rescue_maze_2023/vision-code/"
+        sampledir = "/home/theseus/rescue_maze_2023/vision-code/samples/"
+
+
+    #log directory
+
+    def createfolder(self):  
+        log = pathlib.Path(f"{self.basefolder}log")
+        list = []
+        for file in log.glob(f"log*"):
+            list.append(file)
+        print(len(list))
+        self.log_folder = f"{self.basefolder}log/log{len(list)}"
+        os.mkdir(self.log_folder)
+    
+
 
 #loading samples
     Dictand = {
@@ -60,19 +76,24 @@ class imgproc:
 
 #sends message to navigaion code using sockets
     def sendMessage(self,msg):
-        if self.info: print("sending message", msg)
-        logging.info(f"sending: {msg}")
+        if self.connected:
+            if self.info: print("sending message", msg)
+            logging.info(f"sending: {msg}")
 
-        try:
-            message = msg.encode(self.FORMAT)
-            msg_length = len(message).to_bytes(self.HEADER, "big")
-            self.client.send(msg_length)
-            self.client.send(message)
-        except Exception as e:
-            if self.info: print("failed to send messsage")
+            try:
+                message = msg.encode(self.FORMAT)
+                msg_length = len(message).to_bytes(self.HEADER, "big")
+                self.client.send(msg_length)
+                self.client.send(message)
+            except Exception as e:
+                if self.info: print("failed to send messsage")
+                logging.exception("failed to send message")
+                self.connect(once = True, msg = msg)
 #connects to navigation code
-    def connect(self):
-        while True:
+    def connect(self, once = False, msg = None):
+        connect = True
+        while connect:
+            if once: connect = False
             try:
                 self.HEADER = 16
                 PORT = 4242
@@ -84,10 +105,11 @@ class imgproc:
                 self.client.connect(ADDR)
             except:
                 print("failed")
-                time.sleep(2)
+                if not once: time.sleep(2)
+                if msg: self.sendMessage(msg)
             else:
                 print("Connected")
-                connected = True
+                self.connected = True
                 break
 
 
@@ -99,12 +121,17 @@ class imgproc:
         self.debugidentification = debugidentification
         self.info = info
         self.time = time
+
         if connect:
             self.connect()
+        else: self.connected = False
+        if logging: self.createfolder()
     
 
     
     
+    
+
     def adjust_white_balance(self, image_s, percent_red=0, percent_blue=0):
         image = image_s.copy()
         image = self.blank_out(image)
@@ -135,26 +162,29 @@ class imgproc:
         return adjusted_image       
 
 
+
+
     def do_the_work(self, image, fnum):
+        self.fnum = fnum
         self.framedetected = {}
         self.original_image = np.copy(image)
-        self.log("E")
         self.image = self.adjust_white_balance(self.original_image)
         self.image_clone = self.image.copy()#image where lines and contours will be showed to
-        self.fnum = fnum
-
-        try:
+        self.log("E")
+        try: 
             self.find_victim()
             self.Color_victim2()
-        except Exception as e: 
-            print(e)
-            print("something went wrong in do the work")
-            logging.exception("something went wrong")
+        except Exception as ex:
+            logging.exception("exception in class")
+
+        finally:
+            self.evaluate_detected()
+
+
 
         if self.showsource:
             cv2.imshow("image_clone",self.image_clone)
 
-        self.evaluate_detected()
 
 
     def detected(self,msg, victim): #makes the victim only send once every victim detection
@@ -164,9 +194,10 @@ class imgproc:
 
 
 
-    def evaluate_detected(self): #does not update lastdetected[1] would be horrible if one is bdetected all the time
+    def evaluate_detected(self):
         send = False
         if len(self.framedetected) > 0:
+
             for victim in self.framedetected:
                 msg = self.framedetected[victim]
                 
@@ -176,15 +207,25 @@ class imgproc:
                 else:
                     if self.info: print("alredy detected")
                 #updates last detected
+                break
+            if send:
+                if len(self.framedetected) >= 1:
+                    self.sendMessage(msg)
+
+
+
+            
+            S_detected_victims = ""
+            for victim in self.framedetected:
                 new_list = (msg, self.fnum, list[2]+ 1)
                 self.lastdetected[victim] = new_list
-                break
-        if send:
-            if len(self.framedetected) == 1:
-                self.sendMessage(msg)
-            elif len(self.framedetected) > 1:
-                if len(victim) == 1:
-                    self.sendMessage(msg)
+                S_detected_victims += f"{victim} " 
+            
+                  
+            pos = (10,20)
+            self.putText(S_detected_victims,pos=pos)
+
+            
 
 
             
@@ -274,6 +315,7 @@ class imgproc:
                             miny = y
                     i = i+1
                 imgCnt = self.binary[miny:maxy, minx:maxx]
+                self.putTextPos = (minx, maxy + 5)
                 width = maxx - minx
                 height = maxy - miny
                 if width < 42: continue
@@ -281,13 +323,13 @@ class imgproc:
 
                 dsize = (200,200)
                 RImgCnt = cv2.resize(imgCnt, dsize)
+                if width < height: RImgCnt = cv2.rotate(RImgCnt, cv2.ROTATE_90_CLOCKWISE)
                 if self.show_visual:
                     cv2.imshow("imgCnt",RImgCnt)
 
                 if maxx < 320: self.side ="r"
                 else: self.side = "l"
 
-                self.putTextPos = (minx, maxy + 5)
                 result = self.identify_victim2(RImgCnt)
 #                self.identify_victim2(RImgCnt)
                 if result[0]:
@@ -330,12 +372,12 @@ class imgproc:
                     cv2.waitKey(0)
 
   
-        if sim[0] + sim[1] > 1.95:
+        if sim[0] + sim[1] > 1.91:
             identified = True
 
-        kits = self.how_many_kits(victim)
+        if victim: kits = self.how_many_kits(victim)
         
-        self.putText(f"{sim[0]:.2f}, {sim[1]:.2f}")
+        self.putText(f"{victim}{sim[0]:.2f}, {sim[1]:.2f}")
 
         return (identified,kits, victim)
     
@@ -349,44 +391,71 @@ class imgproc:
         return kits
     
     def putText(self, text, pos = None):
-        bottomLeftCornerOfText = self.putTextPos
-
+        if pos == None:
+            bottomLeftCornerOfText = self.putTextPos
+        else:
+            bottomLeftCornerOfText = pos
         font                   = cv2.FONT_HERSHEY_SIMPLEX
         fontScale              =  1/2
         color                  = (255,255,255)
         thickness              =   1
-        cv2.putText(self.image_clone,text,bottomLeftCornerOfText,font,fontScale,color,thickness)
+        try:
+            cv2.putText(self.image_clone,text,bottomLeftCornerOfText,font,fontScale,color,thickness)
+        except Exception as ex:
+            logging.exception("could not put text")
+            logging.debug(f"textpos: {pos}")
+            print("failed putting text")
     
 
     
     def safeguards_color(self, contour, victim,mask):#reducing false identified colour victims
         correct = False
+        text_pos = (10,470)
         (x,y,w,h) = cv2.boundingRect(contour)
         if x > 300: self.side = "l"
         else: self.side = "r"
 
-        if self.find_edges(contour, mask, x,y,w,h):
+        if True or self.find_edges(contour, mask, x,y,w,h):
             if self.check_position(x,y,w,h):
-                if self.check_movement(victim,x,y,w,h): #evaluate and remove
+                if True or self.check_movement(victim,x,y,w,h): #evaluate and remove
                     correct = True
-                else: print("something of in multiframe safeguard")
+                else: 
+                    print("something of in multiframe safeguard")
+                    self.putText("not moving",text_pos)
 
-            elif self.info: print("to high or low")
+            elif self.info: 
+                print("to high or low")
+                self.putText("wrong position",text_pos)
 
         else: 
-            if self.info: print("no edges")
+            if self.info: 
+                print("no edges")
+                self.putText("no edges",text_pos)
         return correct
 
 
 
     def check_position(self, x,y,w,h): # makes sure the victim is on the right height
         b_position = None
-        victimheight = 142
-        victimheight2 = 450
-        if victimheight > x and victimheight - 20 < x + w:
+        victimheight = 185
+        victimheight2 = 460
+        if victimheight > x and victimheight - 40 < x + w:
             b_position = True
-        elif victimheight2 > x and victimheight2 - 20 < x + w:
+        elif victimheight2 > x and victimheight2 - 40 < x + w:
             b_position = True
+
+        width1 = 69
+        width2 = 420
+        if y < width1 or y + h > width2: #FIX VALUES  
+            b_position = False
+        #draw lines where it can't be
+        cv2.line(self.image_clone, (0,width1),(640,width1),(0,0,200), 1)
+        cv2.line(self.image_clone, (0,width2),(640,width2),(0,0,200), 1)
+
+        
+        cv2.line(self.image_clone, (victimheight,0),(victimheight,480),(0,200,0), 1)
+        cv2.line(self.image_clone, (victimheight2,0),(victimheight2,480),(0,200,0), 1)
+
         return b_position
  
     def check_movement(self,victim,x,y,w,h):
@@ -429,6 +498,7 @@ class imgproc:
         
 #safe guard to make sure the found mask is actually a contour
     def find_edges(self,contour,mask, x,y,w,h):
+        print("achtung achtung, das ist nicht gut")
         contours_match = False
         image = np.copy(self.image)
         if x < 20:
@@ -479,8 +549,11 @@ class imgproc:
                     break
 
 
-
+ #       self.test_find_edges(contour,mask,x,y,w,h)
         return contours_match
+
+
+
 
 
 
@@ -494,14 +567,14 @@ class imgproc:
         self.masks = {}
 
         lower_range = {
-            "green": np.array([50,60,70]), 
-            "yellow": np.array([12,90,100]),      
-            "red" : np.array([130,60,100]) #increase saturation >100
+            "yellow": np.array([20,50,100]),#decrese Saturation? 
+            "red" : np.array([130,69,100]), #increase saturation >100
+            "green": np.array([42,50,70]) #decrese V 50 
             }
         upper_range = {
-            "green" : np.array([85,255,255]),
-            "yellow" : np.array([50,255,255]),
-            "red" : np.array([180,255,255])
+            "yellow" : np.array([35,255,255]),
+            "red" : np.array([180,255,255]),
+            "green" : np.array([90,255,255])
             }
         for color in lower_range:
             lower = lower_range[color]
@@ -557,12 +630,15 @@ class imgproc:
 
 
     def log(self, name, img=None):#logging the images
-        if img is None:
-            img = self.original_image
-   
-        if self.logging:
-            path = f'./log/{name}{self.fnum}.png'
-            cv2.imwrite(path,img)
+        try:
+            if img is None:
+                img = self.original_image
+    
+            if self.logging:
+                path = f'{self.log_folder}/{name}{self.fnum}.png'
+                cv2.imwrite(path,img)
+        except Exception as ex:
+            logging.exception("couldn't log")
 
         
         

@@ -14,6 +14,9 @@
 Adafruit_TCS34725 colSens = Adafruit_TCS34725(TCS34725_INTEGRATIONTIME_60MS, TCS34725_GAIN_1X);
 bool readState = false; // Keeps track of whether the sensor was read or not
 
+double MAX_DETECTION_DISTANCES[5] {50, 20, 70, 70, 0}; // White, black, blue, reflective, unknown
+double STANDARD_RADIUSES[5] {30, 0, 7, 20, 0};// White, black, blue, reflective, unknown
+
 MeRGBLed newLed(0, 12);
 newLights::RGBColour newColourBlack {0, 0, 0};
 newLights::RGBColour newColourWhite {100, 100, 100};
@@ -65,6 +68,7 @@ void ColourSensor::init()
 {
     if (colSens.begin() == false)
     {
+        newLights::errorBlink();
         // Serial.println("Could not find sensor");
     }
     // else Serial.println("Sensor initialized");
@@ -99,7 +103,7 @@ void ColourSensor::printClearVal()
     Serial.print("C: "); Serial.print(sensorClear, DEC); Serial.print(" ");
 }
 
-void ColourSensor::printColourName(ColourSensor::FloorColour colourToPrint)
+void ColourSensor::printColourName(FloorColour colourToPrint)
 {
     switch (colourToPrint)
     {
@@ -199,22 +203,28 @@ double ColourSensor::getColDistance(FloorColour ref, ColourSample comp, int refl
     }
 }
 
-ColourSensor::FloorColour ColourSensor::getClosestColour(ColourSample compare)
+FloorColour ColourSensor::getClosestColour(ColourSample compare)
 {
     double distances[4];
     distances[floor_black] = getColDistance(blackReference.s, compare) - blackReference.radius;
     distances[floor_blue] = getColDistance(blueReference.s, compare) - blueReference.radius;
     distances[floor_white] = getColDistance(whiteReference.s, compare) - whiteReference.radius;
+    // Serial.print("Black: ");Serial.print(distances[floor_black] + blackReference.radius);Serial.print(" - ");Serial.print(blackReference.radius);Serial.print(" = ");Serial.println(distances[floor_black]);
+    // Serial.print("Blue: ");Serial.print(distances[floor_blue] + blueReference.radius);Serial.print(" - ");Serial.print(blueReference.radius);Serial.print(" = ");Serial.println(distances[floor_blue]);
+    // Serial.print("White: ");Serial.print(distances[floor_white] + whiteReference.radius);Serial.print(" - ");Serial.print(whiteReference.radius);Serial.print(" = ");Serial.println(distances[floor_white]);
     
     #ifdef REFLECTIVE_SPLIT
     double reflectiveDistances[REFLECTIVE_REFERENCE_NUM];
     for (int i=0; i<usedReflectiveReferences; ++i)
     {
         reflectiveDistances[i] = getColDistance(reflectiveReferences[i].s, compare) - reflectiveReferences[i].radius;
+        // Serial.print("Reflective");Serial.print(i);Serial.print(": ");Serial.print(reflectiveDistances[i] + reflectiveReferences[i].radius);Serial.print(" - ");Serial.print(reflectiveReferences[i].radius);Serial.print(" = ");Serial.println(reflectiveDistances[i]);
     }
     #else
     distances[floor_reflective] = getColDistance(reflectiveReference.s, compare) - reflectiveReference.radius;
+    // Serial.print("Reflective: ");Serial.print(distances[floor_reflective] + reflectiveReference.radius);Serial.print(" - ");Serial.print(reflectiveReference.radius);Serial.print(" = ");Serial.println(distances[floor_reflectiveReference]);
     #endif
+    // Serial.println("");Serial.println("");
     
     FloorColour minCol = floor_black;
     if (distances[floor_blue] < distances[minCol]) minCol = floor_blue;
@@ -266,8 +276,22 @@ bool ColourSensor::readSensor()
     
 }
 
+bool ColourSensor::isSpike()
+{
+    // double spikeThreshold = whiteReference.s.values[ColourSample::clear] + 200;
+    // if (reading.values[ColourSample::clear] > spikeThreshold)
+    // {
+    //     return true;
+    // }
+    // else
+    // {
+    //     return false;
+    // }
+    return false; // For now, as it is not tuned correclty
+}
+
 // Identify the colour read by readSensor()
-ColourSensor::FloorColour ColourSensor::identifyColour()
+FloorColour ColourSensor::identifyColour()
 {
 
     // Identification using ratios
@@ -276,7 +300,6 @@ ColourSensor::FloorColour ColourSensor::identifyColour()
     {
         return floor_notUpdated;
     }
-
     
     // // Calculation using thresholds
 
@@ -300,6 +323,7 @@ ColourSensor::FloorColour ColourSensor::identifyColour()
 
     // Calculation using colour distances
 
+    // #warning Debugging
     // return floor_unknown; // For debugging. Uncomment to disable colour detection
 
     FloorColour closestCol = getClosestColour(reading);
@@ -319,7 +343,7 @@ ColourSensor::FloorColour ColourSensor::identifyColour()
             reference = reflectiveReference;
             #endif
             // If both white and reflective are detected, make sure to detect white
-            if (getColDistance(whiteReference.s, reading)-whiteReference.radius <= MAX_DETECTION_DISTANCE)
+            if (getColDistance(whiteReference.s, reading)-whiteReference.radius <= MAX_DETECTION_DISTANCES[floor_white])
             {
                 newLights::setColour(3, newColourWhite, true);
                 closestCol = floor_white;
@@ -338,7 +362,8 @@ ColourSensor::FloorColour ColourSensor::identifyColour()
             break;
     }
     double colDistance = getColDistance(reference.s, reading);
-    if (colDistance <= MAX_DETECTION_DISTANCE + reference.radius) return closestCol;
+    double maxDetectDist = MAX_DETECTION_DISTANCES[closestCol];
+    if (colDistance <= maxDetectDist + reference.radius) return closestCol;
     else return floor_unknown;
     
     // Old colour distance matching
@@ -352,14 +377,14 @@ ColourSensor::FloorColour ColourSensor::identifyColour()
     
 }
 
-ColourSensor::FloorColour ColourSensor::checkRawFloorColour()
+FloorColour ColourSensor::checkRawFloorColour()
 {
     readState = readSensor();
     return identifyColour();
 }
 
 // Returns the last floor colour (eg. the one from the latest update).
-ColourSensor::FloorColour ColourSensor::checkFloorColour()
+FloorColour ColourSensor::checkFloorColour()
 {
     FloorColour identifiedColour = checkRawFloorColour();
     if (identifiedColour != floor_notUpdated)
@@ -372,20 +397,20 @@ ColourSensor::FloorColour ColourSensor::checkFloorColour()
     
 }
 
-char ColourSensor::floorColourAsChar(ColourSensor::FloorColour floorColour)
+char ColourSensor::floorColourAsChar(FloorColour floorColour)
 {
   switch (floorColour)
   {
-    case ColourSensor::floor_black:
+    case floor_black:
       return 's';
       break;
-    case ColourSensor::floor_blue:
+    case floor_blue:
       return 'b';
       break;
-    case ColourSensor::floor_reflective:
+    case floor_reflective:
       return 'c';
       break;
-    case ColourSensor::floor_white:
+    case floor_white:
       return 'v';
       break;
     // default:
@@ -415,21 +440,21 @@ ColourSample ColourSensor::getColourSample()
 // Reads thresholds from EEPROM
 void ColourSensor::refreshReferences()
 {
-    Serial.println("---Refreshing---");
+    // Serial.println("---Refreshing---");
     blackReference = blackSamples.read(blackAddr);
-    Serial.print("Black: ");printColStorData(blackReference);
+    // Serial.print("Black: ");printCorefreshlStorData(blackReference);
     blueReference = blueSamples.read(blueAddr);
-    Serial.print("Blue: ");printColStorData(blueReference);
+    // Serial.print("Blue: ");printColStorData(blueReference);
     whiteReference = whiteSamples.read(whiteAddr);
-    Serial.print("White: ");printColStorData(whiteReference);
+    // Serial.print("White: ");printColStorData(whiteReference);
 
     #ifdef REFLECTIVE_SPLIT
     usedReflectiveReferences = reflectiveSamples.readReflectiveNum(reflectiveNumAddr);
-    Serial.print("Used reflective references is: ");Serial.println(usedReflectiveReferences);
+    // Serial.print("Used reflective references is: ");Serial.println(usedReflectiveReferences);
     for (int i=0;i<usedReflectiveReferences;++i)
     {
         reflectiveReferences[i] = reflectiveSamples.readReflective(reflectiveAddresses[i]);
-        Serial.print("Reflective");Serial.print(i);Serial.print(" ");printColStorData(reflectiveReferences[i]);
+        // Serial.print("Reflective");Serial.print(i);Serial.print(" ");printColStorData(reflectiveReferences[i]);
     }
     #else
     reflectiveReference = reflectiveSamples.read(reflectiveAddr);
@@ -730,7 +755,15 @@ void ColourSampleCollection::calculate()
     // Calculate minimum and maximum values
 
     // Setting the actual values
-    thresholds.radius = (rDist+gDist+bDist+clearDist)/4.0; // Average of half of min-max distances
+    double potRadius = (rDist+gDist+bDist+clearDist)/4.0;
+    if (potRadius > STANDARD_RADIUSES[colourToBe]) // Set it so you that the radius cannot be smaller than the standard one
+    {
+        thresholds.radius = potRadius; // Average of half of min-max distances
+    }
+    else
+    {
+        thresholds.radius = STANDARD_RADIUSES[colourToBe];
+    }
 
     // Ideas for threshold calculation:
     //  - Calculate the min and max and set the thresholds a bit outside of that
@@ -750,8 +783,7 @@ void ColourSampleCollection::updateReflective()
     thresholds.s.values[ColourSample::b] = samples[sampleIndex-1].values[ColourSample::b];
     thresholds.s.values[ColourSample::clear] = samples[sampleIndex-1].values[ColourSample::clear];
 
-    #warning untuned constant (check what a typical stored constant is)
-    thresholds.radius = 16;
+    thresholds.radius = STANDARD_RADIUSES[floor_reflective];
 }
 
 void ColourSampleCollection::resetIndex()

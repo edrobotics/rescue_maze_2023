@@ -44,6 +44,20 @@ namespace newLights
     void errorBlink();
 }
 
+// For colour detection
+extern double MAX_DETECTION_DISTANCES[5]; // {50, 30, 60, 70, 0}; // White, black, blue, reflective, unknown
+extern double STANDARD_RADIUSES[5]; // {0, 0, 0, 20, 0};// White, black, blue, reflective, unknown
+
+
+enum FloorColour {
+    floor_white,
+    floor_black,
+    floor_blue,
+    floor_reflective,
+    floor_unknown,
+    floor_notUpdated,
+};
+
 struct ColourSample // Should maybe be inside one of the other classes?
 {
 
@@ -58,7 +72,7 @@ struct ColourSample // Should maybe be inside one of the other classes?
         values[gb] = 0;
     }
 
-    double rVar, gVar, bVar, clearVar, rgVar, rbVar, gbVar;
+    // double rVar, gVar, bVar, clearVar, rgVar, rbVar, gbVar;
     
     enum Values
     {
@@ -106,7 +120,17 @@ const int REFLECTIVE_REFERENCE_NUM = 5;
 class ColourSampleCollection
 {
     public:
+        ColourSampleCollection()
+        {
+            ColourSampleCollection(floor_unknown);
+        }
+        ColourSampleCollection(FloorColour colour)
+        {
+            colourToBe = colour;
+            thresholds.radius = STANDARD_RADIUSES[colourToBe];
+        }
         void setReflective(bool newReflectiveState);
+        // void setType(FloorColour floorColour);
         bool enterSample(ColourSample sample); // For inputting the coloursamples
         void calculate(); // Calculate the thresholds
         void updateReflective();
@@ -126,6 +150,7 @@ class ColourSampleCollection
         const double stdDevsToUse = 1; // How many standard deviations that should be used when computing the thresholds
 
         bool isReflective = false;
+        FloorColour colourToBe;
         
         // Functions to aid in computation of the thresholds
         // I want to be able to give rg, rb or gb as an argument (or equivalent) and iterate through an array of colour samples while keeping the ending the same. I do not know how to do this.
@@ -155,17 +180,10 @@ class ColourSensor
             #endif
         }
         void init();
-        enum FloorColour {
-            floor_white,
-            floor_black,
-            floor_blue,
-            floor_reflective,
-            floor_unknown,
-            floor_notUpdated,
-        };
 
         FloorColour checkFloorColour();
         FloorColour checkRawFloorColour();
+        bool isSpike(); // Check if there was a spike in values (to detect reflective)
 
         char floorColourAsChar(FloorColour floorColour);
         void printValues();
@@ -199,7 +217,8 @@ class ColourSensor
         double getColDistance(FloorColour ref, ColourSample comp, int reflectiveIndex);
         int getMinValIndex(double val1, double val2, double val3, double val4);
         FloorColour getClosestColour(ColourSample compare);
-        double MAX_DETECTION_DISTANCE = 70;
+        // double MAX_DETECTION_DISTANCE = 50;
+        // double REFLECTIVE_MAX_DETECTION_DISTANCE = 100;
 
         unsigned long lastReadTime = 0; // Keep track of the last time you read from the sensor
         int INTEGRATION_TIME = 60; // The integration time in milliseconds
@@ -214,10 +233,10 @@ class ColourSensor
         // HardwareButton whiteButton {0, false};
 
         // Colour sample collections for calibration routine
-        ColourSampleCollection blackSamples;
-        ColourSampleCollection blueSamples;
-        ColourSampleCollection reflectiveSamples;
-        ColourSampleCollection whiteSamples;
+        ColourSampleCollection blackSamples {floor_black};
+        ColourSampleCollection blueSamples {floor_blue};
+        ColourSampleCollection reflectiveSamples {floor_reflective};
+        ColourSampleCollection whiteSamples {floor_white};
 
         // Thresholds for colour recognition
         // ColourStorageData blackReference {1.5, 6 , 1.7, 6 , 1.05, 2.0 , 0, 100};

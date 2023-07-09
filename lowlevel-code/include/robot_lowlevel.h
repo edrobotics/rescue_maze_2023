@@ -52,7 +52,7 @@ enum TouchSensorSide
 // Drives one step (30cm) forwards.
 // Could take a speed argument
 // continuing - if you should continue where you left off last time (keeping the truedistancedriven)
-bool driveStep(ColourSensor::FloorColour& floorColourAhead, bool& rampDriven, TouchSensorSide& frontSensorDetectionType, double& xDistanceOnRamp, double& yDistanceOnRamp, bool continuing);
+bool driveStep(FloorColour& floorColourAhead, bool& rampDriven, TouchSensorSide& frontSensorDetectionType, double& xDistanceOnRamp, double& yDistanceOnRamp, bool continuing);
 
 bool driveStep();
 
@@ -91,7 +91,7 @@ namespace serialcomm
 
     void returnFailure();
 
-    void returnFloorColour(ColourSensor::FloorColour floorColour);
+    void returnFloorColour(FloorColour floorColour);
 
     void returnAnswer(int answer);
 
@@ -121,6 +121,44 @@ namespace serialcomm
     void sendColourCal();
 }
 
+class BumperComm
+{ 
+  public:
+    void communicate();
+    void setInitiator(bool isInit);
+    int readKitNum[4] {0};
+    int writeKitNum[4] {0};
+  private:
+    bool isReady(); // Determines if the other robot is present and thus if communication can be initiated
+    void receiveData(); // Receive data once ready
+    void transmitData(int kits); // Transmit data once ready
+    void endCommunication(); // Returns the robot to its original state (middle of the tile)
+
+    void gotoReadPos();
+    int read();
+    void gotoWritePos();
+    void write(int kits);
+    void returnToNeutral(); // Return to the middle of the tile
+
+    bool bumpDriveLoop(bool backwards); // False is forwards, true is backwards. Loop it.
+
+    bool isActivated();
+    long timeFlag = 0;
+
+    const int BASE_LEN = 1000; // The length of a rescue kit sending
+    const int CONTACT_LEN = 1000; // The length of contact for one sending
+    const int SHORT_PAUSE_LEN = 1000; // The length of the pause between bumps in a kit
+    const int LONG_PAUSE_LEN = 3000; // The length of the pause between kits
+    const int MIN_DEBOUNCE_TIME = 700; // The time for which to block bumpreadings
+    
+    bool isInitiator = false; // True if this robot should initiate, false if it should not (the other robot initiates)
+    double ROBOT_DETECTION_THRESHOLD = 20;
+    bool inReadPos = false;
+    bool inWritePos = false;
+    double beginUltrasonicDist;
+    bool blockFrontSensor = false;
+};
+
 // Makes a navigation decision
 // For simple testing without the maze-code present
 void makeNavDecision(Command& action);
@@ -146,6 +184,17 @@ namespace lights
         back = 2,
     };
 
+    enum LightCommand
+    {
+      lCommand_done,
+      lCommand_returning,
+      lCommand_notReturning,
+      lCommand_mappingError,
+      lCommand_navigationFail,
+      lCommand_none
+    };
+
+    LightCommand getLightCommandFromChar(char command);
     void execLightCommand();
 
     // Turns all lights off
@@ -170,7 +219,7 @@ namespace lights
 
     void negativeBlink();
     
-    void floorIndicator(ColourSensor::FloorColour floorColour);
+    void floorIndicator(FloorColour floorColour);
     
     void disabled();
 
@@ -462,6 +511,8 @@ enum WallChangeType {
 void checkSmoothWallChanges();
 
 void checkPotWallChanges();
+
+void resetWallChanges();
 
 
 

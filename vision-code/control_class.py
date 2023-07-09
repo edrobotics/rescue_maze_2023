@@ -8,7 +8,7 @@ ssh = False
 
 if __name__ == '__main__':
     n = 0
-    logging.basicConfig(filename='example.log', encoding='utf-8', level=logging.DEBUG)
+    logging.basicConfig(filename='log/vision.log', encoding='utf-8', level=logging.DEBUG)
     logging.info("started")
 #initating class
     imgproc = tc.imgproc()
@@ -23,7 +23,12 @@ if __name__ == '__main__':
     rawCapture = PiRGBArray(camera, size=(640, 480))
     for frame in camera.capture_continuous(rawCapture, format="bgr", use_video_port=True):
         image = frame.array
-        imgproc.do_the_work(image,n)
+        try:
+            imgproc.do_the_work(image,n)
+        except Exception as e: 
+            print(e)
+            print("something went wrong in do the work")
+            logging.exception("something went wrong")
         rawCapture.truncate(0)
         try:
             if not ssh: 
