@@ -437,11 +437,11 @@ class imgproc:
 
     def check_position(self, x,y,w,h): # makes sure the victim is on the right height
         b_position = None
-        victimheight = 185
+        victimheight = 190
         victimheight2 = 460
-        if victimheight > x and victimheight - 40 < x + w:
+        if victimheight > x and victimheight - 42 < x + w:
             b_position = True
-        elif victimheight2 > x and victimheight2 - 40 < x + w:
+        elif victimheight2 > x and victimheight2 - 42 < x + w:
             b_position = True
 
         width1 = 69
@@ -567,7 +567,7 @@ class imgproc:
         self.masks = {}
 
         lower_range = {
-            "yellow": np.array([20,50,100]),#decrese Saturation? 
+            "yellow": np.array([22,100,100]),#decrese Saturation? 
             "red" : np.array([130,69,100]), #increase saturation >100
             "green": np.array([42,50,70]) #decrese V 50 
             }
@@ -582,7 +582,7 @@ class imgproc:
             mask = cv2.inRange(hsv,lower,upper)
             if color == "red":
                 red2_lower =np.array([0,120,60]) #0,100,100?
-                red2_upper =np.array([7,255,255]) 
+                red2_upper =np.array([7,190,255]) 
                 mask2 = cv2.inRange(hsv,red2_lower,red2_upper)
                 mask = np.bitwise_or(mask,mask2)
             mask = self.blank_out(mask)
